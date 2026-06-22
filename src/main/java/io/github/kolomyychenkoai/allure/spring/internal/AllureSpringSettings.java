@@ -50,6 +50,9 @@ public final class AllureSpringSettings {
     /** Включить логирование реального SQL (обёртка DataSource через datasource-proxy, по умолчанию true). */
     public static final String DATASOURCE_ENABLED = "allure.spring.datasource.enabled";
 
+    /** Включить HTTP-логирование (MockMvc + RestAssured), по умолчанию true. */
+    public static final String WEB_ENABLED = "allure.spring.web.enabled";
+
     /** Префиксы по умолчанию — без доменной специфики. */
     public static final String DEFAULT_INCLUDE_PREFIXES = "spring.,server.,logging.,management.";
 
