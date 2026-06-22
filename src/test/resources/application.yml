@@ -1,0 +1,10 @@
+spring:
+  application:
+    name: allure-spring-test-demo
+  # секрет под включённым префиксом spring.* — в отчёте должен быть отфильтрован
+  datasource:
+    password: super-secret-should-be-filtered
+
+logging:
+  level:
+    io.github.kolomyychenkoai: DEBUG

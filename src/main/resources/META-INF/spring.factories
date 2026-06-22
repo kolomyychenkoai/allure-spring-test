@@ -1,0 +1,3 @@
+org.springframework.test.context.TestExecutionListener=\
+io.github.kolomyychenkoai.allure.spring.logs.AllureApplicationLogsListener,\
+io.github.kolomyychenkoai.allure.spring.config.AllureConfigurationListener
