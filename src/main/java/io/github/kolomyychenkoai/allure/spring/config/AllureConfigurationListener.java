@@ -20,7 +20,8 @@ import java.util.stream.Collectors;
 /**
  * Перед каждым тестом снимает срез актуальных свойств Spring {@link Environment} и
  * прикрепляет их к Allure-отчёту шагом «Configuration» с вложением «Properties».
- * Значения с признаками секрета (password/secret/credential) не выводятся.
+ * Маскирование значений намеренно НЕ делается (данные в тестах фейковые); состав
+ * среза ограничивается только префиксами {@code allure.spring.config.include-prefixes}.
  * Активируется автоматически через {@code META-INF/spring.factories}.
  */
 public class AllureConfigurationListener implements TestExecutionListener, Ordered {
@@ -53,7 +54,6 @@ public class AllureConfigurationListener implements TestExecutionListener, Order
         }
 
         final String config = keys.stream()
-                .filter(k -> !isSecret(k))
                 .filter(k -> prefixes.stream().anyMatch(k::startsWith))
                 .map(k -> k + "=" + env.getProperty(k))
                 .collect(Collectors.joining("\n"));
@@ -61,11 +61,6 @@ public class AllureConfigurationListener implements TestExecutionListener, Order
         Allure.step("Configuration", () ->
                 Allure.addAttachment("Properties", "text/plain",
                         config.isEmpty() ? "No relevant properties" : config));
-    }
-
-    private static boolean isSecret(String key) {
-        String k = key.toLowerCase();
-        return k.contains("password") || k.contains("secret") || k.contains("credential");
     }
 
     private static Environment environment(TestContext testContext) {

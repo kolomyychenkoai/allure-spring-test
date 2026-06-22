@@ -70,8 +70,8 @@ default.
 | `allure.spring.config.enabled` | `true` | Attach the **Configuration** snapshot. |
 | `allure.spring.config.include-prefixes` | `spring.,server.,logging.,management.` | CSV of property-name prefixes included in the snapshot. |
 
-Property keys containing `password`, `secret` or `credential` are never shown,
-regardless of prefix.
+> Note: values are **not** masked. The snapshot is scoped by prefix only — assume
+> test configuration uses non-sensitive (fake) data.
 
 ```yaml
 # example: include your own namespace too

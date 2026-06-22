@@ -10,8 +10,8 @@
     <packaging>jar</packaging>
 
     <name>allure-spring-test</name>
-    <description>Zero-config Allure reporting for Spring tests: application logs and configuration
-        snapshots attached automatically via a TestExecutionListener.</description>
+    <description>Zero-config Allure reporting for Spring tests: application logs, configuration
+        snapshots and MockMvc HTTP request/response, attached automatically — no test code changes.</description>
     <url>https://github.com/kolomyychenkoai/allure-spring-test</url>
 
     <licenses>
@@ -89,6 +89,25 @@
             <scope>provided</scope>
         </dependency>
 
+        <!-- Модуль HTTP MockMvc: @AutoConfiguration/@ConditionalOnClass и
+             MockMvcBuilderCustomizer. У потребителя это есть в test-scope, поэтому provided
+             (не тянем транзитивно); модуль сам не активируется без MockMvc на classpath. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-test-autoconfigure</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
         <!-- Тесты: самопроверка (уровень A) и живой отчёт (уровень B). -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -100,6 +119,12 @@
             <artifactId>allure-junit5</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- для живого MockMvc-теста (поднять MVC-слой с тестовым контроллером) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -107,6 +132,10 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <!-- сохранять имена параметров: нужно Spring MVC (@PathVariable/@RequestParam) -->
+                    <parameters>true</parameters>
+                </configuration>
             </plugin>
 
             <plugin>

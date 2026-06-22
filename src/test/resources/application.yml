@@ -1,9 +1,9 @@
 spring:
   application:
     name: allure-spring-test-demo
-  # секрет под включённым префиксом spring.* — в отчёте должен быть отфильтрован
+  # маскирования нет — это значение будет видно в снимке конфигурации (данные фейковые)
   datasource:
-    password: super-secret-should-be-filtered
+    password: demo-password-value
 
 logging:
   level:

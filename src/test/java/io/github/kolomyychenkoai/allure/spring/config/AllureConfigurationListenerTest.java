@@ -36,8 +36,8 @@ class AllureConfigurationListenerTest {
     }
 
     @Test
-    @DisplayName("свойства по дефолтным префиксам попадают в шаг Configuration, секреты отфильтрованы")
-    void attachesFilteredProperties() {
+    @DisplayName("свойства по дефолтным префиксам попадают в шаг Configuration (маскирования нет)")
+    void attachesPropertiesByPrefix() {
         TestContext ctx = contextWith(new MockPropertySource()
                 .withProperty("spring.application.name", "demo")
                 .withProperty("server.port", "8080")
@@ -51,8 +51,8 @@ class AllureConfigurationListenerTest {
         assertThat(props)
                 .contains("spring.application.name=demo")
                 .contains("server.port=8080")
-                .doesNotContain("hunter2")        // секрет (password) отфильтрован
-                .doesNotContain("custom.foo");    // не входит в дефолтные префиксы
+                .contains("spring.datasource.password=hunter2") // маскирования нет — значение видно
+                .doesNotContain("custom.foo");                  // не входит в дефолтные префиксы
     }
 
     @Test
