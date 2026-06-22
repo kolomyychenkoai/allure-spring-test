@@ -47,7 +47,7 @@ class AllureSpringAssertionsTest {
         TestResult result = allure.run("eq", () ->
                 AssertionErrors.assertEquals("имя", "laptop", "laptop"));
 
-        assertThat(allure.hasStep(result, "Assert: имя — expected laptop = laptop")).isTrue();
+        assertThat(allure.hasStep(result, "Проверка: имя — ожидалось laptop = laptop")).isTrue();
     }
 
     @Test
@@ -58,8 +58,8 @@ class AllureSpringAssertionsTest {
             AssertionErrors.assertNotNull("есть id", "id-1");
         });
 
-        assertThat(allure.hasStep(result, "Assert: количество положительно — true")).isTrue();
-        assertThat(allure.hasStep(result, "Assert: есть id — actual id-1 is not null")).isTrue();
+        assertThat(allure.hasStep(result, "Проверка: количество положительно — верно")).isTrue();
+        assertThat(allure.hasStep(result, "Проверка: есть id — значение id-1 не null")).isTrue();
     }
 
     @Test
@@ -70,8 +70,8 @@ class AllureSpringAssertionsTest {
             AssertionErrors.assertNull("ссылка пуста", null);
         });
 
-        assertThat(allure.hasStep(result, "Assert: цена не ноль — unexpected 0 != 100")).isTrue();
-        assertThat(allure.hasStep(result, "Assert: ссылка пуста — actual null is null")).isTrue();
+        assertThat(allure.hasStep(result, "Проверка: цена не ноль — 0 ≠ 100")).isTrue();
+        assertThat(allure.hasStep(result, "Проверка: ссылка пуста — значение null")).isTrue();
     }
 
     @Test
@@ -86,8 +86,8 @@ class AllureSpringAssertionsTest {
             }
         });
 
-        assertThat(allure.hasStep(result, "Assert: не должно быть нулём — false")).isTrue();
-        StepResult failStep = step(result, "Assert fail: принудительный провал");
+        assertThat(allure.hasStep(result, "Проверка: не должно быть нулём — неверно")).isTrue();
+        StepResult failStep = step(result, "Проверка провалена: принудительный провал");
         assertThat(failStep.getStatus()).isEqualTo(Status.FAILED);
     }
 
@@ -98,7 +98,7 @@ class AllureSpringAssertionsTest {
                 assertThatThrownBy(() -> AssertionErrors.assertEquals("имя", "laptop", "phone"))
                         .isInstanceOf(AssertionError.class));
 
-        StepResult step = step(result, "Assert: имя — expected laptop ≠ phone");
+        StepResult step = step(result, "Проверка: имя — ожидалось laptop, получено phone");
         assertThat(step.getStatus()).isEqualTo(Status.FAILED);
     }
 
@@ -112,7 +112,7 @@ class AllureSpringAssertionsTest {
         });
 
         // если бы флаг утёк (остался true), этот шаг был бы проглочен как «внутренний»
-        assertThat(allure.hasStep(result, "Assert: после провала — true")).isTrue();
+        assertThat(allure.hasStep(result, "Проверка: после провала — верно")).isTrue();
     }
 
     private StepResult step(TestResult result, String name) {

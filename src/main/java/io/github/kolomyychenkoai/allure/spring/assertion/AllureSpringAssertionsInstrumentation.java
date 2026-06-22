@@ -73,8 +73,9 @@ public final class AllureSpringAssertionsInstrumentation {
                                   @Advice.Argument(2) Object actual,
                                   @Advice.Thrown Throwable thrown) {
             try {
-                step("Assert: " + message + " — expected " + expected
-                        + (thrown == null ? " = " : " ≠ ") + actual, thrown);
+                step("Проверка: " + message + (thrown == null
+                        ? " — ожидалось " + expected + " = " + actual
+                        : " — ожидалось " + expected + ", получено " + actual), thrown);
             } catch (Throwable t) {
                 AllureInstrumentationLogger.warn("SpringAssertEquals", t);
             }
@@ -88,8 +89,8 @@ public final class AllureSpringAssertionsInstrumentation {
                                   @Advice.Argument(2) Object actual,
                                   @Advice.Thrown Throwable thrown) {
             try {
-                step("Assert: " + message + (thrown == null
-                        ? " — unexpected " + unexpected + " != " + actual
+                step("Проверка: " + message + (thrown == null
+                        ? " — " + unexpected + " ≠ " + actual
                         : " — значения равны: " + actual), thrown);
             } catch (Throwable t) {
                 AllureInstrumentationLogger.warn("SpringAssertNotEquals", t);
@@ -105,7 +106,7 @@ public final class AllureSpringAssertionsInstrumentation {
                 if (delegating()) {
                     return;
                 }
-                step("Assert: " + message + (thrown == null ? " — true" : " — false"), thrown);
+                step("Проверка: " + message + (thrown == null ? " — верно" : " — неверно"), thrown);
             } catch (Throwable t) {
                 AllureInstrumentationLogger.warn("SpringAssertTrue", t);
             }
@@ -122,7 +123,7 @@ public final class AllureSpringAssertionsInstrumentation {
         public static void onExit(@Advice.Argument(0) String message, @Advice.Thrown Throwable thrown) {
             try {
                 delegating(false);
-                step("Assert: " + message + (thrown == null ? " — false" : " — true"), thrown);
+                step("Проверка: " + message + (thrown == null ? " — неверно" : " — верно"), thrown);
             } catch (Throwable t) {
                 AllureInstrumentationLogger.warn("SpringAssertFalse", t);
             }
@@ -141,8 +142,9 @@ public final class AllureSpringAssertionsInstrumentation {
                                   @Advice.Thrown Throwable thrown) {
             try {
                 delegating(false);
-                step("Assert: " + message + " — actual " + actual
-                        + (thrown == null ? " is null" : " is NOT null"), thrown);
+                step("Проверка: " + message + (thrown == null
+                        ? " — значение null"
+                        : " — значение " + actual + ", не null"), thrown);
             } catch (Throwable t) {
                 AllureInstrumentationLogger.warn("SpringAssertNull", t);
             }
@@ -161,9 +163,9 @@ public final class AllureSpringAssertionsInstrumentation {
                                   @Advice.Thrown Throwable thrown) {
             try {
                 delegating(false);
-                step("Assert: " + message + (thrown == null
-                        ? " — actual " + actual + " is not null"
-                        : " — actual is null"), thrown);
+                step("Проверка: " + message + (thrown == null
+                        ? " — значение " + actual + " не null"
+                        : " — значение null"), thrown);
             } catch (Throwable t) {
                 AllureInstrumentationLogger.warn("SpringAssertNotNull", t);
             }
@@ -174,7 +176,7 @@ public final class AllureSpringAssertionsInstrumentation {
         @Advice.OnMethodEnter(suppress = Throwable.class)
         public static void onEnter(@Advice.Argument(0) String message) {
             try {
-                Allure.step("Assert fail: " + message, Status.FAILED);
+                Allure.step("Проверка провалена: " + message, Status.FAILED);
             } catch (Throwable t) {
                 AllureInstrumentationLogger.warn("SpringFail", t);
             }
