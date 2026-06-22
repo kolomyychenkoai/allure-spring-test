@@ -18,7 +18,8 @@ import java.util.stream.Collectors;
 
 /**
  * Логирует вызовы Spring Data репозиториев в Allure-отчёт шагом
- * «DB Repo.method» с вложениями «DB Query» (аргументы) и «DB Result» (результат).
+ * «DB Repo.method» с вложениями «DB Call» (метод и аргументы — снятые ДО вызова,
+ * чтобы отражать отправленное в БД) и «DB Result» (что вернулось).
  * Ставится автоматически — см. {@code AllureDataJpaAutoConfiguration}, код в тестах не нужен.
  * <p>
  * Гейтинг — по активному Allure тест-кейсу (а НЕ по хардкоду пакетов): логируем все
@@ -30,32 +31,48 @@ public class AllureRepositoryAspect {
 
     private final Map<Class<?>, Field[]> fieldCache = new ConcurrentHashMap<>();
 
+    private record Call(String stepName, String callText) {
+    }
+
     @Around("execution(* org.springframework.data.repository.Repository+.*(..))")
     public Object logRepositoryCall(ProceedingJoinPoint pjp) throws Throwable {
+        // снимок ДО вызова: аргументы должны отражать то, что ОТПРАВИЛИ в БД,
+        // а не мутированное состояние после вызова (напр. сгенерированный id у save)
+        Call call = snapshotIfActive(pjp);
+
         Object result;
         try {
             result = pjp.proceed();
         } catch (Throwable error) {
             // при падении репозитория шаг тоже нужен — видно, ЧТО ушло в БД (диагностируемость)
-            logStep(pjp, "<exception: " + error.getClass().getSimpleName() + ": " + error.getMessage() + ">");
+            emit(call, "<exception: " + error.getClass().getSimpleName() + ": " + error.getMessage() + ">");
             throw error;
         }
-        logStep(pjp, formatResponse(result));
+        emit(call, formatResponse(result));
         return result;
     }
 
-    private void logStep(ProceedingJoinPoint pjp, String resultText) {
+    private Call snapshotIfActive(ProceedingJoinPoint pjp) {
         try {
             if (!Allure.getLifecycle().getCurrentTestCase().isPresent()) {
-                return;
+                return null;
             }
             String repoName = repositoryName(pjp);
             String methodName = pjp.getSignature().getName();
-            Object[] args = pjp.getArgs();
+            return new Call("DB " + repoName + "." + methodName,
+                    formatRequest(repoName, methodName, pjp.getArgs()));
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
 
-            Allure.step("DB " + repoName + "." + methodName, step -> {
-                Allure.addAttachment("DB Query", "text/plain",
-                        formatRequest(repoName, methodName, args));
+    private void emit(Call call, String resultText) {
+        if (call == null) {
+            return;
+        }
+        try {
+            Allure.step(call.stepName(), step -> {
+                Allure.addAttachment("DB Call", "text/plain", call.callText());
                 Allure.addAttachment("DB Result", "text/plain", resultText);
             });
         } catch (Throwable ignored) {

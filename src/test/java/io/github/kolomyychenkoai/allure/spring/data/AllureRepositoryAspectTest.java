@@ -73,7 +73,7 @@ class AllureRepositoryAspectTest {
         });
 
         assertThat(allure.hasStep(result, "DB FakeRepo.save")).isTrue();
-        assertThat(allure.attachment(result, "DB Query").orElseThrow())
+        assertThat(allure.attachment(result, "DB Call").orElseThrow())
                 .contains("FakeRepo.save")
                 .contains("thing");
         assertThat(allure.attachment(result, "DB Result").orElseThrow())
@@ -116,7 +116,7 @@ class AllureRepositoryAspectTest {
             }
         });
 
-        assertThat(allure.attachment(result, "DB Query").orElseThrow()).contains("42");
+        assertThat(allure.attachment(result, "DB Call").orElseThrow()).contains("42");
         assertThat(allure.attachment(result, "DB Result").orElseThrow()).contains("Optional.empty");
     }
 
@@ -156,5 +156,34 @@ class AllureRepositoryAspectTest {
         assertThat(allure.attachment(result, "DB Result").orElseThrow())
                 .contains("exception")
                 .contains("constraint violation");
+    }
+
+    @Test
+    @DisplayName("аргументы снимаются ДО вызова: мутация в proceed() не искажает «DB Call»")
+    void argumentsCapturedBeforeProceed() throws Throwable {
+        StringBuilder arg = new StringBuilder("PENDING");
+        Signature sig = mock(Signature.class);
+        when(sig.getName()).thenReturn("save");
+        ProceedingJoinPoint pjp = mock(ProceedingJoinPoint.class);
+        when(pjp.getSignature()).thenReturn(sig);
+        when(pjp.getTarget()).thenReturn(new FakeRepoImpl());
+        when(pjp.getArgs()).thenReturn(new Object[]{arg});
+        // имитируем мутацию аргумента внутри вызова (как save проставляет id сущности)
+        when(pjp.proceed()).thenAnswer(inv -> {
+            arg.append("-MUTATED");
+            return "ok";
+        });
+
+        TestResult result = allure.run("db-snapshot", () -> {
+            try {
+                aspect.logRepositoryCall(pjp);
+            } catch (Throwable t) {
+                throw new RuntimeException(t);
+            }
+        });
+
+        assertThat(allure.attachment(result, "DB Call").orElseThrow())
+                .contains("PENDING")
+                .doesNotContain("PENDING-MUTATED");
     }
 }

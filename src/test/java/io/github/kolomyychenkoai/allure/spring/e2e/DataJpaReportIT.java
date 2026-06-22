@@ -24,10 +24,12 @@ class DataJpaReportIT {
     private WidgetRepository widgets;
 
     @Test
-    @DisplayName("вызовы репозитория (save/findById/findAll) автоматически попадают в отчёт")
+    @DisplayName("вызовы репозитория (save/findById/findAll/промах) автоматически попадают в отчёт")
     void repositoryCallsAppearInReport() {
         Widget saved = widgets.save(new Widget("gadget"));
         widgets.findById(saved.getId());
         widgets.findAll();
+        // чтение-промах — в отчёте виден результат Optional.empty
+        widgets.findById(999_999L);
     }
 }
