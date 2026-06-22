@@ -22,5 +22,6 @@ public class AllureAssertionsListener implements TestExecutionListener, Ordered 
     public void beforeTestClass(TestContext testContext) {
         AllureSpringAssertionsInstrumentation.install();
         AllureHamcrestInstrumentation.install();
+        AllureAssertJInstrumentation.install();
     }
 }
