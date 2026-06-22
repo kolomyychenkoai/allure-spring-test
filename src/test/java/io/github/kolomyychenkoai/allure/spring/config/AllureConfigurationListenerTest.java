@@ -72,6 +72,19 @@ class AllureConfigurationListenerTest {
     }
 
     @Test
+    @DisplayName("нет свойств под префиксами → вложение «No relevant properties»")
+    void noRelevantProperties() {
+        TestContext ctx = contextWith(new MockPropertySource()
+                .withProperty("allure.spring.config.include-prefixes", "zzz.nonexistent.")
+                .withProperty("custom.foo", "bar"));
+
+        TestResult result = allure.run("config-empty", () -> listener.beforeTestMethod(ctx));
+
+        assertThat(allure.attachment(result, "Properties").orElseThrow())
+                .isEqualTo("No relevant properties");
+    }
+
+    @Test
     @DisplayName("при allure.spring.config.enabled=false шаг не создаётся")
     void disabledByProperty() {
         TestContext ctx = contextWith(new MockPropertySource()

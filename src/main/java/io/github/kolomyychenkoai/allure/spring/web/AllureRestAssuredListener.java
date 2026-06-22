@@ -4,7 +4,6 @@ import io.github.kolomyychenkoai.allure.spring.internal.AllureSpringSettings;
 import io.restassured.RestAssured;
 import io.restassured.filter.Filter;
 import org.springframework.core.Ordered;
-import org.springframework.core.env.Environment;
 import org.springframework.test.context.TestContext;
 import org.springframework.test.context.TestExecutionListener;
 
@@ -40,7 +39,8 @@ public class AllureRestAssuredListener implements TestExecutionListener, Ordered
 
     @Override
     public void beforeTestExecution(TestContext testContext) {
-        if (!AllureSpringSettings.enabled(environment(testContext), AllureSpringSettings.WEB_ENABLED)) {
+        if (!AllureSpringSettings.enabled(AllureSpringSettings.environment(testContext),
+                AllureSpringSettings.WEB_ENABLED)) {
             return;
         }
         synchronized (LOCK) {
@@ -49,14 +49,6 @@ public class AllureRestAssuredListener implements TestExecutionListener, Ordered
             if (!present) {
                 RestAssured.filters(new AllureRestAssuredFilter());
             }
-        }
-    }
-
-    private static Environment environment(TestContext testContext) {
-        try {
-            return testContext.getApplicationContext().getEnvironment();
-        } catch (Throwable ignored) {
-            return null;
         }
     }
 }
