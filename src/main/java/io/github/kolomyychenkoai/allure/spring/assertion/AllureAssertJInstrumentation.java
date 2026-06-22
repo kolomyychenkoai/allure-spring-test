@@ -1,9 +1,8 @@
 package io.github.kolomyychenkoai.allure.spring.assertion;
 
+import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
-import io.qameta.allure.Allure;
-import io.qameta.allure.model.Status;
 import net.bytebuddy.asm.Advice;
 import org.assertj.core.api.AbstractAssert;
 
@@ -19,10 +18,19 @@ import static net.bytebuddy.matcher.ElementMatchers.not;
  * ByteBuddy-инструментирование AssertJ ({@code AbstractAssert} и наследники):
  * каждый ассерт-метод ({@code isEqualTo}, {@code startsWith}, {@code contains}…) даёт
  * в отчёте шаг «Проверка: значение X — method arg» — без кода в тестах.
- * Подход — blacklist: перехватываем ВСЕ public non-static методы, КРОМЕ
- * конфигурационных/fluent-builder (as, describedAs, extracting, isNotNull…), которые
- * не являются проверками и/или зовутся внутренне. Шаг и при успехе (PASSED), и при
- * падении (FAILED). Ставится один раз на JVM — см. {@link AllureAssertionsListener}.
+ * <p>
+ * <b>Подход — blacklist</b> (а не whitelist), чтобы ловить и КАСТОМНЫЕ ассерты потребителя
+ * (его {@code extends AbstractAssert} с произвольно названными проверками). Перехватываем
+ * ВСЕ public non-static методы, КРОМЕ перечисленных не-проверок: конфигурация/описание
+ * ({@code as}, {@code describedAs}, {@code withFailMessage}, {@code usingComparator}…),
+ * извлечение/навигация ({@code extracting}, {@code filteredOn}, {@code first}, {@code last},
+ * {@code element}…) — они возвращают производный/тот же assert, сами ничего не проверяют,
+ * и шаг по ним был бы ложным. ВАЖНО: настоящие проверки {@code satisfies}/{@code returns}/
+ * {@code matches} в blacklist НЕ входят — они логируются. При добавлении новых
+ * fluent/navigation-методов в AssertJ их, возможно, нужно дописать сюда.
+ * <p>
+ * Шаг и при успехе (PASSED), и при падении (FAILED). Ставится один раз на JVM —
+ * см. {@link AllureAssertionsListener}.
  */
 public final class AllureAssertJInstrumentation {
 
@@ -36,17 +44,21 @@ public final class AllureAssertJInstrumentation {
     private AllureAssertJInstrumentation() {
     }
 
-    /** Вход в ассерт-метод; возвращает глубину (1 — внешний вызов). */
+    /** Вход в ассерт-метод; возвращает глубину (1 — внешний вызов). Только для inline-advice. */
     public static int enter() {
         int depth = DEPTH.get() + 1;
         DEPTH.set(depth);
         return depth;
     }
 
-    /** Выход из ассерт-метода. */
+    /** Выход из ассерт-метода (всегда парен {@link #enter()}). Только для inline-advice. */
     public static void exit() {
         int depth = DEPTH.get() - 1;
-        DEPTH.set(depth < 0 ? 0 : depth);
+        if (depth <= 0) {
+            DEPTH.remove(); // вернулись к нулю — не держим boxed 0 в пуле потоков surefire
+        } else {
+            DEPTH.set(depth);
+        }
     }
 
     public static void install() {
@@ -71,11 +83,18 @@ public final class AllureAssertJInstrumentation {
                                 .and(not(named("withAssertionInfo")))
                                 .and(not(named("inHexadecimal")))
                                 .and(not(named("inBinary")))
+                                .and(not(named("usingRecursiveAssertion")))
                                 .and(not(named("extracting")))
                                 .and(not(named("filteredOn")))
                                 .and(not(named("asInstanceOf")))
                                 .and(not(named("asString")))
                                 .and(not(named("asList")))
+                                // навигация: возвращают assert на под-элемент, сами не проверяют
+                                .and(not(named("first")))
+                                .and(not(named("last")))
+                                .and(not(named("element")))
+                                .and(not(named("elements")))
+                                .and(not(named("singleElement")))
                                 .and(not(named("newAbstractIterableAssert")))
                                 .and(not(named("getActual")))
                                 .and(not(named("actual")))
@@ -110,18 +129,16 @@ public final class AllureAssertJInstrumentation {
                 if (!outermost) {
                     return; // внутренний делегат (super.*) — не дублируем
                 }
-                StringBuilder sb = new StringBuilder("Проверка: значение ").append(actual)
+                StringBuilder sb = new StringBuilder("Проверка: значение ")
+                        .append(AllureAdviceSupport.safe(actual))
                         .append(" — ").append(methodName);
                 if (args != null) {
                     for (int i = 0; i < args.length; i++) {
-                        Object a = args[i];
-                        // varargs приходят массивом — показываем элементы, а не [Ljava…
-                        String rendered = (a instanceof Object[])
-                                ? java.util.Arrays.toString((Object[]) a) : String.valueOf(a);
-                        sb.append(i == 0 ? " " : ", ").append(rendered);
+                        // varargs приходят массивом — safe() печатает элементы (deepToString), не [Ljava…
+                        sb.append(i == 0 ? " " : ", ").append(AllureAdviceSupport.safe(args[i]));
                     }
                 }
-                Allure.step(sb.toString(), thrown == null ? Status.PASSED : Status.FAILED);
+                AllureAdviceSupport.step(sb.toString(), thrown);
             } catch (Throwable t) {
                 AllureInstrumentationLogger.warn("AssertJ", t);
             }

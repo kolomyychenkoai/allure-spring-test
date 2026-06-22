@@ -103,16 +103,45 @@ class AllureSpringAssertionsTest {
     }
 
     @Test
-    @DisplayName("после падения делегирующего ассерта флаг не «залипает» — следующий assertTrue логируется")
-    void delegatingFlagDoesNotLeakAfterFailure() {
+    @DisplayName("после падения делегирующего ассерта счётчик глубины не «залипает» — следующий assertTrue логируется")
+    void depthCounterDoesNotLeakAfterFailure() {
         TestResult result = allure.run("leak", () -> {
             assertThatThrownBy(() -> AssertionErrors.assertNotNull("должен быть", null))
                     .isInstanceOf(AssertionError.class);
             AssertionErrors.assertTrue("после провала", true);
         });
 
-        // если бы флаг утёк (остался true), этот шаг был бы проглочен как «внутренний»
+        // если бы счётчик утёк (остался > 0), этот шаг был бы проглочен как «внутренний»
         assertThat(allure.hasStep(result, "Проверка: после провала — верно")).isTrue();
+    }
+
+    @Test
+    @DisplayName("упавший assertFalse даёт РОВНО один шаг (внутренний fail не дублируется)")
+    void failingAssertFalseGivesSingleStep() {
+        TestResult result = allure.run("ff-fail", () ->
+                assertThatThrownBy(() -> AssertionErrors.assertFalse("должно быть ложью", true))
+                        .isInstanceOf(AssertionError.class));
+
+        long aboutAssert = result.getSteps().stream()
+                .filter(s -> s.getName().contains("должно быть ложью")).count();
+        assertThat(aboutAssert).isEqualTo(1);
+        // делегированный fail НЕ должен породить отдельный шаг «Проверка провалена: …»
+        assertThat(result.getSteps().stream()
+                .noneMatch(s -> s.getName().startsWith("Проверка провалена"))).isTrue();
+    }
+
+    @Test
+    @DisplayName("упавший assertTrue даёт РОВНО один шаг (внутренний fail не дублируется)")
+    void failingAssertTrueGivesSingleStep() {
+        TestResult result = allure.run("tt-fail", () ->
+                assertThatThrownBy(() -> AssertionErrors.assertTrue("должно быть истиной", false))
+                        .isInstanceOf(AssertionError.class));
+
+        long aboutAssert = result.getSteps().stream()
+                .filter(s -> s.getName().contains("должно быть истиной")).count();
+        assertThat(aboutAssert).isEqualTo(1);
+        assertThat(result.getSteps().stream()
+                .noneMatch(s -> s.getName().startsWith("Проверка провалена"))).isTrue();
     }
 
     private StepResult step(TestResult result, String name) {

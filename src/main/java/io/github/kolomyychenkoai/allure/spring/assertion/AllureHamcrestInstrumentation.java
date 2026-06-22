@@ -1,9 +1,8 @@
 package io.github.kolomyychenkoai.allure.spring.assertion;
 
+import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
-import io.qameta.allure.Allure;
-import io.qameta.allure.model.Status;
 import net.bytebuddy.asm.Advice;
 
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -48,8 +47,8 @@ public final class AllureHamcrestInstrumentation {
                                   @Advice.Thrown Throwable thrown) {
             try {
                 String label = (reason != null && !reason.isEmpty()) ? reason + ": " : "";
-                Allure.step("Проверка: " + label + "значение " + actual + ", ожидалось " + matcher,
-                        thrown == null ? Status.PASSED : Status.FAILED);
+                AllureAdviceSupport.step("Проверка: " + label + "значение " + AllureAdviceSupport.safe(actual)
+                        + ", ожидалось " + AllureAdviceSupport.safe(matcher), thrown);
             } catch (Throwable t) {
                 AllureInstrumentationLogger.warn("Hamcrest", t);
             }

@@ -19,15 +19,31 @@ public final class AllureSpringSettings {
     /** CSV-список префиксов свойств, попадающих в снимок конфигурации. */
     public static final String CONFIG_INCLUDE_PREFIXES = "allure.spring.config.include-prefixes";
 
+    /**
+     * Включить инструментирование ассертов (AssertJ/Hamcrest/Spring), по умолчанию true.
+     * Это ГЛОБАЛЬНАЯ на JVM фича (байткод ставится один раз до контекста), поэтому
+     * читается из system property, а не из per-test Spring Environment.
+     */
+    public static final String ASSERTION_ENABLED = "allure.spring.assertion.enabled";
+
     /** Префиксы по умолчанию — без доменной специфики. */
     public static final String DEFAULT_INCLUDE_PREFIXES = "spring.,server.,logging.,management.";
 
     private AllureSpringSettings() {
     }
 
-    /** Булев тумблер с дефолтом «включено». */
+    /** Булев тумблер с дефолтом «включено» (Spring Environment → system property). */
     public static boolean enabled(Environment env, String key) {
         String value = property(env, key);
+        return value == null || Boolean.parseBoolean(value);
+    }
+
+    /**
+     * Булев тумблер только из system property (дефолт «включено») — для глобальных, на
+     * JVM, фич, которые ставятся до Spring-контекста (напр. байткод-инструментирование).
+     */
+    public static boolean enabled(String key) {
+        String value = System.getProperty(key);
         return value == null || Boolean.parseBoolean(value);
     }
 
