@@ -5,6 +5,7 @@ import io.github.kolomyychenkoai.allure.spring.support.mock.Pricing;
 import io.github.kolomyychenkoai.allure.spring.support.mock.PricingCaller;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
+import io.qameta.allure.model.Status;
 import io.qameta.allure.model.StepResult;
 import io.qameta.allure.model.TestResult;
 import org.junit.jupiter.api.AfterEach;
@@ -53,10 +54,14 @@ class AllureMockitoTest {
         });
 
         List<String> names = stepNames(result);
-        assertThat(names).anyMatch(n -> n.startsWith("Мок-заглушка:") && n.contains("price"));
-        assertThat(names).anyMatch(n -> n.startsWith("Мок-вызов:") && n.contains("price")
+        assertThat(names).anyMatch(n -> n.startsWith("Мок-заглушка:") && n.contains("Pricing.price"));
+        assertThat(names).anyMatch(n -> n.startsWith("Мок-вызов:") && n.contains("Pricing.price")
                 && n.contains("999.99"));
-        assertThat(names).anyMatch(n -> n.startsWith("Мок-проверка:") && n.contains("price"));
+        assertThat(names).anyMatch(n -> n.startsWith("Мок-проверка:") && n.contains("ожидали ×1"));
+        // как у WireMock/БД — есть вложения с деталями
+        assertThat(allure.attachment(result, "Mock Call").orElseThrow())
+                .contains("Pricing.price").contains("laptop");
+        assertThat(allure.attachment(result, "Mock Result").orElseThrow()).contains("999.99");
     }
 
     @Test
@@ -75,5 +80,29 @@ class AllureMockitoTest {
                 && n.contains("laptop") && n.contains("2") && n.contains("1999.98"));
         assertThat(names).anyMatch(n -> n.startsWith("Мок-вызов:") && n.contains("mouse")
                 && n.contains("0.0")); // нестабленный метод вернул дефолт
+    }
+
+    @Test
+    @DisplayName("проваленный verify даёт FAILED-шаг с текстом ошибки во вложении")
+    void failedVerifyIsFailedStep() {
+        Pricing pricing = Mockito.mock(Pricing.class);
+
+        TestResult result = allure.run("fail", () -> {
+            new PricingCaller().callPrice(pricing, "laptop");      // вызвали 1 раз
+            try {
+                Mockito.verify(pricing, Mockito.times(2)).price("laptop"); // ждали 2 → провал
+            } catch (AssertionError expected) {
+                // ожидаемо: проверяем, что провал отразился в отчёте
+            }
+        });
+
+        StepResult failed = result.getSteps().stream()
+                .filter(s -> s.getName().startsWith("Мок-проверка не прошла:"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("нет FAILED-шага verify"));
+        assertThat(failed.getStatus()).isEqualTo(Status.FAILED);
+        assertThat(failed.getName()).contains("ожидали ×2");
+        assertThat(allure.attachment(result, "Mock Verify").orElseThrow())
+                .containsIgnoringCase("laptop"); // текст ошибки Mockito с деталями
     }
 }
