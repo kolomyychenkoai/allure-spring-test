@@ -130,6 +130,15 @@
             <artifactId>jakarta.persistence-api</artifactId>
             <scope>provided</scope>
         </dependency>
+        <!-- Модуль WireMock: provided — активируется, только если WireMock на classpath
+             потребителя; не в Spring Boot BOM — версия явно. -->
+        <dependency>
+            <groupId>org.wiremock</groupId>
+            <artifactId>wiremock-standalone</artifactId>
+            <version>3.13.2</version>
+            <scope>provided</scope>
+        </dependency>
+
         <!-- datasource-proxy: наш механизм логирования реального SQL. optional —
              как и прочие feature-зависимости, не навязываем транзитивно; модуль
              активируется, только если datasource-proxy есть на classpath потребителя
