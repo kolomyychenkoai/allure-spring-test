@@ -165,6 +165,13 @@
             <artifactId>mockito-core</artifactId>
             <scope>provided</scope>
         </dependency>
+        <!-- Модуль Kafka: kafka-clients для advice (ConsumerRecords/ProducerRecord).
+             provided — у потребителя есть, если он пишет тесты с Kafka. -->
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka-clients</artifactId>
+            <scope>provided</scope>
+        </dependency>
 
         <!-- datasource-proxy: наш механизм логирования реального SQL. optional —
              как и прочие feature-зависимости, не навязываем транзитивно; модуль
@@ -208,6 +215,17 @@
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- для живого Kafka-теста: spring-kafka + встроенный брокер (без Docker) -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka-test</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
