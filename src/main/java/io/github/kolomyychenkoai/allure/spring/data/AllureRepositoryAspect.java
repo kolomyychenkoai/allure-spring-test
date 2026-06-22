@@ -1,6 +1,8 @@
 package io.github.kolomyychenkoai.allure.spring.data;
 
 import io.qameta.allure.Allure;
+import io.qameta.allure.model.Status;
+import io.qameta.allure.model.StepResult;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
@@ -13,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.StringJoiner;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -21,6 +24,10 @@ import java.util.stream.Collectors;
  * «DB Repo.method» с вложениями «DB Call» (метод и аргументы — снятые ДО вызова,
  * чтобы отражать отправленное в БД) и «DB Result» (что вернулось).
  * Ставится автоматически — см. {@code AllureDataJpaAutoConfiguration}, код в тестах не нужен.
+ * <p>
+ * Шаг открывается ДО вызова, поэтому реальный SQL (модуль {@code AllureDataSourceListener})
+ * вкладывается ВНУТРЬ этого шага — в отчёте видно «вызов репозитория → его SQL»,
+ * а не вперемешку. {@code try/finally} гарантирует закрытие шага (степы не «пропадают»).
  * <p>
  * Гейтинг — по активному Allure тест-кейсу (а НЕ по хардкоду пакетов): логируем все
  * обращения к БД, пока идёт тест (в т.ч. сквозь прод-код), и молчим во время старта
@@ -39,17 +46,26 @@ public class AllureRepositoryAspect {
         // снимок ДО вызова: аргументы должны отражать то, что ОТПРАВИЛИ в БД,
         // а не мутированное состояние после вызова (напр. сгенерированный id у save)
         Call call = snapshotIfActive(pjp);
-
-        Object result;
-        try {
-            result = pjp.proceed();
-        } catch (Throwable error) {
-            // при падении репозитория шаг тоже нужен — видно, ЧТО ушло в БД (диагностируемость)
-            emit(call, "<exception: " + error.getClass().getSimpleName() + ": " + error.getMessage() + ">");
-            throw error;
+        if (call == null) {
+            return pjp.proceed();
         }
-        emit(call, formatResponse(result));
-        return result;
+
+        // шаг открываем ДО proceed — тогда SQL внутри вызова вложится В НЕГО
+        String uuid = UUID.randomUUID().toString();
+        boolean started = startStep(uuid, call.stepName());
+        try {
+            Object result = pjp.proceed();
+            finish(started, uuid, call.callText(), formatResponse(result), Status.PASSED);
+            return result;
+        } catch (Throwable error) {
+            // при падении шаг тоже заполняем — видно, ЧТО ушло в БД (диагностируемость)
+            finish(started, uuid, call.callText(),
+                    "<exception: " + error.getClass().getSimpleName() + ": " + error.getMessage() + ">",
+                    Status.BROKEN);
+            throw error;
+        } finally {
+            stopQuietly(started, uuid);
+        }
     }
 
     private Call snapshotIfActive(ProceedingJoinPoint pjp) {
@@ -66,17 +82,36 @@ public class AllureRepositoryAspect {
         }
     }
 
-    private void emit(Call call, String resultText) {
-        if (call == null) {
+    private boolean startStep(String uuid, String name) {
+        try {
+            Allure.getLifecycle().startStep(uuid, new StepResult().setName(name).setStatus(Status.PASSED));
+            return true;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private void finish(boolean started, String uuid, String callText, String resultText, Status status) {
+        if (!started) {
             return;
         }
         try {
-            Allure.step(call.stepName(), step -> {
-                Allure.addAttachment("DB Call", "text/plain", call.callText());
-                Allure.addAttachment("DB Result", "text/plain", resultText);
-            });
+            // вложения и статус — на ТЕКУЩИЙ (наш) шаг; SQL уже вложился сюда же во время proceed
+            Allure.addAttachment("DB Call", "text/plain", callText);
+            Allure.addAttachment("DB Result", "text/plain", resultText);
+            Allure.getLifecycle().updateStep(uuid, s -> s.setStatus(status));
         } catch (Throwable ignored) {
             // инструментирование не должно ронять тест
+        }
+    }
+
+    private void stopQuietly(boolean started, String uuid) {
+        if (!started) {
+            return;
+        }
+        try {
+            Allure.getLifecycle().stopStep(uuid);
+        } catch (Throwable ignored) {
         }
     }
 
