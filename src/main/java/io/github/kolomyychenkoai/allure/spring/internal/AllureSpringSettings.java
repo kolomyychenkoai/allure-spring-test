@@ -38,6 +38,12 @@ public final class AllureSpringSettings {
      */
     public static final String KAFKA_ENABLED = "allure.spring.kafka.enabled";
 
+    /**
+     * Включить инструментирование WireMock (stubFor/verify/resetAll + запросы),
+     * по умолчанию true. Глобальная на JVM фича (байткод) — читается из system property.
+     */
+    public static final String WIREMOCK_ENABLED = "allure.spring.wiremock.enabled";
+
     /** Префиксы по умолчанию — без доменной специфики. */
     public static final String DEFAULT_INCLUDE_PREFIXES = "spring.,server.,logging.,management.";
 

@@ -1,5 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.wiremock;
 
+import com.github.tomakehurst.wiremock.http.HttpHeaders;
 import com.github.tomakehurst.wiremock.http.Request;
 import com.github.tomakehurst.wiremock.http.Response;
 import io.qameta.allure.Allure;
@@ -88,7 +89,7 @@ public final class AllureWireMockListener {
         return sb.toString();
     }
 
-    private static void appendHeaders(StringBuilder sb, com.github.tomakehurst.wiremock.http.HttpHeaders headers) {
+    private static void appendHeaders(StringBuilder sb, HttpHeaders headers) {
         // выводим ВСЕ значения заголовка (multi-value: Set-Cookie, Cache-Control и т.п.)
         headers.all().forEach(h ->
                 h.values().forEach(v -> sb.append(h.key()).append(": ").append(v).append('\n')));

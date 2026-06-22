@@ -1,7 +1,10 @@
 package io.github.kolomyychenkoai.allure.spring.wiremock;
 
+import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.CountMatchingStrategy;
 import com.github.tomakehurst.wiremock.matching.RequestPatternBuilder;
+import com.github.tomakehurst.wiremock.stubbing.StubMapping;
+import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import io.qameta.allure.Allure;
@@ -16,12 +19,18 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static net.bytebuddy.matcher.ElementMatchers.named;
 
 /**
- * ByteBuddy-инструментирование WireMock {@code verify(...)} (проверки «дёрнули ли
- * сервис, сколько раз, с чем») и {@code resetAll} (сброс заглушек). У этих операций нет
- * listener-хука, поэтому ловим байткодом. verify даёт шаг «Проверка обращений к
- * заглушке (×N)» (PASSED/FAILED по исходу), resetAll — «WireMock: сброс заглушек».
- * Перехватываются и static {@code client.WireMock.verify}, и {@code WireMockServer.verify}.
- * Ставится один раз на JVM — см. {@link AllureWireMockTestListener}.
+ * ByteBuddy-инструментирование WireMock, у которого нет listener-хука:
+ * <ul>
+ *   <li>{@code stubFor} → шаг «Создана заглушка …» в момент создания (живой, верный порядок,
+ *       переживает {@code resetAll()});</li>
+ *   <li>{@code verify(...)} → шаг «Проверка обращений к заглушке (×N)» (PASSED/FAILED);</li>
+ *   <li>{@code resetAll} → перед сбросом снимает near-miss и состояния сценариев со СЕРВЕРА
+ *       (иначе reset их сотрёт до afterTestMethod), затем шаг «WireMock: сброс заглушек».</li>
+ * </ul>
+ * Перехватываются и static {@code client.WireMock.*}, и {@code WireMockServer.*}.
+ * Дубля шага НЕТ: {@code verify}-перегрузки делегируют в {@code verifyThat} (не в {@code verify}),
+ * {@code stubFor} — в {@code register} (мы их не матчим). Проверено на WireMock 3.13.
+ * Установка идемпотентна (CAS-гард {@code INSTALLED}, потокобезопасно) — один раз на JVM.
  */
 public final class AllureWireMockVerifyInstrumentation {
 
@@ -35,12 +44,21 @@ public final class AllureWireMockVerifyInstrumentation {
             return;
         }
         AllureInstrumentation.retransform(named("com.github.tomakehurst.wiremock.client.WireMock"),
-                (builder, type, cl, module, pd) -> builder.visit(
-                        Advice.to(VerifyAdvice.class).on(named("verify"))));
+                (builder, type, cl, module, pd) -> builder
+                        .visit(Advice.to(VerifyAdvice.class).on(named("verify")))
+                        .visit(Advice.to(StubAdvice.class).on(named("stubFor"))));
         AllureInstrumentation.retransform(named("com.github.tomakehurst.wiremock.WireMockServer"),
                 (builder, type, cl, module, pd) -> builder
                         .visit(Advice.to(VerifyAdvice.class).on(named("verify")))
+                        .visit(Advice.to(StubAdvice.class).on(named("stubFor")))
                         .visit(Advice.to(ResetAdvice.class).on(named("resetAll"))));
+    }
+
+    /** Логика шага создания заглушки (вынесена из advice). */
+    public static void onStub(Object stub) {
+        if (stub instanceof StubMapping mapping) {
+            AllureWireMockSteps.stub(mapping);
+        }
     }
 
     /** Логика логирования verify (вынесена из advice). */
@@ -59,9 +77,9 @@ public final class AllureWireMockVerifyInstrumentation {
                     if (a instanceof Integer integer) {
                         count = "×" + integer;
                     } else if (a instanceof CountMatchingStrategy strategy) {
-                        count = String.valueOf(strategy); // напр. «less than 3»
+                        count = AllureAdviceSupport.safe(strategy); // напр. «less than 3»
                     } else if (a instanceof RequestPatternBuilder builder) {
-                        pattern = String.valueOf(builder.build());
+                        pattern = AllureAdviceSupport.safe(builder.build());
                     }
                 }
             }
@@ -84,14 +102,29 @@ public final class AllureWireMockVerifyInstrumentation {
         }
     }
 
-    /** Логика логирования resetAll. */
-    public static void onResetAll() {
+    /**
+     * Логика resetAll. Вызывается ПЕРЕД фактическим сбросом (advice OnMethodEnter), поэтому
+     * near-miss/сценарии ещё доступны на сервере — снимаем их до того, как reset всё сотрёт.
+     */
+    public static void onResetAll(Object server) {
         try {
-            if (Allure.getLifecycle().getCurrentTestCase().isPresent()) {
-                Allure.step("WireMock: сброс заглушек", Status.PASSED);
+            if (!AllureWireMockSteps.active()) {
+                return;
             }
+            if (server instanceof WireMockServer wireMockServer) {
+                AllureWireMockSteps.nearMisses(wireMockServer);
+                AllureWireMockSteps.scenarios(wireMockServer);
+            }
+            Allure.step("WireMock: сброс заглушек", Status.PASSED);
         } catch (Throwable t) {
             AllureInstrumentationLogger.warn("WireMockReset", t);
+        }
+    }
+
+    public static class StubAdvice {
+        @Advice.OnMethodExit(suppress = Throwable.class)
+        public static void onExit(@Advice.Return Object stub) {
+            onStub(stub);
         }
     }
 
@@ -103,9 +136,9 @@ public final class AllureWireMockVerifyInstrumentation {
     }
 
     public static class ResetAdvice {
-        @Advice.OnMethodExit(suppress = Throwable.class)
-        public static void onExit() {
-            onResetAll();
+        @Advice.OnMethodEnter(suppress = Throwable.class)
+        public static void onEnter(@Advice.This Object server) {
+            onResetAll(server);
         }
     }
 }

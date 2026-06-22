@@ -13,8 +13,12 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import com.github.tomakehurst.wiremock.stubbing.StubMapping;
+
+import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.lessThan;
+import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -79,8 +83,22 @@ class AllureWireMockVerifyTest {
     @Test
     @DisplayName("resetAll даёт шаг «WireMock: сброс заглушек»")
     void logsResetAll() {
-        TestResult result = allure.run("reset", AllureWireMockVerifyInstrumentation::onResetAll);
+        // server=null: near-miss/сценарии не снимаются, проверяем сам шаг сброса
+        TestResult result = allure.run("reset", () -> AllureWireMockVerifyInstrumentation.onResetAll(null));
 
         assertThat(allure.hasStep(result, "WireMock: сброс заглушек")).isTrue();
+    }
+
+    @Test
+    @DisplayName("stubFor: шаг «Создана заглушка …» с вложением WireMock Stub")
+    void logsStub() {
+        StubMapping stub = get(urlPathEqualTo("/api/prices"))
+                .willReturn(okJson("{\"price\":9.99}")).build();
+
+        TestResult result = allure.run("stub", () ->
+                AllureWireMockVerifyInstrumentation.onStub(stub));
+
+        assertThat(allure.hasStep(result, "Создана заглушка: GET /api/prices → 200")).isTrue();
+        assertThat(allure.attachment(result, "WireMock Stub")).isPresent();
     }
 }
