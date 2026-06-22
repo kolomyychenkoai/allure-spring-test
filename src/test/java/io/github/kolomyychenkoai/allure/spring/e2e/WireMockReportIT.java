@@ -17,6 +17,7 @@ import java.net.http.HttpResponse;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
+import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
@@ -96,5 +97,10 @@ class WireMockReportIT {
                 HttpRequest.newBuilder(URI.create(base + "/api/does-not-exist")).build(),
                 HttpResponse.BodyHandlers.ofString());
         assertThat(miss.statusCode()).isEqualTo(404);
+
+        // verify — проверки обращений (попадают в отчёт шагами)
+        wireMock.verify(getRequestedFor(urlPathEqualTo("/api/prices")));
+        wireMock.verify(2, getRequestedFor(urlPathEqualTo("/api/flaky"))); // flaky вызвали дважды
+        wireMock.resetAll();                                               // сброс заглушек → шаг
     }
 }

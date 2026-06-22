@@ -44,6 +44,12 @@ public class AllureWireMockTestListener implements TestExecutionListener, Ordere
     }
 
     @Override
+    public void beforeTestClass(TestContext testContext) {
+        // verify()/resetAll нет listener-хука — ставим байткод-инструментирование один раз
+        AllureWireMockVerifyInstrumentation.install();
+    }
+
+    @Override
     public void beforeTestMethod(TestContext testContext) {
         AllureWireMockListener.clear();
         Set<UUID> stubsBefore = new HashSet<>();
