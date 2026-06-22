@@ -8,7 +8,6 @@ import io.github.kolomyychenkoai.allure.spring.internal.AllureSpringSettings;
 import io.qameta.allure.Allure;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
-import org.springframework.core.env.Environment;
 import org.springframework.test.context.TestContext;
 import org.springframework.test.context.TestExecutionListener;
 
@@ -22,7 +21,22 @@ import java.util.List;
 /**
  * Захватывает логи приложения (через Logback) на время каждого теста и прикрепляет их
  * к Allure-отчёту как вложение «Application Logs». Активируется автоматически через
- * {@code META-INF/spring.factories} — потребителю не нужно писать код.
+ * {@code META-INF/spring.factories} — потребителю не нужно писать код. Выключить —
+ * {@code allure.spring.logs.enabled=false}.
+ * <p>
+ * Вложение кладётся на уровень тест-кейса (а не отдельным шагом, как «Configuration»):
+ * логи — это сквозной артефакт всего теста, а не дискретное действие.
+ * <p>
+ * {@code getOrder() = HIGHEST_PRECEDENCE}: {@code beforeTestMethod} срабатывает раньше
+ * прочих листенеров, {@code afterTestMethod} (в обратном порядке) — позже, так захват
+ * покрывает тело теста и колбэки листенеров с меньшим приоритетом. То, что логируется
+ * ДО beforeTestMethod этого листенера (более ранние листенеры), в захват не попадёт.
+ * <p>
+ * ⚠️ <b>Параллелизм:</b> аппендер вешается на ОБЩИЙ root-логгер JVM. Модуль рассчитан на
+ * ПОСЛЕДОВАТЕЛЬНЫЙ прогон (forked-JVM surefire — штатно). Под {@code @Execution(CONCURRENT)}
+ * аппендеры разных тестов будут ловить логи всех параллельных потоков — содержимое
+ * перемешается. Захват намеренно по всем потокам (а не только потоку теста), чтобы видеть
+ * async-логи (брокеры/исполнители) — ценой несовместимости с параллельным запуском.
  */
 public class AllureApplicationLogsListener implements TestExecutionListener, Ordered {
 
@@ -33,14 +47,13 @@ public class AllureApplicationLogsListener implements TestExecutionListener, Ord
 
     @Override
     public int getOrder() {
-        // beforeTestMethod пораньше, afterTestMethod (в обратном порядке) — попозже:
-        // так захват логов покрывает весь тест.
         return Ordered.HIGHEST_PRECEDENCE;
     }
 
     @Override
     public void beforeTestMethod(TestContext testContext) {
-        if (!AllureSpringSettings.enabled(environment(testContext), AllureSpringSettings.LOGS_ENABLED)) {
+        if (!AllureSpringSettings.enabled(AllureSpringSettings.environment(testContext),
+                AllureSpringSettings.LOGS_ENABLED)) {
             return;
         }
 
@@ -49,10 +62,10 @@ public class AllureApplicationLogsListener implements TestExecutionListener, Ord
         appender.setContext(loggerContext);
         appender.start();
 
-        Logger root = loggerContext.getLogger(Logger.ROOT_LOGGER_NAME);
-        root.addAppender(appender);
-
+        // атрибут СТАВИМ ДО addAppender: тогда afterTestMethod гарантированно найдёт и снимет
+        // аппендер, даже если addAppender бросит (иначе аппендер «повис» бы на root навсегда)
         testContext.setAttribute(APPENDER_KEY, appender);
+        loggerContext.getLogger(Logger.ROOT_LOGGER_NAME).addAppender(appender);
     }
 
     @Override
@@ -63,21 +76,16 @@ public class AllureApplicationLogsListener implements TestExecutionListener, Ord
         }
         testContext.removeAttribute(APPENDER_KEY);
 
-        LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
-        Logger root = loggerContext.getLogger(Logger.ROOT_LOGGER_NAME);
-        root.detachAppender(appender);
-        appender.stop();
-
-        List<String> lines = appender.getLines();
-        Allure.addAttachment("Application Logs", "text/plain",
-                lines.isEmpty() ? "No logs captured" : String.join("\n", lines));
-    }
-
-    private static Environment environment(TestContext testContext) {
         try {
-            return testContext.getApplicationContext().getEnvironment();
-        } catch (Throwable ignored) {
-            return null;
+            LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
+            Logger root = loggerContext.getLogger(Logger.ROOT_LOGGER_NAME);
+            root.detachAppender(appender);
+            appender.stop();
+        } finally {
+            // вложение пишем даже если detach/stop бросили — и снятие, и аттач не теряются
+            List<String> lines = appender.getLines();
+            Allure.addAttachment("Application Logs", "text/plain",
+                    lines.isEmpty() ? "No logs captured" : String.join("\n", lines));
         }
     }
 
@@ -87,16 +95,24 @@ public class AllureApplicationLogsListener implements TestExecutionListener, Ord
 
         @Override
         protected void append(ILoggingEvent event) {
-            String line = FMT.format(Instant.ofEpochMilli(event.getTimeStamp()))
-                    + " " + String.format("%-5s", event.getLevel())
-                    + " [" + event.getThreadName() + "] "
-                    + event.getLoggerName()
-                    + " - " + event.getFormattedMessage();
-            lines.add(line);
+            try {
+                String thread = event.getThreadName();
+                String line = FMT.format(Instant.ofEpochMilli(event.getTimeStamp()))
+                        + " " + String.format("%-5s", event.getLevel())
+                        + " [" + (thread != null ? thread : "?") + "] "
+                        + event.getLoggerName()
+                        + " - " + event.getFormattedMessage();
+                lines.add(line);
+            } catch (Exception e) {
+                // сбой захвата строки виден в статусах logback, но НЕ роняет логирование приложения
+                addError("Allure log capture failed", e);
+            }
         }
 
         List<String> getLines() {
-            return List.copyOf(lines);
+            synchronized (lines) { // итерация по synchronizedList — под его же монитором
+                return List.copyOf(lines);
+            }
         }
     }
 }

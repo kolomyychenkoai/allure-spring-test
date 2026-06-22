@@ -1,6 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.internal;
 
 import org.springframework.core.env.Environment;
+import org.springframework.test.context.TestContext;
 
 /**
  * Единый реестр ключей-тумблеров библиотеки и их чтение. Каждый модуль держит СВОЙ ключ
@@ -78,6 +79,18 @@ public final class AllureSpringSettings {
     public static String includePrefixes(Environment env) {
         String value = property(env, CONFIG_INCLUDE_PREFIXES);
         return (value == null || value.isBlank()) ? DEFAULT_INCLUDE_PREFIXES : value;
+    }
+
+    /**
+     * Spring {@link Environment} текущего теста, или {@code null}, если контекст ещё не поднят.
+     * Общий хелпер для per-test листенеров (logs/config) — без копипасты.
+     */
+    public static Environment environment(TestContext testContext) {
+        try {
+            return testContext.getApplicationContext().getEnvironment();
+        } catch (RuntimeException e) {
+            return null; // контекст не поднят — фичу пропустим (дефолт «включено» по property)
+        }
     }
 
     private static String property(Environment env, String key) {
