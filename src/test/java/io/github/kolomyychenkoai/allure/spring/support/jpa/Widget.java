@@ -24,6 +24,7 @@ public class Widget extends BaseEntity {
 
     @Override
     public String toString() {
-        return "Widget{id=" + getId() + ", name=" + name + "}";
+        // порядок полей как в аспекте (describeEntity: поля класса, затем суперкласса)
+        return "Widget{name=" + name + ", id=" + getId() + "}";
     }
 }
