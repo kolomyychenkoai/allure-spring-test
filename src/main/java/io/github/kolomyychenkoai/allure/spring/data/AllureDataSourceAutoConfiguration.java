@@ -1,5 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.data;
 
+import io.github.kolomyychenkoai.allure.spring.internal.AllureSpringSettings;
 import net.ttddyy.dsproxy.support.ProxyDataSource;
 import net.ttddyy.dsproxy.support.ProxyDataSourceBuilder;
 import org.springframework.beans.factory.config.BeanPostProcessor;
@@ -22,7 +23,7 @@ import javax.sql.DataSource;
  */
 @AutoConfiguration
 @ConditionalOnClass({DataSource.class, ProxyDataSourceBuilder.class})
-@ConditionalOnProperty(name = "allure.spring.datasource.enabled", matchIfMissing = true)
+@ConditionalOnProperty(name = AllureSpringSettings.DATASOURCE_ENABLED, matchIfMissing = true)
 public class AllureDataSourceAutoConfiguration {
 
     @Bean

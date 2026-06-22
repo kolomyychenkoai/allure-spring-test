@@ -44,6 +44,12 @@ public final class AllureSpringSettings {
      */
     public static final String WIREMOCK_ENABLED = "allure.spring.wiremock.enabled";
 
+    /** Включить AOP-логирование вызовов Spring Data репозиториев (по умолчанию true). */
+    public static final String DATA_ENABLED = "allure.spring.data.enabled";
+
+    /** Включить логирование реального SQL (обёртка DataSource через datasource-proxy, по умолчанию true). */
+    public static final String DATASOURCE_ENABLED = "allure.spring.datasource.enabled";
+
     /** Префиксы по умолчанию — без доменной специфики. */
     public static final String DEFAULT_INCLUDE_PREFIXES = "spring.,server.,logging.,management.";
 

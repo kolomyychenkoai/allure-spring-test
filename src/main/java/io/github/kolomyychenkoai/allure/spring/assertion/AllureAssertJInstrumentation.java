@@ -95,6 +95,8 @@ public final class AllureAssertJInstrumentation {
                                 .and(not(named("element")))
                                 .and(not(named("elements")))
                                 .and(not(named("singleElement")))
+                                .and(not(named("get"))) // OptionalAssert.get() и т.п. — навигация к значению
+                                .and(not(named("value")))
                                 .and(not(named("newAbstractIterableAssert")))
                                 .and(not(named("getActual")))
                                 .and(not(named("actual")))
