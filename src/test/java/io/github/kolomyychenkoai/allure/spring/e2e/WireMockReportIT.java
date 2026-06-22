@@ -20,6 +20,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+import static com.github.tomakehurst.wiremock.stubbing.Scenario.STARTED;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -72,7 +73,25 @@ class WireMockReportIT {
                 HttpResponse.BodyHandlers.ofString());
         assertThat(post.statusCode()).isEqualTo(201);
 
-        // незаматченный запрос — WireMock отдаёт 404, он тоже должен быть в отчёте
+        // stateful-сценарий: первый вызов 503, после перехода состояния — 200
+        wireMock.stubFor(get(urlPathEqualTo("/api/flaky")).inScenario("retry")
+                .whenScenarioStateIs(STARTED)
+                .willReturn(aResponse().withStatus(503))
+                .willSetStateTo("recovered"));
+        wireMock.stubFor(get(urlPathEqualTo("/api/flaky")).inScenario("retry")
+                .whenScenarioStateIs("recovered")
+                .willReturn(okJson("{\"ok\":true}")));
+
+        HttpResponse<String> firstTry = client.send(
+                HttpRequest.newBuilder(URI.create(base + "/api/flaky")).build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertThat(firstTry.statusCode()).isEqualTo(503);
+        HttpResponse<String> secondTry = client.send(
+                HttpRequest.newBuilder(URI.create(base + "/api/flaky")).build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertThat(secondTry.statusCode()).isEqualTo(200);
+
+        // незаматченный запрос — WireMock отдаёт 404 + near-miss (ближайший стаб) в отчёте
         HttpResponse<String> miss = client.send(
                 HttpRequest.newBuilder(URI.create(base + "/api/does-not-exist")).build(),
                 HttpResponse.BodyHandlers.ofString());

@@ -1,7 +1,9 @@
 package io.github.kolomyychenkoai.allure.spring.wiremock;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import com.github.tomakehurst.wiremock.stubbing.StubMapping;
+import com.github.tomakehurst.wiremock.verification.NearMiss;
 import io.qameta.allure.Allure;
 import io.qameta.allure.model.Attachment;
 import io.qameta.allure.model.Status;
@@ -61,6 +63,61 @@ public class AllureWireMockTestListener implements TestExecutionListener, Ordere
     public void afterTestMethod(TestContext testContext) {
         AllureWireMockListener.flushToAllure();
         prependStubSteps(testContext);
+        appendNearMisses(testContext);
+        appendScenarios(testContext);
+    }
+
+    /** Для незаматченных запросов — почему не сматчилось (ближайший стаб + diff). */
+    private void appendNearMisses(TestContext testContext) {
+        try {
+            if (!Allure.getLifecycle().getCurrentTestCase().isPresent()) {
+                return;
+            }
+            for (WireMockServer server : findServers(testContext)) {
+                for (NearMiss nearMiss : server.findNearMissesForAllUnmatchedRequests()) {
+                    String method = "";
+                    String url = "";
+                    if (nearMiss.getRequest() != null) {
+                        method = nearMiss.getRequest().getMethod().getName();
+                        url = nearMiss.getRequest().getUrl();
+                    }
+                    String candidate = stubRequestLine(nearMiss.getStubMapping());
+                    StepResult step = new StepResult()
+                            .setName("Near-miss: " + method + " " + url + " ≉ заглушка " + candidate)
+                            .setStatus(Status.BROKEN);
+                    step.getAttachments().add(new Attachment()
+                            .setName("Near miss (почему не сматчилось)")
+                            .setType("text/plain")
+                            .setSource(writeAttachment(String.valueOf(nearMiss.getDiff()))));
+                    addStep(step);
+                }
+            }
+        } catch (Throwable ignored) {
+            // инструментирование не должно ронять тест
+        }
+    }
+
+    /** Итоговые состояния сценариев (stateful-заглушки). */
+    private void appendScenarios(TestContext testContext) {
+        try {
+            if (!Allure.getLifecycle().getCurrentTestCase().isPresent()) {
+                return;
+            }
+            for (WireMockServer server : findServers(testContext)) {
+                for (Scenario scenario : server.getAllScenarios().getScenarios()) {
+                    addStep(new StepResult()
+                            .setName("WireMock сценарий «" + scenario.getName() + "»: состояние "
+                                    + scenario.getState())
+                            .setStatus(Status.PASSED));
+                }
+            }
+        } catch (Throwable ignored) {
+            // инструментирование не должно ронять тест
+        }
+    }
+
+    private void addStep(StepResult step) {
+        Allure.getLifecycle().updateTestCase(tr -> tr.getSteps().add(step));
     }
 
     @SuppressWarnings("unchecked")
@@ -88,22 +145,10 @@ public class AllureWireMockTestListener implements TestExecutionListener, Ordere
     }
 
     private StepResult buildStubStep(StubMapping stub) {
-        String method = "";
-        String url = "";
-        if (stub.getRequest() != null) {
-            if (stub.getRequest().getMethod() != null) {
-                method = stub.getRequest().getMethod().getName();
-            }
-            url = firstNonNull(
-                    stub.getRequest().getUrlPathPattern(),
-                    stub.getRequest().getUrlPath(),
-                    stub.getRequest().getUrl(),
-                    stub.getRequest().getUrlPattern());
-        }
         int status = stub.getResponse() != null ? stub.getResponse().getStatus() : 200;
 
         StepResult step = new StepResult()
-                .setName("Создана заглушка: " + method + " " + url + " → " + status)
+                .setName("Создана заглушка: " + stubRequestLine(stub) + " → " + status)
                 .setStatus(Status.PASSED);
         step.getAttachments().add(new Attachment()
                 .setName("WireMock Stub")
@@ -162,6 +207,21 @@ public class AllureWireMockTestListener implements TestExecutionListener, Ordere
         } catch (Throwable e) {
             return null;
         }
+    }
+
+    /** «METHOD url» из стаба (для имени шага и near-miss кандидата). */
+    private String stubRequestLine(StubMapping stub) {
+        if (stub == null || stub.getRequest() == null) {
+            return "";
+        }
+        String method = stub.getRequest().getMethod() != null
+                ? stub.getRequest().getMethod().getName() : "";
+        String url = firstNonNull(
+                stub.getRequest().getUrlPathPattern(),
+                stub.getRequest().getUrlPath(),
+                stub.getRequest().getUrl(),
+                stub.getRequest().getUrlPattern());
+        return (method + " " + url).trim();
     }
 
     private static String firstNonNull(String... values) {
