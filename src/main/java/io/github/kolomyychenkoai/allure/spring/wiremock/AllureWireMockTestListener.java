@@ -179,6 +179,13 @@ public class AllureWireMockTestListener implements TestExecutionListener, Ordere
                 sb.append("  Delay: ").append(stub.getResponse().getFixedDelayMilliseconds()).append("ms\n");
             }
         }
+        // полное правило целиком — чтобы НИЧЕГО не терять: матчеры по заголовкам/телу,
+        // заголовки ответа, scenario, fault, проксирование и пр. (StubMapping.toString() = JSON)
+        try {
+            sb.append("\nFull mapping (JSON):\n").append(stub.toString()).append('\n');
+        } catch (Throwable ignored) {
+            // полный дамп не критичен — читаемая часть выше уже есть
+        }
         return sb.toString();
     }
 
