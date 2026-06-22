@@ -139,6 +139,19 @@
             <scope>provided</scope>
         </dependency>
 
+        <!-- Модуль ассертов (ByteBuddy): инструментирование байткода. provided —
+             у потребителя byte-buddy есть в test-scope (тянет mockito/spring-boot-test). -->
+        <dependency>
+            <groupId>net.bytebuddy</groupId>
+            <artifactId>byte-buddy</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>net.bytebuddy</groupId>
+            <artifactId>byte-buddy-agent</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
         <!-- datasource-proxy: наш механизм логирования реального SQL. optional —
              как и прочие feature-зависимости, не навязываем транзитивно; модуль
              активируется, только если datasource-proxy есть на classpath потребителя

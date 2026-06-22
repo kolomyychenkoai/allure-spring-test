@@ -2,4 +2,5 @@ org.springframework.test.context.TestExecutionListener=\
 io.github.kolomyychenkoai.allure.spring.logs.AllureApplicationLogsListener,\
 io.github.kolomyychenkoai.allure.spring.config.AllureConfigurationListener,\
 io.github.kolomyychenkoai.allure.spring.web.AllureRestAssuredListener,\
-io.github.kolomyychenkoai.allure.spring.wiremock.AllureWireMockTestListener
+io.github.kolomyychenkoai.allure.spring.wiremock.AllureWireMockTestListener,\
+io.github.kolomyychenkoai.allure.spring.assertion.AllureAssertionsListener
