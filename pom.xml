@@ -11,7 +11,8 @@
 
     <name>allure-spring-test</name>
     <description>Zero-config Allure reporting for Spring tests: application logs, configuration
-        snapshots and MockMvc HTTP request/response, attached automatically — no test code changes.</description>
+        snapshots and HTTP request/response (MockMvc and RestAssured), attached automatically —
+        no test code changes.</description>
     <url>https://github.com/kolomyychenkoai/allure-spring-test</url>
 
     <licenses>
@@ -106,6 +107,14 @@
             <groupId>jakarta.servlet</groupId>
             <artifactId>jakarta.servlet-api</artifactId>
             <scope>provided</scope>
+        </dependency>
+
+        <!-- Модуль HTTP RestAssured: optional — модуль активируется только если
+             RestAssured есть на classpath потребителя; транзитивно не навязываем. -->
+        <dependency>
+            <groupId>io.rest-assured</groupId>
+            <artifactId>rest-assured</artifactId>
+            <optional>true</optional>
         </dependency>
 
         <!-- Тесты: самопроверка (уровень A) и живой отчёт (уровень B). -->
