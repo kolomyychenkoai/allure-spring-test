@@ -9,17 +9,46 @@ import java.lang.instrument.Instrumentation;
 
 /**
  * Общая база байткод-инструментирования для всех модулей (Spring-ассерты, Hamcrest,
- * AssertJ, Kafka, WireMock-verify…). Один {@code ByteBuddyAgent.install()} на JVM
- * (идемпотентен, переиспользует уже привязанный агент — совместимо с Mockito),
- * узкий радиус (только заданный тип), {@code disableClassFormatChanges} — безопасно
- * для соседних агентов. Сбой агента логируется и НЕ роняет тест.
+ * AssertJ, Kafka, WireMock-verify…). Сам {@code ByteBuddyAgent.install()} идемпотентен
+ * (переиспользует уже привязанный к JVM агент — совместимо с Mockito), радиус узкий
+ * (только заданный тип), {@code disableClassFormatChanges} — безопасно для соседних
+ * агентов. Сбой инструментирования логируется на WARNING и НЕ роняет тест.
+ * <p>
+ * <b>byte-buddy в scope {@code provided}</b> — у потребителя он обычно есть транзитивно
+ * (mockito / spring-boot-starter-test). Если есть сомнение, что byte-buddy на classpath,
+ * вызывающий модуль должен проверить {@link #available()} ПЕРЕД тем, как строить matcher
+ * и transformer (их типы из byte-buddy, иначе упадёт линковка вызывающего класса).
  */
 public final class AllureInstrumentation {
 
     private AllureInstrumentation() {
     }
 
-    /** Ретрансформировать тип(ы) под matcher переданным трансформером (advice). */
+    /**
+     * Есть ли byte-buddy на classpath. Проверка по имени класса (без инициализации),
+     * сама по себе типы byte-buddy не тянет — безопасно звать даже когда его нет.
+     */
+    public static boolean available() {
+        try {
+            Class.forName("net.bytebuddy.agent.ByteBuddyAgent", false,
+                    AllureInstrumentation.class.getClassLoader());
+            return true;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /**
+     * Ретрансформировать тип(ы) под {@code typeMatcher} переданным {@code transformer}
+     * (advice). Сбой ловится и логируется на WARNING — тест не затрагивается.
+     * <p>
+     * <b>НЕ идемпотентен:</b> каждый вызов регистрирует НОВЫЙ {@code ClassFileTransformer}
+     * в {@link Instrumentation} на весь срок жизни JVM и заново ретрансформирует
+     * подходящие классы. Вызывающий ОБЯЗАН гарантировать однократность установки
+     * (потокобезопасно, напр. {@code AtomicBoolean.compareAndSet} — как сделано во всех
+     * модулях), иначе под параллельными тестами навесятся дубли трансформеров и шаги
+     * в отчёте задвоятся.
+     */
     public static void retransform(ElementMatcher<? super TypeDescription> typeMatcher,
                                    AgentBuilder.Transformer transformer) {
         try {

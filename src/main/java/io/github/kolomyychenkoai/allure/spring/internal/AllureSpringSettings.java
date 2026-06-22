@@ -3,9 +3,10 @@ package io.github.kolomyychenkoai.allure.spring.internal;
 import org.springframework.core.env.Environment;
 
 /**
- * Чтение тумблеров библиотеки. Значения берутся сначала из Spring {@link Environment}
- * (то есть из application.yml/properties тестового проекта), а если там нет — из
- * system property с тем же ключом. По умолчанию всё включено.
+ * Единый реестр ключей-тумблеров библиотеки и их чтение. Каждый модуль держит СВОЙ ключ
+ * здесь (а не россыпью по коду), чтобы контракт свойств был в одном месте. Значения
+ * берутся сначала из Spring {@link Environment} (application.yml/properties тестового
+ * проекта), а если там нет — из system property с тем же ключом. По умолчанию всё включено.
  */
 public final class AllureSpringSettings {
 
