@@ -107,9 +107,17 @@ public class AllureWireMockTestListener implements TestExecutionListener, Ordere
                 .setStatus(Status.PASSED);
         step.getAttachments().add(new Attachment()
                 .setName("WireMock Stub")
-                .setType("text/plain")
-                .setSource(writeAttachment(formatStub(stub, method, url, status))));
+                .setType("application/json")
+                .setSource(writeAttachment(stubJson(stub))));
         return step;
+    }
+
+    private static String stubJson(StubMapping stub) {
+        try {
+            return stub.toString(); // StubMapping.toString() = полный JSON правила
+        } catch (Throwable t) {
+            return "{}";
+        }
     }
 
     private String writeAttachment(String content) {
@@ -154,39 +162,6 @@ public class AllureWireMockTestListener implements TestExecutionListener, Ordere
         } catch (Throwable e) {
             return null;
         }
-    }
-
-    private String formatStub(StubMapping stub, String method, String url, int status) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("Request:\n  Method: ").append(method).append("\n  URL: ").append(url).append('\n');
-        if (stub.getRequest() != null && stub.getRequest().getQueryParameters() != null) {
-            stub.getRequest().getQueryParameters().forEach((key, pattern) -> {
-                String value;
-                try {
-                    value = pattern.getExpected();
-                } catch (Exception e) {
-                    value = key;
-                }
-                sb.append("  Query: ").append(key).append(" = ").append(value).append('\n');
-            });
-        }
-        sb.append("\nResponse:\n  Status: ").append(status).append('\n');
-        if (stub.getResponse() != null) {
-            if (stub.getResponse().getBody() != null) {
-                sb.append("  Body: ").append(stub.getResponse().getBody()).append('\n');
-            }
-            if (stub.getResponse().getFixedDelayMilliseconds() != null) {
-                sb.append("  Delay: ").append(stub.getResponse().getFixedDelayMilliseconds()).append("ms\n");
-            }
-        }
-        // полное правило целиком — чтобы НИЧЕГО не терять: матчеры по заголовкам/телу,
-        // заголовки ответа, scenario, fault, проксирование и пр. (StubMapping.toString() = JSON)
-        try {
-            sb.append("\nFull mapping (JSON):\n").append(stub.toString()).append('\n');
-        } catch (Throwable ignored) {
-            // полный дамп не критичен — читаемая часть выше уже есть
-        }
-        return sb.toString();
     }
 
     private static String firstNonNull(String... values) {
