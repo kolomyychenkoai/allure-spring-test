@@ -54,31 +54,31 @@ class AllureDataSourceListenerTest {
         TestResult result = allure.run("sql-insert", () ->
                 listener.afterQuery(exec(), List.of(query("insert into widget (name, id) values (?, ?)"))));
 
-        assertThat(allure.hasStep(result, "SQL INSERT")).isTrue();
+        assertThat(allure.hasStep(result, "SQL INSERT widget")).isTrue();
         assertThat(allure.attachment(result, "SQL Query").orElseThrow())
                 .contains("insert into widget");
     }
 
     @Test
-    @DisplayName("SELECT: операция определяется по первому слову запроса")
+    @DisplayName("SELECT: в имени шага операция и таблица")
     void logsSelect() {
         TestResult result = allure.run("sql-select", () ->
                 listener.afterQuery(exec(), List.of(query("select w.id, w.name from widget w where w.id=?"))));
 
-        assertThat(allure.hasStep(result, "SQL SELECT")).isTrue();
+        assertThat(allure.hasStep(result, "SQL SELECT widget")).isTrue();
         assertThat(allure.attachment(result, "SQL Query").orElseThrow())
                 .contains("from widget");
     }
 
     @Test
-    @DisplayName("UPDATE и DELETE тоже корректно определяются по первому слову")
+    @DisplayName("UPDATE и DELETE: операция и таблица в имени шага")
     void logsUpdateAndDelete() {
         TestResult upd = allure.run("sql-update", () ->
                 listener.afterQuery(exec(), List.of(query("update widget set name=? where id=?"))));
-        assertThat(allure.hasStep(upd, "SQL UPDATE")).isTrue();
+        assertThat(allure.hasStep(upd, "SQL UPDATE widget")).isTrue();
 
         TestResult del = allure.run("sql-delete", () ->
                 listener.afterQuery(exec(), List.of(query("delete from widget where id=?"))));
-        assertThat(allure.hasStep(del, "SQL DELETE")).isTrue();
+        assertThat(allure.hasStep(del, "SQL DELETE widget")).isTrue();
     }
 }

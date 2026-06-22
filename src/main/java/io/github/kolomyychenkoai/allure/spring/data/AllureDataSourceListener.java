@@ -36,14 +36,20 @@ public class AllureDataSourceListener implements QueryExecutionListener {
                     || !Allure.getLifecycle().getCurrentTestCase().isPresent()) {
                 return;
             }
-            String op = firstKeyword(queryInfoList.get(0).getQuery());
             String body = logCreator.getLogEntry(execInfo, queryInfoList, false, false, false);
-            Allure.step("SQL " + op, step -> {
+            Allure.step(stepName(queryInfoList.get(0).getQuery()), step -> {
                 Allure.addAttachment("SQL Query", "text/plain", body);
             });
         } catch (Throwable ignored) {
             // инструментирование не должно ронять тест
         }
+    }
+
+    /** Имя шага: «SQL <OP> <таблица>» — чтобы разные запросы различались в дереве. */
+    private static String stepName(String sql) {
+        String op = firstKeyword(sql);
+        String table = tableName(sql, op);
+        return table.isEmpty() ? "SQL " + op : "SQL " + op + " " + table;
     }
 
     private static String firstKeyword(String sql) {
@@ -52,5 +58,23 @@ public class AllureDataSourceListener implements QueryExecutionListener {
         }
         // по любому пробельному символу (запрос может начинаться с переноса строки)
         return sql.trim().split("\\s+", 2)[0].toUpperCase();
+    }
+
+    private static String tableName(String sql, String op) {
+        if (sql == null) {
+            return "";
+        }
+        String regex = switch (op) {
+            case "INSERT" -> "(?i)insert\\s+into\\s+([\\w.\"`]+)";
+            case "UPDATE" -> "(?i)update\\s+([\\w.\"`]+)";
+            case "DELETE" -> "(?i)delete\\s+from\\s+([\\w.\"`]+)";
+            case "SELECT" -> "(?i)\\bfrom\\s+([\\w.\"`]+)";
+            default -> null;
+        };
+        if (regex == null) {
+            return "";
+        }
+        var matcher = java.util.regex.Pattern.compile(regex).matcher(sql);
+        return matcher.find() ? matcher.group(1).replace("\"", "").replace("`", "") : "";
     }
 }
