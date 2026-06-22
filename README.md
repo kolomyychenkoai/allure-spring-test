@@ -81,6 +81,21 @@ allure:
       include-prefixes: spring.,server.,logging.,management.,myapp.
 ```
 
+## Mockito (opt-in)
+
+Mockito interaction logging (mock stub / call / verify steps) is **not enabled by
+default** — it works by registering a global Mockito `MockMaker`, which would otherwise
+be forced on every consumer and could clash with a project's own `MockMaker`. To enable
+it, add one file to your test resources:
+
+`src/test/resources/mockito-extensions/org.mockito.plugins.MockMaker`
+```
+io.github.kolomyychenkoai.allure.spring.mock.AllureMockitoMockMaker
+```
+
+Note: this module relies on Mockito 5.x internals (the inline mock maker); keep Mockito
+at the version managed by `spring-boot-starter-test`.
+
 ## How it works
 
 - `AllureApplicationLogsListener` attaches a Logback appender to the root logger

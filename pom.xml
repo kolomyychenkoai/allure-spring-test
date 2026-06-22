@@ -158,6 +158,13 @@
             <artifactId>assertj-core</artifactId>
             <scope>provided</scope>
         </dependency>
+        <!-- Модуль Mockito: кастомный MockMaker. provided — mockito есть у потребителя
+             в test-scope (spring-boot-starter-test). -->
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <scope>provided</scope>
+        </dependency>
 
         <!-- datasource-proxy: наш механизм логирования реального SQL. optional —
              как и прочие feature-зависимости, не навязываем транзитивно; модуль
