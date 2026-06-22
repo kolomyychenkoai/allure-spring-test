@@ -42,4 +42,16 @@ class DataJpaReportIT {
 
         assertThat(widgets.findById(999_999L)).isEmpty();
     }
+
+    @Test
+    @DisplayName("UPDATE и DELETE тоже ловятся как реальный SQL")
+    void updateAndDeleteAreLogged() {
+        Widget saved = widgets.save(new Widget("old"));
+
+        saved.setName("new");
+        widgets.save(saved);                 // существующая сущность → UPDATE
+
+        widgets.deleteById(saved.getId());   // → DELETE
+        assertThat(widgets.findById(saved.getId())).isEmpty();
+    }
 }
