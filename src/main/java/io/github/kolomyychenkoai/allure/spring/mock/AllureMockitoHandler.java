@@ -1,9 +1,12 @@
 package io.github.kolomyychenkoai.allure.spring.mock;
 
+import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
+import io.github.kolomyychenkoai.allure.spring.internal.AllureSpringSettings;
 import io.qameta.allure.Allure;
 import io.qameta.allure.AllureLifecycle;
 import io.qameta.allure.model.Status;
+import io.qameta.allure.model.StatusDetails;
 import io.qameta.allure.model.StepResult;
 import org.mockito.internal.progress.ThreadSafeMockingProgress;
 import org.mockito.invocation.Invocation;
@@ -23,12 +26,24 @@ import java.util.UUID;
  * Логируем только при активном Allure тест-кейсе; всё в try/catch.
  * <p>
  * Различение «заглушка vs вызов» — best-effort по стеку (прямой вызов из теста =
- * настройка заглушки, через прод-класс = вызов); завязано на суффиксы Test/Tests/IT.
- * «Проверка» определяется надёжно по состоянию Mockito; кратность (ожидали ×N) —
- * best-effort из режима verify. Настроенное возвращаемое значение у заглушки в момент
- * {@code when(...)} ещё не задано (thenReturn идёт после), поэтому показывается у вызова.
+ * настройка заглушки, через прод-класс = вызов); завязано на суффиксы имён тест-классов
+ * {@link #TEST_CLASS_SUFFIXES}. «Проверка» определяется надёжно по состоянию Mockito;
+ * кратность (ожидали ×N) — best-effort из режима verify, для {@code atLeast/atMost}
+ * показывается как точное число (без «≥/≤»). Настроенное возвращаемое значение у заглушки
+ * в момент {@code when(...)} ещё не задано (thenReturn идёт после), поэтому показывается у вызова.
+ * <p>
+ * Выключается system property {@code allure.spring.mock.enabled=false} (фича глобальна на JVM).
+ * <b>Хрупкость:</b> определение verify/кратности завязано на внутренние поля Mockito 5.x
+ * ({@code ThreadSafeMockingProgress.verificationMode}, {@code Times.wantedCount}); при апгрейде
+ * Mockito проверить. Деградация мягкая: при смене внутренностей кратность/детект тихо
+ * отключаются (шаг без ×N), тест не падает.
  */
 public class AllureMockitoHandler<T> implements MockHandler<T> {
+
+    private static final boolean ENABLED = AllureSpringSettings.enabled(AllureSpringSettings.MOCK_ENABLED);
+
+    // Суффиксы имён тест-классов: прямой вызов мока из такого класса = настройка заглушки, не прод-вызов.
+    private static final String[] TEST_CLASS_SUFFIXES = {"Test", "Tests", "IT"};
 
     private final MockHandler<T> delegate;
 
@@ -38,6 +53,9 @@ public class AllureMockitoHandler<T> implements MockHandler<T> {
 
     @Override
     public Object handle(Invocation invocation) throws Throwable {
+        if (!ENABLED) {
+            return delegate.handle(invocation); // фича выключена — прозрачное делегирование
+        }
         boolean objectMethod = isObjectMethod(invocation.getMethod());
         Object verificationMode = objectMethod ? null : verificationMode();
         boolean verify = verificationMode != null;
@@ -86,7 +104,7 @@ public class AllureMockitoHandler<T> implements MockHandler<T> {
                         Allure.addAttachment("Mock Call", "text/plain", call);
                     });
         } else if (productionCall) {
-            final String res = String.valueOf(result);
+            final String res = AllureAdviceSupport.safe(result);
             Allure.step("Мок-вызов: " + signature + " → " + res, step -> {
                 Allure.addAttachment("Mock Call", "text/plain", call);
                 Allure.addAttachment("Mock Result", "text/plain", res);
@@ -115,6 +133,8 @@ public class AllureMockitoHandler<T> implements MockHandler<T> {
             String message = failure.getMessage();
             if (message != null) {
                 Allure.addAttachment("Mock Verify", "text/plain", message);
+                // дублируем причину в statusDetails шага — видно сразу, без открытия вложения
+                lifecycle.updateStep(stepId, s -> s.setStatusDetails(new StatusDetails().setMessage(message)));
             }
         } finally {
             if (started) {
@@ -142,7 +162,7 @@ public class AllureMockitoHandler<T> implements MockHandler<T> {
             if (i > 0) {
                 sb.append(", ");
             }
-            sb.append(String.valueOf(args[i]));
+            sb.append(AllureAdviceSupport.safe(args[i]));
         }
         return sb.toString();
     }
@@ -155,7 +175,7 @@ public class AllureMockitoHandler<T> implements MockHandler<T> {
         if (args != null && args.length > 0) {
             sb.append("\nArguments:");
             for (int i = 0; i < args.length; i++) {
-                sb.append("\n  [").append(i).append("]: ").append(String.valueOf(args[i]));
+                sb.append("\n  [").append(i).append("]: ").append(AllureAdviceSupport.safe(args[i]));
             }
         }
         return sb.toString();
@@ -202,8 +222,10 @@ public class AllureMockitoHandler<T> implements MockHandler<T> {
                 field.setAccessible(true);
                 return "×" + field.getInt(mode);
             } catch (NoSuchFieldException notHere) {
-                mode = unwrapMode(mode);
-            } catch (Throwable ignored) {
+                mode = unwrapMode(mode); // ожидаемо: на этом слое поля нет — снимаем обёртку
+            } catch (Throwable t) {
+                // неожиданный сбой (напр. InaccessibleObjectException) — видим на WARNING, не молча
+                AllureInstrumentationLogger.warn("MockitoWantedCount", t);
                 return null;
             }
         }
@@ -257,8 +279,10 @@ public class AllureMockitoHandler<T> implements MockHandler<T> {
                     || className.contains("ByteBuddy")) {
                 continue;
             }
-            if (className.endsWith("Test") || className.endsWith("Tests") || className.endsWith("IT")) {
-                return false; // прямой вызов из теста — это настройка заглушки
+            for (String suffix : TEST_CLASS_SUFFIXES) {
+                if (className.endsWith(suffix)) {
+                    return false; // прямой вызов из теста — это настройка заглушки
+                }
             }
             return true; // любой другой прикладной код — прод-вызов
         }

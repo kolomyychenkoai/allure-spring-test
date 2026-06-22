@@ -26,6 +26,12 @@ public final class AllureSpringSettings {
      */
     public static final String ASSERTION_ENABLED = "allure.spring.assertion.enabled";
 
+    /**
+     * Включить логирование взаимодействий с моками (Mockito), по умолчанию true. Тоже
+     * ГЛОБАЛЬНАЯ на JVM фича (кастомный MockMaker) — читается из system property.
+     */
+    public static final String MOCK_ENABLED = "allure.spring.mock.enabled";
+
     /** Префиксы по умолчанию — без доменной специфики. */
     public static final String DEFAULT_INCLUDE_PREFIXES = "spring.,server.,logging.,management.";
 
