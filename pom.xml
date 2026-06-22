@@ -130,6 +130,16 @@
             <artifactId>jakarta.persistence-api</artifactId>
             <scope>provided</scope>
         </dependency>
+        <!-- datasource-proxy: наш механизм логирования реального SQL. optional —
+             как и прочие feature-зависимости, не навязываем транзитивно; модуль
+             активируется, только если datasource-proxy есть на classpath потребителя
+             (в нашей сборке он есть — SQL в нашем отчёте работает). Нет в Boot BOM — версия явно. -->
+        <dependency>
+            <groupId>net.ttddyy</groupId>
+            <artifactId>datasource-proxy</artifactId>
+            <version>1.10.1</version>
+            <optional>true</optional>
+        </dependency>
 
         <!-- Тесты: самопроверка (уровень A) и живой отчёт (уровень B). -->
         <dependency>
