@@ -103,7 +103,7 @@ public class AllureWireMockTestListener implements TestExecutionListener, Ordere
         int status = stub.getResponse() != null ? stub.getResponse().getStatus() : 200;
 
         StepResult step = new StepResult()
-                .setName("WireMock stub " + method + " " + url + " → " + status)
+                .setName("Создана заглушка: " + method + " " + url + " → " + status)
                 .setStatus(Status.PASSED);
         step.getAttachments().add(new Attachment()
                 .setName("WireMock Stub")

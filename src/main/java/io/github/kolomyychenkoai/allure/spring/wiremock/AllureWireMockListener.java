@@ -46,7 +46,7 @@ public final class AllureWireMockListener {
         }
         CapturedExchange exchange;
         while ((exchange = EXCHANGES.poll()) != null) {
-            String stepName = "WireMock request " + exchange.method() + " " + exchange.url()
+            String stepName = "Запрос к заглушке: " + exchange.method() + " " + exchange.url()
                     + " → " + exchange.status();
             String req = exchange.requestDetails();
             String resp = exchange.responseDetails();

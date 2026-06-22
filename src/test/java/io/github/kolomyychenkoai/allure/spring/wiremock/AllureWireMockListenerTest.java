@@ -55,7 +55,7 @@ class AllureWireMockListenerTest {
             AllureWireMockListener.flushToAllure();
         });
 
-        assertThat(allure.hasStep(result, "WireMock request GET /api/prices → 200")).isTrue();
+        assertThat(allure.hasStep(result, "Запрос к заглушке: GET /api/prices → 200")).isTrue();
         assertThat(allure.attachment(result, "WireMock Request").orElseThrow())
                 .contains("GET /api/prices");
         assertThat(allure.attachment(result, "WireMock Response").orElseThrow())
