@@ -32,6 +32,12 @@ public final class AllureSpringSettings {
      */
     public static final String MOCK_ENABLED = "allure.spring.mock.enabled";
 
+    /**
+     * Включить инструментирование Kafka (producer.send/consumer.poll), по умолчанию true.
+     * ГЛОБАЛЬНАЯ на JVM фича (байткод) — читается из system property.
+     */
+    public static final String KAFKA_ENABLED = "allure.spring.kafka.enabled";
+
     /** Префиксы по умолчанию — без доменной специфики. */
     public static final String DEFAULT_INCLUDE_PREFIXES = "spring.,server.,logging.,management.";
 
