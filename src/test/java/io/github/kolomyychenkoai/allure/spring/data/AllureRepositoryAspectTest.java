@@ -102,7 +102,7 @@ class AllureRepositoryAspectTest {
         assertThat(allure.attachment(result, "DB Result").orElseThrow())
                 .contains("Widget{")
                 .contains("name=thing")
-                .contains("id=");   // поле из BaseEntity — доказывает обход суперклассов
+                .contains("id=null"); // поле id из BaseEntity (значение, не персистнут) — обход суперклассов
     }
 
     @Test

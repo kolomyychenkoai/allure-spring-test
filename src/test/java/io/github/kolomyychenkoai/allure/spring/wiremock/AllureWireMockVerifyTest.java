@@ -12,13 +12,22 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import com.github.tomakehurst.wiremock.stubbing.StubMapping;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+
+import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.lessThan;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** Уровень A: проверка содержимого отчёта для WireMock verify/reset (без брокера). */
@@ -62,7 +71,8 @@ class AllureWireMockVerifyTest {
 
         TestResult strategy = allure.run("strategy", () -> AllureWireMockVerifyInstrumentation.onVerify(
                 new Object[]{lessThan(3), getRequestedFor(urlPathEqualTo("/api/prices"))}, null));
-        assertThat(stepNames(strategy)).anyMatch(n -> n.toLowerCase().contains("less than"));
+        assertThat(stepNames(strategy)).anyMatch(n ->
+                n.startsWith("Проверка обращений к заглушке") && n.toLowerCase().contains("less than 3"));
     }
 
     @Test
@@ -102,6 +112,35 @@ class AllureWireMockVerifyTest {
                 AllureWireMockVerifyInstrumentation.onStub(stub));
 
         assertThat(allure.hasStep(result, "Создана заглушка: GET /api/prices → 200")).isTrue();
-        assertThat(allure.attachment(result, "WireMock Stub")).isPresent();
+        // содержимое вложения, а не только наличие: url и тело ответа из самого стаба
+        assertThat(allure.attachment(result, "WireMock Stub").orElseThrow())
+                .contains("/api/prices").contains("9.99");
+    }
+
+    @Test
+    @DisplayName("onResetAll снимает near-miss и состояние сценария ДО сброса (самое хрупкое место)")
+    void resetAllSnapshotsNearMissAndScenario() throws Exception {
+        WireMockServer server = new WireMockServer(options().dynamicPort());
+        server.start();
+        try {
+            server.stubFor(get(urlPathEqualTo("/api/prices")).willReturn(okJson("{\"price\":1}")));
+            server.stubFor(get(urlPathEqualTo("/api/flaky")).inScenario("retry")
+                    .whenScenarioStateIs(Scenario.STARTED)
+                    .willReturn(aResponse().withStatus(503)).willSetStateTo("recovered"));
+            // незаматченный запрос → WireMock запишет near-miss (ближайший стаб)
+            HttpClient.newHttpClient().send(
+                    HttpRequest.newBuilder(URI.create(server.baseUrl() + "/api/wrong")).build(),
+                    HttpResponse.BodyHandlers.ofString());
+
+            // onResetAll должен СНЯТЬ near-miss и состояние сценария ДО сброса (иначе reset их стирает)
+            TestResult result = allure.run("reset-snap", () ->
+                    AllureWireMockVerifyInstrumentation.onResetAll(server));
+
+            assertThat(stepNames(result)).anyMatch(n -> n.startsWith("Near-miss:") && n.contains("/api/wrong"));
+            assertThat(stepNames(result)).anyMatch(n -> n.contains("сценарий") && n.contains("retry"));
+            assertThat(allure.hasStep(result, "WireMock: сброс заглушек")).isTrue();
+        } finally {
+            server.stop();
+        }
     }
 }

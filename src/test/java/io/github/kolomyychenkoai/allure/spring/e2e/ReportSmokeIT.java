@@ -1,31 +1,60 @@
 package io.github.kolomyychenkoai.allure.spring.e2e;
 
+import io.github.kolomyychenkoai.allure.spring.support.CurrentReport;
 import io.github.kolomyychenkoai.allure.spring.support.TestApp;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 /**
- * Уровень B: «живой» прогон. Листенеры подключаются САМИ (только через
- * {@code META-INF/spring.factories}, в этом классе ноль настройки Allure) и пишут
- * реальные allure-results. Смотреть результат: {@code mvn allure:serve}.
+ * Уровень B: «живой» прогон. Листенеры конфигурации/логов подключаются САМИ (только через
+ * {@code META-INF/spring.factories}, в классе ноль настройки Allure).
+ * <p>
+ * Шаг «Configuration» config-листенер пишет в {@code beforeTestMethod} — он уже в текущем
+ * кейсе во время теста (проверяем сразу). Вложение «Application Logs» logs-листенер
+ * добавляет в {@code afterTestMethod} — из тела теста его не прочитать, НО Allure кладёт
+ * файл на диск, и к следующему (упорядоченному) тесту он уже там: второй тест читает
+ * записанный реальной цепочкой результат и проверяет, что лог-строка реально попала во
+ * вложение. Так оба модуля (config + logs) проверены end-to-end на уровне B.
  */
 @SpringBootTest(classes = TestApp.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 @Epic("allure-spring-test")
 @Feature("Захват логов и конфигурации приложения")
 class ReportSmokeIT {
 
     private static final Logger log = LoggerFactory.getLogger(ReportSmokeIT.class);
 
+    // уникальный маркер — по нему второй тест найдёт лог-строку в записанном вложении
+    private static final String LOG_MARKER = "ReportSmokeIT-marker-7f3a9c";
+
     @Test
-    @DisplayName("Логи и конфигурация автоматически прикрепляются к отчёту")
-    void attachesLogsAndConfigAutomatically() {
-        log.info("Привет из ReportSmokeIT — эта строка должна оказаться в Application Logs");
+    @Order(1)
+    @DisplayName("config-листенер даёт шаг Configuration; логи эмитятся")
+    void emitsConfigStepAndLogs() {
+        log.info("Привет из ReportSmokeIT [{}] — строка для Application Logs", LOG_MARKER);
         log.warn("Предупреждение со значением value={}", 42);
-        log.debug("debug-строка для проверки уровня логирования");
+
+        assertTrue(CurrentReport.stepNames().contains("Configuration"),
+                () -> "нет шага Configuration (config-листенер не зарегистрирован?): " + CurrentReport.stepNames());
+    }
+
+    @Test
+    @Order(2)
+    @DisplayName("logs-листенер реально записал «Application Logs» с лог-строкой (end-to-end)")
+    void logsAttachmentWasWrittenToReport() {
+        // вложение из afterTestMethod теста №1 уже на диске → ищем маркер в записанных результатах
+        assertTrue(CurrentReport.anyResultFileContains(LOG_MARKER),
+                "лог-строка не попала во вложение Application Logs реального отчёта "
+                        + "(logs-листенер не зарегистрирован или не пишет содержимое)");
     }
 }

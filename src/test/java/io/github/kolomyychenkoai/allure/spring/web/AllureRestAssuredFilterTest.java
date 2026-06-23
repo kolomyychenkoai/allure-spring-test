@@ -74,7 +74,7 @@ class AllureRestAssuredFilterTest {
 
         assertThat(result.getSteps().stream().map(s -> s.getName()))
                 .anyMatch(n -> n.startsWith("HTTP GET") && n.endsWith("/ping → 200"));
-        assertThat(allure.attachment(result, "HTTP Request").orElseThrow()).contains("GET");
+        assertThat(allure.attachment(result, "HTTP Request").orElseThrow()).contains("GET ").contains("/ping");
         assertThat(allure.attachment(result, "HTTP Response").orElseThrow()).contains("pong");
     }
 
