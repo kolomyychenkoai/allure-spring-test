@@ -112,6 +112,23 @@
 5. **Сбой САМОГО инструментирования** (ByteBuddy/advice) логируется на WARNING
    (`AllureInstrumentationLogger`), а не молча и НЕ фабрикованным FAILED-шагом. Упавшую
    пользовательскую проверку отдаём Allure (см. §4) — шаг для неё не создаём.
+6. **ByteBuddy ловит и УЖЕ ЗАГРУЖЕННЫЕ классы.** `retransform` должен инструментировать не
+   только будущие загрузки, но и классы, загруженные ДО установки агента (иерархии с методами
+   в абстрактных предках — AssertJ — Spring/surefire тянут рано). Дефолтный батч
+   `RETRANSFORMATION` их пропускает → методы остаются без advice, пропадают из отчёта (видно
+   лишь в изолированном прогоне). Решение — `AgentBuilder…DiscoveryStrategy.Reiterating`.
+   Ручной `instrumentation.retransformClasses(...)` НЕ мешать с AgentBuilder — конфликтует с
+   его future-load перехватом (ломает вплетение классов, загружаемых позже). Диагностика
+   хрупкого байткода — `AgentBuilder.Listener` (лог transform/ignore/error по типам).
+7. **Advice на public-методы НЕ должен цеплять конструкторы/bridge-методы.** Матчер вида
+   «все public non-static» у инструментирования с `@OnMethodExit(onThrowable)` падает на
+   публичном конструкторе («Cannot catch exception during constructor call») и плодит лишние
+   шаги на synthetic/bridge-методах дженериков. Исключать `isConstructor()`/`isSynthetic()` —
+   ИЛИ (как у AssertJ) сознательно вплетать только в иерархию и гасить делегацию счётчиком
+   глубины; но тогда проверить, что смена набора вплетённых классов не рассинхронит дедуп.
+   Полный разбор AssertJ-узла — `docs/adr/0001-assertj-instrumentation.md`. Версионные
+   допущения матчеров (что метод/класс на месте) держит канарейка
+   `internal/InstrumentationApiCanaryTest` — при апгрейде краснеет точечно.
 
 ## Как смотреть код
 
