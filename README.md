@@ -68,29 +68,29 @@ Maven:
 Любой Spring-управляемый тест (`@SpringBootTest`, `@SpringJUnitConfig`, …) сразу начинает
 наполнять Allure-отчёт.
 
-### Что для какой интеграции нужно на classpath
+### Нужна ли ещё одна зависимость?
 
-Базовый набор работает только от зависимости (+ `allure-junit5`). Перехват каждой
-внешней технологии включается, ТОЛЬКО если её библиотека есть на test-classpath — модуль
-сам её не тянет (всё `provided`/`optional`, чтобы не навязывать лишнее). Логично: ты
-подключаешь библиотеку, если этой технологией пользуешься. Единственный неочевидный
-случай — **SQL** (нужен `datasource-proxy`, его обычно нет по умолчанию).
+Почти всё работает само. Перехват HTTP MockMvc, ассертов, логов, конфигурации и вызовов
+репозиториев — из коробки. RestAssured / WireMock / Kafka тоже подхватываются сами — но
+только если их библиотека уже на classpath; а она там и так есть, раз ты этой технологией
+пользуешься в тестах. Отдельно их добавлять НЕ нужно.
 
-| Что попадает в отчёт | Нужно на classpath (всё в `<scope>test</scope>`) | Версия |
-|---|---|---|
-| HTTP MockMvc, ассерты, логи приложения, конфигурация | ничего сверх зависимости | — |
-| Вызовы Spring Data репозиториев | `spring-boot-starter-data-jpa` (тянет AspectJ сам) | из Spring Boot |
-| **Реальный SQL** внутри вызовов репозитория | **`net.ttddyy:datasource-proxy`** ← легко забыть | **указать явно** (напр. `1.10.1`) |
-| HTTP REST Assured | `io.rest-assured:rest-assured` | из Spring Boot |
-| WireMock (стабы/verify/запросы) | `org.wiremock:wiremock-standalone` | **указать явно** (напр. `3.13.2`) |
-| Kafka (send/poll) | `org.springframework.kafka:spring-kafka` (тянет `kafka-clients`); для встроенного брокера в тестах — `spring-kafka-test` | из Spring Boot |
-| Mockito (заглушки/вызовы/проверки) | по согласию — см. раздел ниже | — |
+**Единственная неочевидная зависимость — для реального SQL:**
 
-Нет библиотеки на classpath — соответствующий модуль просто молчит, тесты не падают.
+```xml
+<!-- без него SQL внутри вызовов репозитория в отчёт не попадёт -->
+<dependency>
+    <groupId>net.ttddyy</groupId>
+    <artifactId>datasource-proxy</artifactId>
+    <version>1.10.1</version>
+    <scope>test</scope>
+</dependency>
+```
 
-⚠️ `datasource-proxy` и `wiremock-standalone` Spring Boot BOM **не** менеджит — без явной
-`<version>` сборка не разрешит зависимость. Остальные (`rest-assured`, `spring-kafka`,
-`kafka-clients`) берут версию из Spring Boot — её писать не нужно.
+`datasource-proxy` ты обычно НЕ держишь (репозитории и так работают без него), а нам он
+нужен, чтобы вытащить запросы. Версию Spring Boot BOM не менеджит — указывай явно.
+
+Всё, чего нет на classpath, модуль тихо пропускает — тесты не падают.
 
 ## Быстрый старт
 
