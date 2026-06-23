@@ -15,6 +15,10 @@ import org.springframework.test.web.servlet.ResultHandler;
  * есть на classpath — потребителю писать ничего не нужно. Выключить —
  * {@code allure.spring.web.enabled=false} (общий тумблер HTTP-модуля, с RestAssured).
  * Регистрируется через {@code META-INF/spring/...AutoConfiguration.imports}.
+ * <p>
+ * Ограничение: handler цепляется через {@code MockMvcBuilderCustomizer.alwaysDo} — это
+ * работает для {@code @AutoConfigureMockMvc}/Spring Boot фикстур. MockMvc, собранный
+ * ВРУЧНУЮ ({@code MockMvcBuilders.standaloneSetup(...)} мимо кастомайзера), не перехватится.
  */
 @AutoConfiguration
 @ConditionalOnProperty(name = AllureSpringSettings.WEB_ENABLED, matchIfMissing = true)

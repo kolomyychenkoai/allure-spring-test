@@ -107,6 +107,38 @@ at the version managed by `spring-boot-starter-test`.
   `org.springframework.test.context.TestExecutionListener`, so Spring activates
   them for every test — no annotations, no setup.
 
+## Coverage — what gets logged
+
+Instrumentation captures all primary operations of each supported library, automatically:
+
+| Library | Logged | Step / attachment |
+|---|---|---|
+| Spring MockMvc | every `perform(...)`, any HTTP method | `HTTP <METHOD> <path> → <status>` + Request/Response (+ Exception) |
+| REST Assured | every global `given()...` request, any method | `HTTP <METHOD> <path> → <status>` + Request/Response |
+| Spring Data (JPA) | every repository method + the real SQL it runs | `DB <Repo>.<method>` + nested `SQL <OP> <table>` + Call/Result/Query |
+| Kafka | `producer.send(...)`, `consumer.poll(Duration)` | `Kafka: отправлено/получено` + message attachment |
+| WireMock | `stubFor`, `verify(...)`, `resetAll()` / static `reset()`, every served request, near-miss, scenario state | stub/verify/reset/near-miss steps + Request/Response |
+| AssertJ | every assertion on `AbstractAssert` & subtypes | `Проверка: значение X — <method> <args>` (PASSED/FAILED) |
+| Hamcrest | `assertThat(actual, matcher)` (2- and 3-arg) | `Проверка: …` |
+| Spring asserts | `AssertionErrors.assert*` / `fail` | `Проверка: …` |
+| Mockito (opt-in) | every mock interaction (stub / call / verify) | `Мок-заглушка/вызов/проверка` + Call/Result/Verify |
+| App logs / config | per-test Logback output / `Environment` snapshot | `Application Logs` / `Configuration` + `Properties` |
+
+### Known limitations (by design)
+
+- **Reactive repositories** (Spring Data R2DBC) are not covered — the aspect targets the
+  synchronous (JPA) `Repository+` hierarchy only.
+- **Manually built MockMvc** (`MockMvcBuilders.standaloneSetup(...)` outside the
+  auto-configured customizer) is not intercepted — use `@AutoConfigureMockMvc` / Spring Boot fixtures.
+- **REST Assured** logs only the global `given()` API; an isolated `RequestSpecification`
+  with local-only filters is not captured.
+- **WireMock partial resets** (`resetMappings/resetRequests/resetScenarios`,
+  static `resetAllRequests/resetScenario/resetAllScenarios`) are not logged — only the full
+  reset (`resetAll()` / static `reset()`) emits a step.
+- **Parallel execution** (`@Execution(CONCURRENT)`) is not supported: REST Assured global
+  filters, the WireMock exchange buffer and the root log appender are shared/global state.
+  Run tests sequentially (forked-JVM surefire is fine).
+
 ## License
 
 [Apache-2.0](LICENSE).

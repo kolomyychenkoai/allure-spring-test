@@ -19,7 +19,8 @@ import static net.bytebuddy.matcher.ElementMatchers.takesArguments;
  * Ставится один раз на JVM — см. {@link AllureAssertionsListener}.
  * <p>
  * Перегрузка {@code assertThat(String, boolean)} (без матчера) намеренно НЕ
- * перехватывается — это не матчер-проверка; покрываются только matcher-формы.
+ * перехватывается — это не matcher-проверка (просто boolean + reason), её аналог в отчёте
+ * дают Spring-ассерты/AssertJ; покрываются только matcher-формы ({@code Matcher}-аргумент).
  */
 public final class AllureHamcrestInstrumentation {
 

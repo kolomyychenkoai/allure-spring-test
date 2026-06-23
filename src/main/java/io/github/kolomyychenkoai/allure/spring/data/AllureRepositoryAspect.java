@@ -33,6 +33,11 @@ import java.util.stream.Collectors;
  * Гейтинг — по активному Allure тест-кейсу (а НЕ по хардкоду пакетов): логируем все
  * обращения к БД, пока идёт тест (в т.ч. сквозь прод-код), и молчим во время старта
  * контекста. Так модуль не привязан к структуре пакетов потребителя.
+ * <p>
+ * Pointcut ловит ВСЕ методы любого {@code Repository+} (Crud/Jpa/PagingAndSorting +
+ * derived-методы). Ограничение: REACTIVE-репозитории (Spring Data R2DBC,
+ * {@code ReactiveCrudRepository}) НЕ охвачены — нужен отдельный аспект; модуль рассчитан
+ * на синхронный (JPA) стек.
  */
 @Aspect
 public class AllureRepositoryAspect {

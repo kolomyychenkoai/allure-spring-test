@@ -90,6 +90,14 @@ class AllureWireMockVerifyTest {
     }
 
     @Test
+    @DisplayName("статический WireMock.reset() (старый DSL) тоже даёт шаг сброса")
+    void logsStaticReset() {
+        TestResult result = allure.run("static-reset", AllureWireMockVerifyInstrumentation::onStaticReset);
+
+        assertThat(allure.hasStep(result, "WireMock: сброс заглушек")).isTrue();
+    }
+
+    @Test
     @DisplayName("stubFor: шаг «Создана заглушка …» с вложением WireMock Stub")
     void logsStub() {
         StubMapping stub = get(urlPathEqualTo("/api/prices"))

@@ -21,6 +21,10 @@ import java.util.List;
  * Регистрируется через {@code META-INF/spring.factories}; если RestAssured нет на
  * classpath, Spring просто пропустит этот листенер.
  * <p>
+ * Ограничение: ловится только ГЛОБАЛЬНЫЙ {@code given()} API (фильтр в глобальных
+ * {@code RestAssured.filters}). Изолированный {@code RequestSpecification} с локальными
+ * фильтрами (без глобальных) в отчёт не попадёт.
+ * <p>
  * ⚠️ <b>Параллелизм:</b> {@code RestAssured.filters} — это ГЛОБАЛЬНОЕ статическое
  * состояние самого RestAssured (не потокобезопасное). Наш {@code LOCK} синхронизирует
  * лишь нашу проверку-вставку; если код потребителя в другом потоке дёргает

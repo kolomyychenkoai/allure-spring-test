@@ -24,12 +24,21 @@ import static net.bytebuddy.matcher.ElementMatchers.named;
  *   <li>{@code stubFor} → шаг «Создана заглушка …» в момент создания (живой, верный порядок,
  *       переживает {@code resetAll()});</li>
  *   <li>{@code verify(...)} → шаг «Проверка обращений к заглушке (×N)» (PASSED/FAILED);</li>
- *   <li>{@code resetAll} → перед сбросом снимает near-miss и состояния сценариев со СЕРВЕРА
- *       (иначе reset их сотрёт до afterTestMethod), затем шаг «WireMock: сброс заглушек».</li>
+ *   <li>{@code WireMockServer.resetAll} → перед сбросом снимает near-miss и состояния
+ *       сценариев со СЕРВЕРА (иначе reset их сотрёт до afterTestMethod), затем шаг
+ *       «WireMock: сброс заглушек»;</li>
+ *   <li>статический {@code WireMock.reset()} (старый DSL через {@code configureFor}) →
+ *       тот же шаг «WireMock: сброс заглушек» (без снимка near-miss/сценариев — у статики
+ *       нет ссылки на сервер; снимок остаётся у инстансного {@code resetAll}).</li>
  * </ul>
  * Перехватываются и static {@code client.WireMock.*}, и {@code WireMockServer.*}.
  * Дубля шага НЕТ: {@code verify}-перегрузки делегируют в {@code verifyThat} (не в {@code verify}),
- * {@code stubFor} — в {@code register} (мы их не матчим). Проверено на WireMock 3.13.
+ * {@code stubFor} — в {@code register}, статический {@code reset()} — в инстансный
+ * {@code resetMappings()} (мы их не матчим). Проверено на WireMock 3.9/3.13.
+ * <p>
+ * ЧАСТИЧНЫЕ сбросы намеренно НЕ логируются (логируем только полный сброс): инстансные
+ * {@code resetMappings/resetRequests/resetScenarios} и статические {@code resetAllRequests/
+ * resetScenario/resetAllScenarios} — у них нет отдельного шага.
  * Установка идемпотентна (CAS-гард {@code INSTALLED}, потокобезопасно) — один раз на JVM.
  */
 public final class AllureWireMockVerifyInstrumentation {
@@ -46,7 +55,8 @@ public final class AllureWireMockVerifyInstrumentation {
         AllureInstrumentation.retransform(named("com.github.tomakehurst.wiremock.client.WireMock"),
                 (builder, type, cl, module, pd) -> builder
                         .visit(Advice.to(VerifyAdvice.class).on(named("verify")))
-                        .visit(Advice.to(StubAdvice.class).on(named("stubFor"))));
+                        .visit(Advice.to(StubAdvice.class).on(named("stubFor")))
+                        .visit(Advice.to(StaticResetAdvice.class).on(named("reset"))));
         AllureInstrumentation.retransform(named("com.github.tomakehurst.wiremock.WireMockServer"),
                 (builder, type, cl, module, pd) -> builder
                         .visit(Advice.to(VerifyAdvice.class).on(named("verify")))
@@ -121,10 +131,28 @@ public final class AllureWireMockVerifyInstrumentation {
         }
     }
 
+    /** Логика статического {@code WireMock.reset()} (старый DSL): шаг сброса без снимка сервера. */
+    public static void onStaticReset() {
+        try {
+            if (AllureWireMockSteps.active()) {
+                Allure.step("WireMock: сброс заглушек", Status.PASSED);
+            }
+        } catch (Throwable t) {
+            AllureInstrumentationLogger.warn("WireMockStaticReset", t);
+        }
+    }
+
     public static class StubAdvice {
         @Advice.OnMethodExit(suppress = Throwable.class)
         public static void onExit(@Advice.Return Object stub) {
             onStub(stub);
+        }
+    }
+
+    public static class StaticResetAdvice {
+        @Advice.OnMethodEnter(suppress = Throwable.class)
+        public static void onEnter() {
+            onStaticReset();
         }
     }
 
