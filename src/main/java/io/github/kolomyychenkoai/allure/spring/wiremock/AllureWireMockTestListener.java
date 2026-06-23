@@ -79,7 +79,9 @@ public class AllureWireMockTestListener implements TestExecutionListener, Ordere
     }
 
     /** Поиск WireMockServer и в static, и в instance полях (по всей иерархии), без дублей по identity. */
-    private List<WireMockServer> findServers(TestContext testContext) {
+    // package-private (не private) — на этот матчинг (статик/instance/иерархия/notRunning/null/identity)
+    // висят прямые тесты уровня A; это самое хрупкое место листенера.
+    List<WireMockServer> findServers(TestContext testContext) {
         Set<WireMockServer> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         List<WireMockServer> servers = new ArrayList<>();
         Object instance = safeInstance(testContext);
