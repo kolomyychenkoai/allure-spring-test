@@ -1,6 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.e2e;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
+import io.github.kolomyychenkoai.allure.spring.support.CurrentReport;
 import io.github.kolomyychenkoai.allure.spring.support.TestApp;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
@@ -14,6 +15,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.List;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
@@ -22,13 +24,16 @@ import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static com.github.tomakehurst.wiremock.stubbing.Scenario.STARTED;
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Уровень B: «живой» прогон с реальным WireMockServer (in-process, без Docker).
- * Никакой настройки Allure в тесте — листенер находит сервер сам (через static-поле)
- * и пишет в отчёт стабы и все запросы (GET, POST с телом, незаматченный → 404).
- * Смотреть: {@code mvn allure:serve}.
+ * Уровень B: «живой» прогон с реальным WireMockServer через РЕАЛЬНУЮ авто-регистрацию
+ * (листенер находит сервер сам + байткод stubFor/verify/resetAll). Шаги пишутся в настоящий
+ * отчёт (showcase). Тест читает через {@link CurrentReport} шаги, записанные ВО ВРЕМЯ теста:
+ * создание стабов, verify, near-miss и состояния сценариев (снимаются в reset-advice ДО
+ * сброса), сам сброс. Шаги отдельных запросов листенер пишет в afterTestMethod (после чтения),
+ * поэтому в showcase они есть, но здесь не проверяются — их содержимое на уровне A
+ * ({@code AllureWireMockListenerTest}).
  */
 @SpringBootTest(classes = TestApp.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @Epic("allure-spring-test")
@@ -48,59 +53,46 @@ class WireMockReportIT {
     }
 
     @Test
-    @DisplayName("стабы и запросы к WireMock (GET, POST с телом, 404) попадают в отчёт")
+    @DisplayName("стабы, verify, near-miss, сценарии и сброс WireMock попадают в отчёт")
     void wireMockExchangesAppearInReport() throws Exception {
-        wireMock.stubFor(get(urlPathEqualTo("/api/prices"))
-                .willReturn(okJson("{\"price\":9.99}")));
-        wireMock.stubFor(post(urlPathEqualTo("/api/orders"))
-                .willReturn(aResponse().withStatus(201)
-                        .withHeader("Content-Type", "application/json")
-                        .withBody("{\"id\":7,\"status\":\"CREATED\"}")));
-
         String base = "http://localhost:" + wireMock.port();
         HttpClient client = HttpClient.newHttpClient();
 
-        HttpResponse<String> get = client.send(
-                HttpRequest.newBuilder(URI.create(base + "/api/prices")).build(),
-                HttpResponse.BodyHandlers.ofString());
-        assertThat(get.statusCode()).isEqualTo(200);
-        assertThat(get.body()).contains("price");
+        wireMock.stubFor(get(urlPathEqualTo("/api/prices")).willReturn(okJson("{\"price\":9.99}")));
+        wireMock.stubFor(post(urlPathEqualTo("/api/orders"))
+                .willReturn(aResponse().withStatus(201).withBody("{\"id\":7}")));
+        send(client, base + "/api/prices", null);
+        send(client, base + "/api/orders", "{\"productName\":\"laptop\"}");
 
-        HttpResponse<String> post = client.send(
-                HttpRequest.newBuilder(URI.create(base + "/api/orders"))
-                        .header("Content-Type", "application/json")
-                        .POST(HttpRequest.BodyPublishers.ofString("{\"productName\":\"laptop\"}"))
-                        .build(),
-                HttpResponse.BodyHandlers.ofString());
-        assertThat(post.statusCode()).isEqualTo(201);
-
-        // stateful-сценарий: первый вызов 503, после перехода состояния — 200
         wireMock.stubFor(get(urlPathEqualTo("/api/flaky")).inScenario("retry")
                 .whenScenarioStateIs(STARTED)
-                .willReturn(aResponse().withStatus(503))
-                .willSetStateTo("recovered"));
+                .willReturn(aResponse().withStatus(503)).willSetStateTo("recovered"));
         wireMock.stubFor(get(urlPathEqualTo("/api/flaky")).inScenario("retry")
-                .whenScenarioStateIs("recovered")
-                .willReturn(okJson("{\"ok\":true}")));
+                .whenScenarioStateIs("recovered").willReturn(okJson("{\"ok\":true}")));
+        send(client, base + "/api/flaky", null);
+        send(client, base + "/api/flaky", null);
 
-        HttpResponse<String> firstTry = client.send(
-                HttpRequest.newBuilder(URI.create(base + "/api/flaky")).build(),
-                HttpResponse.BodyHandlers.ofString());
-        assertThat(firstTry.statusCode()).isEqualTo(503);
-        HttpResponse<String> secondTry = client.send(
-                HttpRequest.newBuilder(URI.create(base + "/api/flaky")).build(),
-                HttpResponse.BodyHandlers.ofString());
-        assertThat(secondTry.statusCode()).isEqualTo(200);
+        send(client, base + "/api/does-not-exist", null); // 404 → near-miss
 
-        // незаматченный запрос — WireMock отдаёт 404 + near-miss (ближайший стаб) в отчёте
-        HttpResponse<String> miss = client.send(
-                HttpRequest.newBuilder(URI.create(base + "/api/does-not-exist")).build(),
-                HttpResponse.BodyHandlers.ofString());
-        assertThat(miss.statusCode()).isEqualTo(404);
-
-        // verify — проверки обращений (попадают в отчёт шагами)
         wireMock.verify(getRequestedFor(urlPathEqualTo("/api/prices")));
-        wireMock.verify(2, getRequestedFor(urlPathEqualTo("/api/flaky"))); // flaky вызвали дважды
-        wireMock.resetAll();                                               // сброс заглушек → шаг
+        wireMock.verify(2, getRequestedFor(urlPathEqualTo("/api/flaky")));
+        wireMock.resetAll(); // снимает near-miss/сценарии ДО сброса + шаг сброса
+
+        List<String> steps = CurrentReport.stepNames();
+        assertTrue(steps.stream().anyMatch(n -> n.startsWith("Создана заглушка:") && n.contains("/api/prices")),
+                () -> "" + steps);
+        assertTrue(steps.stream().anyMatch(n -> n.startsWith("Проверка обращений к заглушке")), () -> "" + steps);
+        assertTrue(steps.stream().anyMatch(n -> n.contains("(×2)")), () -> "" + steps);
+        assertTrue(steps.stream().anyMatch(n -> n.startsWith("Near-miss:") && n.contains("/api/does-not-exist")),
+                () -> "" + steps);
+        assertTrue(steps.stream().anyMatch(n -> n.contains("сценарий") && n.contains("retry")), () -> "" + steps);
+        assertTrue(steps.contains("WireMock: сброс заглушек"), () -> "" + steps);
+    }
+
+    private static void send(HttpClient client, String url, String body) throws Exception {
+        HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(url));
+        HttpRequest req = body == null ? b.build()
+                : b.header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build();
+        client.send(req, HttpResponse.BodyHandlers.ofString());
     }
 }

@@ -1,5 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.e2e;
 
+import io.github.kolomyychenkoai.allure.spring.support.CurrentReport;
 import io.github.kolomyychenkoai.allure.spring.support.KafkaTestApp;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
@@ -21,12 +22,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Уровень B: «живой» прогон со встроенным Kafka-брокером (без Docker). Обычные
- * KafkaTemplate.send и KafkaConsumer.poll — НИКАКОГО Allure.step; шаги «Kafka: …»
- * рождаются сами через байткод-инструментирование. Смотреть: mvn allure:serve.
+ * Уровень B: «живой» прогон со встроенным Kafka-брокером через РЕАЛЬНЫЙ байткод-перехват
+ * (spring.factories → инструментирование KafkaProducer/KafkaConsumer). send/poll пишут шаги
+ * в настоящий отчёт (showcase); тест читает их через {@link CurrentReport}. Краснеет, если
+ * перехват send/poll сломан или имена шагов съехали.
  */
 @SpringBootTest(classes = KafkaTestApp.class)
 @EmbeddedKafka(partitions = 1, topics = "order-events")
@@ -45,8 +47,6 @@ class KafkaReportIT {
     @Test
     @DisplayName("отправка и приём Kafka автоматически попадают в отчёт")
     void kafkaExchangeAppearsInReport() throws Exception {
-        template.send("order-events", "k1", "{\"id\":7}").get(10, TimeUnit.SECONDS);
-
         Map<String, Object> props = KafkaTestUtils.consumerProps("allure-group", "true", broker);
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
@@ -54,9 +54,15 @@ class KafkaReportIT {
 
         try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props)) {
             consumer.subscribe(List.of("order-events"));
+            template.send("order-events", "k1", "{\"id\":7}").get(10, TimeUnit.SECONDS);
             ConsumerRecords<String, String> records = pollUntilReceived(consumer);
-            assertThat(records.count()).isGreaterThan(0);
+            assertTrue(records.count() > 0, "сообщение не получено из брокера");
         }
+
+        List<String> steps = CurrentReport.stepNames();
+        assertTrue(steps.stream().anyMatch(n -> n.startsWith("Kafka: отправлено → order-events") && n.contains("k1")),
+                () -> "" + steps);
+        assertTrue(steps.stream().anyMatch(n -> n.startsWith("Kafka: получено")), () -> "" + steps);
     }
 
     private ConsumerRecords<String, String> pollUntilReceived(KafkaConsumer<String, String> consumer) {
