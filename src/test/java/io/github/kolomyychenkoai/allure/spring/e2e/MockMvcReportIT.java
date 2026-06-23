@@ -14,6 +14,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -45,6 +46,9 @@ class MockMvcReportIT {
         mockMvc.perform(get("/api/does-not-exist")).andExpect(status().isNotFound());
 
         List<String> steps = CurrentReport.stepNames();
+        // дедуп: авто-MockMvc цепляют ОБА пути (кастомайзер + байткод), но шаг должен быть ОДИН
+        assertEquals(1, steps.stream().filter("HTTP GET /api/hello/world → 200"::equals).count(),
+                () -> "ожидали ровно один GET-шаг (дедуп кастомайзер+байткод): " + steps);
         assertTrue(steps.contains("HTTP GET /api/hello/world → 200"), () -> "нет GET-шага: " + steps);
         assertTrue(steps.contains("HTTP POST /api/echo → 200"), () -> "нет POST-шага: " + steps);
         assertTrue(steps.contains("HTTP GET /api/search?q=laptop → 200"), () -> "нет query-шага: " + steps);

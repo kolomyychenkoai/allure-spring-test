@@ -54,12 +54,18 @@ public final class AllureWireMockVerifyInstrumentation {
                 (builder, type, cl, module, pd) -> builder
                         .visit(Advice.to(VerifyAdvice.class).on(named("verify")))
                         .visit(Advice.to(StubAdvice.class).on(named("stubFor")))
-                        .visit(Advice.to(StaticResetAdvice.class).on(named("reset"))));
+                        .visit(Advice.to(StaticResetAdvice.class).on(named("reset")))
+                        .visit(Advice.to(StaticPartialResetAdvice.class).on(
+                                named("resetAllRequests").or(named("resetScenario"))
+                                        .or(named("resetAllScenarios")))));
         AllureInstrumentation.retransform(named("com.github.tomakehurst.wiremock.WireMockServer"),
                 (builder, type, cl, module, pd) -> builder
                         .visit(Advice.to(VerifyAdvice.class).on(named("verify")))
                         .visit(Advice.to(StubAdvice.class).on(named("stubFor")))
-                        .visit(Advice.to(ResetAdvice.class).on(named("resetAll"))));
+                        .visit(Advice.to(ResetAdvice.class).on(named("resetAll")))
+                        .visit(Advice.to(PartialResetAdvice.class).on(
+                                named("resetMappings").or(named("resetRequests"))
+                                        .or(named("resetScenarios")))));
     }
 
     /** Логика шага создания заглушки (вынесена из advice). */
@@ -128,6 +134,40 @@ public final class AllureWireMockVerifyInstrumentation {
         }
     }
 
+    /**
+     * Частичный сброс на инстансе сервера ({@code resetMappings/resetRequests/resetScenarios}).
+     * Перед сбросом снимаем то, что метод вот-вот сотрёт: requests → near-miss журнала,
+     * scenarios → состояния сценариев. Так частичный сброс не «съедает» данные молча.
+     */
+    public static void onPartialReset(Object server, String method) {
+        try {
+            if (!AllureWireMockSteps.active()) {
+                return;
+            }
+            if (server instanceof WireMockServer wireMockServer) {
+                if ("resetRequests".equals(method)) {
+                    AllureWireMockSteps.nearMisses(wireMockServer);
+                } else if ("resetScenarios".equals(method)) {
+                    AllureWireMockSteps.scenarios(wireMockServer);
+                }
+            }
+            Allure.step("WireMock: частичный сброс (" + method + ")", Status.PASSED);
+        } catch (Throwable t) {
+            AllureInstrumentationLogger.warn("WireMockPartialReset", t);
+        }
+    }
+
+    /** Частичный сброс через статический DSL ({@code resetAllRequests/resetScenario/...}): шаг без снимка. */
+    public static void onStaticPartialReset(String method) {
+        try {
+            if (AllureWireMockSteps.active()) {
+                Allure.step("WireMock: частичный сброс (" + method + ")", Status.PASSED);
+            }
+        } catch (Throwable t) {
+            AllureInstrumentationLogger.warn("WireMockStaticPartialReset", t);
+        }
+    }
+
     public static class StubAdvice {
         @Advice.OnMethodExit(suppress = Throwable.class)
         public static void onExit(@Advice.Return Object stub) {
@@ -153,6 +193,20 @@ public final class AllureWireMockVerifyInstrumentation {
         @Advice.OnMethodEnter(suppress = Throwable.class)
         public static void onEnter(@Advice.This Object server) {
             onResetAll(server);
+        }
+    }
+
+    public static class PartialResetAdvice {
+        @Advice.OnMethodEnter(suppress = Throwable.class)
+        public static void onEnter(@Advice.This Object server, @Advice.Origin("#m") String method) {
+            onPartialReset(server, method);
+        }
+    }
+
+    public static class StaticPartialResetAdvice {
+        @Advice.OnMethodEnter(suppress = Throwable.class)
+        public static void onEnter(@Advice.Origin("#m") String method) {
+            onStaticPartialReset(method);
         }
     }
 }
