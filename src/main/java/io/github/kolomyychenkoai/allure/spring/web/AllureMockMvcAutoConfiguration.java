@@ -1,9 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.web;
 
-import io.github.kolomyychenkoai.allure.spring.internal.AllureSpringSettings;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.test.autoconfigure.web.servlet.MockMvcBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.test.web.servlet.ResultHandler;
@@ -21,7 +19,6 @@ import org.springframework.test.web.servlet.ResultHandler;
  * ВРУЧНУЮ ({@code MockMvcBuilders.standaloneSetup(...)} мимо кастомайзера), не перехватится.
  */
 @AutoConfiguration
-@ConditionalOnProperty(name = AllureSpringSettings.WEB_ENABLED, matchIfMissing = true)
 @ConditionalOnClass({MockMvcBuilderCustomizer.class, ResultHandler.class})
 public class AllureMockMvcAutoConfiguration {
 

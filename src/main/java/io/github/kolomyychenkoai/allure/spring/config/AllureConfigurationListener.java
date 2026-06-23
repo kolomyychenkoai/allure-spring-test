@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
  * Перед каждым тестом снимает срез актуальных свойств Spring {@link Environment} и
  * прикрепляет их к Allure-отчёту шагом «Configuration» с вложением «Properties».
  * Маскирование значений намеренно НЕ делается (данные в тестах фейковые); состав
- * среза ограничивается только префиксами {@code allure.spring.config.include-prefixes}.
+ * среза ограничивается префиксами из {@code allure.spring.config.include-prefixes}.
  * Активируется автоматически через {@code META-INF/spring.factories}.
  */
 public class AllureConfigurationListener implements TestExecutionListener, Ordered {
@@ -34,9 +34,6 @@ public class AllureConfigurationListener implements TestExecutionListener, Order
     @Override
     public void beforeTestMethod(TestContext testContext) {
         Environment base = AllureSpringSettings.environment(testContext);
-        if (!AllureSpringSettings.enabled(base, AllureSpringSettings.CONFIG_ENABLED)) {
-            return;
-        }
         if (!(base instanceof ConfigurableEnvironment env)) {
             return;
         }

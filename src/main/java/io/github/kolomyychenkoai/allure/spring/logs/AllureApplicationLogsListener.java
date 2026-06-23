@@ -4,7 +4,6 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.AppenderBase;
-import io.github.kolomyychenkoai.allure.spring.internal.AllureSpringSettings;
 import io.qameta.allure.Allure;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
@@ -22,7 +21,6 @@ import java.util.List;
  * Захватывает логи приложения (через Logback) на время каждого теста и прикрепляет их
  * к Allure-отчёту как вложение «Application Logs». Активируется автоматически через
  * {@code META-INF/spring.factories} — потребителю не нужно писать код. Выключить —
- * {@code allure.spring.logs.enabled=false}.
  * <p>
  * Вложение кладётся на уровень тест-кейса (а не отдельным шагом, как «Configuration»):
  * логи — это сквозной артефакт всего теста, а не дискретное действие.
@@ -52,11 +50,6 @@ public class AllureApplicationLogsListener implements TestExecutionListener, Ord
 
     @Override
     public void beforeTestMethod(TestContext testContext) {
-        if (!AllureSpringSettings.enabled(AllureSpringSettings.environment(testContext),
-                AllureSpringSettings.LOGS_ENABLED)) {
-            return;
-        }
-
         CapturingAppender appender = new CapturingAppender();
         LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
         appender.setContext(loggerContext);

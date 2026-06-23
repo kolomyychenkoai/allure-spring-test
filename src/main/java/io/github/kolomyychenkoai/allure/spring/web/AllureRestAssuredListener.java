@@ -1,6 +1,5 @@
 package io.github.kolomyychenkoai.allure.spring.web;
 
-import io.github.kolomyychenkoai.allure.spring.internal.AllureSpringSettings;
 import io.restassured.RestAssured;
 import io.restassured.filter.Filter;
 import org.springframework.core.Ordered;
@@ -11,8 +10,7 @@ import java.util.List;
 
 /**
  * Ставит {@link AllureRestAssuredFilter} в глобальные фильтры RestAssured —
- * чтобы все RestAssured-вызовы попадали в отчёт без кода в тестах. Выключить —
- * {@code allure.spring.web.enabled=false} (общий тумблер HTTP-модуля, с MockMvc).
+ * чтобы все RestAssured-вызовы попадали в отчёт без кода в тестах.
  * <p>
  * Регистрация идёт в {@code beforeTestExecution} (а не {@code beforeTestClass}):
  * этот хук срабатывает ПОСЛЕ {@code @BeforeEach} потребителя, поэтому переживает
@@ -43,10 +41,6 @@ public class AllureRestAssuredListener implements TestExecutionListener, Ordered
 
     @Override
     public void beforeTestExecution(TestContext testContext) {
-        if (!AllureSpringSettings.enabled(AllureSpringSettings.environment(testContext),
-                AllureSpringSettings.WEB_ENABLED)) {
-            return;
-        }
         synchronized (LOCK) {
             List<Filter> current = RestAssured.filters();
             boolean present = current.stream().anyMatch(AllureRestAssuredFilter.class::isInstance);

@@ -22,11 +22,4 @@ class AllureMockMvcAutoConfigurationTest {
     void customizerPresentByDefault() {
         runner.run(ctx -> assertThat(ctx).hasSingleBean(MockMvcBuilderCustomizer.class));
     }
-
-    @Test
-    @DisplayName("allure.spring.web.enabled=false выключает кастомайзер")
-    void customizerDisabledByProperty() {
-        runner.withPropertyValues("allure.spring.web.enabled=false")
-                .run(ctx -> assertThat(ctx).doesNotHaveBean(MockMvcBuilderCustomizer.class));
-    }
 }

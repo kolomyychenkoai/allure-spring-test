@@ -10,7 +10,6 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.env.StandardEnvironment;
-import org.springframework.mock.env.MockPropertySource;
 import org.springframework.test.context.TestContext;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -51,23 +50,6 @@ class AllureApplicationLogsListenerTest {
                 .contains("value=42")
                 .contains("INFO")
                 .contains("WARN");
-    }
-
-    @Test
-    @DisplayName("при allure.spring.logs.enabled=false вложение не создаётся")
-    void disabledByProperty() {
-        StandardEnvironment env = new StandardEnvironment();
-        env.getPropertySources().addFirst(
-                new MockPropertySource().withProperty("allure.spring.logs.enabled", "false"));
-        TestContext ctx = TestContexts.withEnvironment(env);
-
-        TestResult result = allure.run("disabled", () -> {
-            listener.beforeTestMethod(ctx);
-            log.info("this should not be captured");
-            listener.afterTestMethod(ctx);
-        });
-
-        assertThat(allure.attachment(result, "Application Logs")).isEmpty();
     }
 
     @Test

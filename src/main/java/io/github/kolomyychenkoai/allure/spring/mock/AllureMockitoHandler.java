@@ -25,15 +25,12 @@ import java.lang.reflect.Method;
  * показывается как точное число (без «≥/≤»). Настроенное возвращаемое значение у заглушки
  * в момент {@code when(...)} ещё не задано (thenReturn идёт после), поэтому показывается у вызова.
  * <p>
- * Выключается system property {@code allure.spring.mock.enabled=false} (фича глобальна на JVM).
  * <b>Хрупкость:</b> определение verify/кратности завязано на внутренние поля Mockito 5.x
  * ({@code ThreadSafeMockingProgress.verificationMode}, {@code Times.wantedCount}); при апгрейде
  * Mockito проверить. Деградация мягкая: при смене внутренностей кратность/детект тихо
  * отключаются (шаг без ×N), тест не падает.
  */
 public class AllureMockitoHandler<T> implements MockHandler<T> {
-
-    private static final boolean ENABLED = AllureSpringSettings.enabled(AllureSpringSettings.MOCK_ENABLED);
 
     // Суффиксы имён тест-классов: прямой вызов мока из такого класса = настройка заглушки, не прод-вызов.
     private static final String[] TEST_CLASS_SUFFIXES = {"Test", "Tests", "IT"};
@@ -46,9 +43,6 @@ public class AllureMockitoHandler<T> implements MockHandler<T> {
 
     @Override
     public Object handle(Invocation invocation) throws Throwable {
-        if (!ENABLED) {
-            return delegate.handle(invocation); // фича выключена — прозрачное делегирование
-        }
         boolean objectMethod = isObjectMethod(invocation.getMethod());
         Object verificationMode = objectMethod ? null : MockitoInternals.verificationMode();
         boolean verify = verificationMode != null;

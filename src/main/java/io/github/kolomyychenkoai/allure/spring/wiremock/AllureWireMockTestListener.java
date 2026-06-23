@@ -2,7 +2,6 @@ package io.github.kolomyychenkoai.allure.spring.wiremock;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
-import io.github.kolomyychenkoai.allure.spring.internal.AllureSpringSettings;
 import org.springframework.core.Ordered;
 import org.springframework.test.context.TestContext;
 import org.springframework.test.context.TestExecutionListener;
@@ -23,8 +22,7 @@ import java.util.WeakHashMap;
  * Код в тестах не нужен. Регистрируется через {@code META-INF/spring.factories}.
  * <p>
  * Перед установкой байткода проверяется {@link AllureInstrumentation#available()} — если
- * byte-buddy нет на classpath, тихий no-op. Выключить — system property
- * {@code allure.spring.wiremock.enabled=false}. Если WireMock нет — матчер ничего не находит.
+ * byte-buddy нет на classpath, тихий no-op. Если WireMock нет — матчер ничего не находит.
  * <p>
  * near-miss и состояния сценариев снимаются в {@code afterTestMethod} для тестов БЕЗ
  * {@code resetAll()}; для тестов С {@code resetAll()} они уже сняты в reset-advice ДО сброса
@@ -45,7 +43,7 @@ public class AllureWireMockTestListener implements TestExecutionListener, Ordere
     @Override
     public void beforeTestClass(TestContext testContext) {
         if (!AllureInstrumentation.available()
-                || !AllureSpringSettings.enabled(AllureSpringSettings.WIREMOCK_ENABLED)) {
+) {
             return;
         }
         // verify()/resetAll/stubFor нет listener-хука — ставим байткод-инструментирование один раз
@@ -54,9 +52,6 @@ public class AllureWireMockTestListener implements TestExecutionListener, Ordere
 
     @Override
     public void beforeTestMethod(TestContext testContext) {
-        if (!AllureSpringSettings.enabled(AllureSpringSettings.WIREMOCK_ENABLED)) {
-            return;
-        }
         AllureWireMockListener.clear();
         for (WireMockServer server : findServers(testContext)) {
             if (REGISTERED.add(server)) {
@@ -67,9 +62,6 @@ public class AllureWireMockTestListener implements TestExecutionListener, Ordere
 
     @Override
     public void afterTestMethod(TestContext testContext) {
-        if (!AllureSpringSettings.enabled(AllureSpringSettings.WIREMOCK_ENABLED)) {
-            return;
-        }
         AllureWireMockListener.flushToAllure();
         // near-miss/сценарии для тестов без resetAll (с resetAll они сняты в reset-advice до сброса)
         for (WireMockServer server : findServers(testContext)) {

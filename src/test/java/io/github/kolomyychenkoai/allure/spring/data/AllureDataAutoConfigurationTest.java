@@ -14,9 +14,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 /**
- * Уровень A: тумблеры авто-конфигов и защита от двойной обёртки DataSource.
- * Тесты падают, если фича перестанет включаться по умолчанию, выключаться по property
- * или начнёт оборачивать уже обёрнутый DataSource второй раз.
+ * Уровень A: авто-конфиги и защита от двойной обёртки DataSource.
+ * Тесты падают, если фича перестанет включаться или начнёт оборачивать уже обёрнутый DataSource второй раз.
  */
 class AllureDataAutoConfigurationTest {
 
@@ -29,29 +28,11 @@ class AllureDataAutoConfigurationTest {
     }
 
     @Test
-    @DisplayName("JPA-аспект: allure.spring.data.enabled=false выключает бин")
-    void repositoryAspectDisabledByProperty() {
-        new ApplicationContextRunner()
-                .withConfiguration(AutoConfigurations.of(AllureDataJpaAutoConfiguration.class))
-                .withPropertyValues("allure.spring.data.enabled=false")
-                .run(ctx -> assertThat(ctx).doesNotHaveBean(AllureRepositoryAspect.class));
-    }
-
-    @Test
     @DisplayName("DataSource-прокси: BeanPostProcessor есть по умолчанию")
     void dataSourceProcessorPresentByDefault() {
         new ApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(AllureDataSourceAutoConfiguration.class))
                 .run(ctx -> assertThat(ctx).hasBean("allureDataSourceProxyPostProcessor"));
-    }
-
-    @Test
-    @DisplayName("DataSource-прокси: allure.spring.datasource.enabled=false выключает BeanPostProcessor")
-    void dataSourceProcessorDisabledByProperty() {
-        new ApplicationContextRunner()
-                .withConfiguration(AutoConfigurations.of(AllureDataSourceAutoConfiguration.class))
-                .withPropertyValues("allure.spring.datasource.enabled=false")
-                .run(ctx -> assertThat(ctx).doesNotHaveBean("allureDataSourceProxyPostProcessor"));
     }
 
     @Test
