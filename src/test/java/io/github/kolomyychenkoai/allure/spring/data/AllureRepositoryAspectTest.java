@@ -18,6 +18,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -32,6 +34,27 @@ class AllureRepositoryAspectTest {
     }
 
     static class FakeRepoImpl implements FakeRepo {
+    }
+
+    // прикладной интерфейс ИДЁТ ПОСЛЕ служебного spring-интерфейса — repositoryName
+    // обязан пропустить org.springframework.* и взять имя репозитория потребителя.
+    static class MixedRepoImpl implements org.springframework.core.Ordered, FakeRepo {
+        @Override
+        public int getOrder() {
+            return 0;
+        }
+    }
+
+    // только служебный интерфейс — фоллбэк на первый интерфейс (его имя).
+    static class OnlySpringImpl implements org.springframework.core.Ordered {
+        @Override
+        public int getOrder() {
+            return 0;
+        }
+    }
+
+    // вовсе без интерфейсов — фоллбэк на имя самого класса.
+    static class NoIfaceImpl {
     }
 
     private final AllureRepositoryAspect aspect = new AllureRepositoryAspect();
@@ -186,5 +209,109 @@ class AllureRepositoryAspectTest {
         assertThat(allure.attachment(result, "DB Call").orElseThrow())
                 .contains("PENDING")
                 .doesNotContain("PENDING-MUTATED");
+    }
+
+    @Test
+    @DisplayName("без активного тест-кейса: proceed вызван, шаг не открывается (имя репо даже не запрашивается)")
+    void noStepWithoutActiveCase() throws Throwable {
+        // setUp установил InMemoryAllure, но allure.run не звали → активного кейса нет
+        ProceedingJoinPoint pjp = pjp("save", new Object[]{new Widget("x")}, "ok");
+
+        Object result = aspect.logRepositoryCall(pjp);
+
+        assertThat(result).isEqualTo("ok");
+        verify(pjp).proceed();
+        verify(pjp, never()).getSignature(); // гейт сработал ДО снятия имени/аргументов
+    }
+
+    @Test
+    @DisplayName("repositoryName: служебный spring-интерфейс пропускается, берётся репозиторий потребителя")
+    void repositoryNameSkipsSpringInterface() throws Throwable {
+        Signature sig = mock(Signature.class);
+        when(sig.getName()).thenReturn("findAll");
+        ProceedingJoinPoint pjp = mock(ProceedingJoinPoint.class);
+        when(pjp.getSignature()).thenReturn(sig);
+        when(pjp.getTarget()).thenReturn(new MixedRepoImpl());
+        when(pjp.getArgs()).thenReturn(new Object[]{});
+        when(pjp.proceed()).thenReturn(List.of());
+
+        TestResult result = allure.run("name-mixed", () -> {
+            try {
+                aspect.logRepositoryCall(pjp);
+            } catch (Throwable t) {
+                throw new RuntimeException(t);
+            }
+        });
+
+        assertThat(allure.hasStep(result, "DB FakeRepo.findAll")).isTrue();
+    }
+
+    @Test
+    @DisplayName("repositoryName: только служебный интерфейс → фоллбэк на его имя")
+    void repositoryNameFallsBackToFirstInterface() throws Throwable {
+        Signature sig = mock(Signature.class);
+        when(sig.getName()).thenReturn("count");
+        ProceedingJoinPoint pjp = mock(ProceedingJoinPoint.class);
+        when(pjp.getSignature()).thenReturn(sig);
+        when(pjp.getTarget()).thenReturn(new OnlySpringImpl());
+        when(pjp.getArgs()).thenReturn(new Object[]{});
+        when(pjp.proceed()).thenReturn(0L);
+
+        TestResult result = allure.run("name-spring", () -> {
+            try {
+                aspect.logRepositoryCall(pjp);
+            } catch (Throwable t) {
+                throw new RuntimeException(t);
+            }
+        });
+
+        assertThat(allure.hasStep(result, "DB Ordered.count")).isTrue();
+    }
+
+    @Test
+    @DisplayName("repositoryName: вовсе без интерфейсов → фоллбэк на имя класса")
+    void repositoryNameFallsBackToClassName() throws Throwable {
+        Signature sig = mock(Signature.class);
+        when(sig.getName()).thenReturn("ping");
+        ProceedingJoinPoint pjp = mock(ProceedingJoinPoint.class);
+        when(pjp.getSignature()).thenReturn(sig);
+        when(pjp.getTarget()).thenReturn(new NoIfaceImpl());
+        when(pjp.getArgs()).thenReturn(new Object[]{});
+        when(pjp.proceed()).thenReturn(null);
+
+        TestResult result = allure.run("name-class", () -> {
+            try {
+                aspect.logRepositoryCall(pjp);
+            } catch (Throwable t) {
+                throw new RuntimeException(t);
+            }
+        });
+
+        assertThat(allure.hasStep(result, "DB NoIfaceImpl.ping")).isTrue();
+    }
+
+    @Test
+    @DisplayName("большая выборка: показываем первые 20 и «… и ещё N», отчёт не раздуваем")
+    void largeCollectionCappedAt20() throws Throwable {
+        List<Widget> many = new java.util.ArrayList<>();
+        for (int i = 0; i < 25; i++) {
+            many.add(new Widget("w" + i));
+        }
+        ProceedingJoinPoint pjp = pjp("findAll", new Object[]{}, many);
+
+        TestResult result = allure.run("db-big", () -> {
+            try {
+                aspect.logRepositoryCall(pjp);
+            } catch (Throwable t) {
+                throw new RuntimeException(t);
+            }
+        });
+
+        String body = allure.attachment(result, "DB Result").orElseThrow();
+        assertThat(body).contains("Collection size: 25")
+                .contains("name=w0")
+                .contains("name=w19")    // 20-й элемент показан
+                .contains("… и ещё 5")
+                .doesNotContain("name=w20"); // 21-й и далее обрезаны
     }
 }
