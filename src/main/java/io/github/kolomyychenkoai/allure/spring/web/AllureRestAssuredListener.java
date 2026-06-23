@@ -1,5 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.web;
 
+import io.github.kolomyychenkoai.allure.spring.internal.ClassPresence;
 import io.restassured.RestAssured;
 import io.restassured.filter.Filter;
 import org.springframework.core.Ordered;
@@ -34,6 +35,12 @@ public class AllureRestAssuredListener implements TestExecutionListener, Ordered
 
     private static final Object LOCK = new Object();
 
+    // RestAssured в scope provided — у потребителя его может не быть. Листенер
+    // регистрируется всегда (spring.factories), поэтому без гейта обращение к RestAssured
+    // в хуке дало бы NoClassDefFoundError и уронило бы тест потребителя. См. ClassPresence.
+    private static final boolean RESTASSURED_PRESENT =
+            ClassPresence.isPresent("io.restassured.RestAssured");
+
     @Override
     public int getOrder() {
         return Ordered.HIGHEST_PRECEDENCE;
@@ -41,6 +48,9 @@ public class AllureRestAssuredListener implements TestExecutionListener, Ordered
 
     @Override
     public void beforeTestExecution(TestContext testContext) {
+        if (!RESTASSURED_PRESENT) {
+            return;
+        }
         synchronized (LOCK) {
             List<Filter> current = RestAssured.filters();
             boolean present = current.stream().anyMatch(AllureRestAssuredFilter.class::isInstance);

@@ -2,6 +2,7 @@ package io.github.kolomyychenkoai.allure.spring.wiremock;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
+import io.github.kolomyychenkoai.allure.spring.internal.ClassPresence;
 import org.springframework.core.Ordered;
 import org.springframework.test.context.TestContext;
 import org.springframework.test.context.TestExecutionListener;
@@ -30,6 +31,12 @@ import java.util.WeakHashMap;
  */
 public class AllureWireMockTestListener implements TestExecutionListener, Ordered {
 
+    // WireMock в scope provided — у потребителя его может не быть. Листенер регистрируется
+    // всегда (spring.factories), поэтому БЕЗ этого гейта прямое обращение к WireMockServer
+    // в хуках дало бы NoClassDefFoundError и уронило бы тест потребителя. См. ClassPresence.
+    private static final boolean WIREMOCK_PRESENT =
+            ClassPresence.isPresent("com.github.tomakehurst.wiremock.WireMockServer");
+
     // По каким серверам уже повешен request-listener. Identity-семантика (WireMockServer не
     // переопределяет equals) + weak-ключи, чтобы не держать сервера всю жизнь JVM.
     private static final Set<WireMockServer> REGISTERED =
@@ -42,8 +49,7 @@ public class AllureWireMockTestListener implements TestExecutionListener, Ordere
 
     @Override
     public void beforeTestClass(TestContext testContext) {
-        if (!AllureInstrumentation.available()
-) {
+        if (!WIREMOCK_PRESENT || !AllureInstrumentation.available()) {
             return;
         }
         // verify()/resetAll/stubFor нет listener-хука — ставим байткод-инструментирование один раз
@@ -52,6 +58,9 @@ public class AllureWireMockTestListener implements TestExecutionListener, Ordere
 
     @Override
     public void beforeTestMethod(TestContext testContext) {
+        if (!WIREMOCK_PRESENT) {
+            return;
+        }
         AllureWireMockListener.clear();
         for (WireMockServer server : findServers(testContext)) {
             if (REGISTERED.add(server)) {
@@ -62,6 +71,9 @@ public class AllureWireMockTestListener implements TestExecutionListener, Ordere
 
     @Override
     public void afterTestMethod(TestContext testContext) {
+        if (!WIREMOCK_PRESENT) {
+            return;
+        }
         AllureWireMockListener.flushToAllure();
         // near-miss/сценарии для тестов без resetAll (с resetAll они сняты в reset-advice до сброса)
         for (WireMockServer server : findServers(testContext)) {
