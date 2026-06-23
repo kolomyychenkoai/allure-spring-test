@@ -73,6 +73,31 @@ class AllureSpringAssertionsTest {
     }
 
     @Test
+    @DisplayName("успешный assertNull даёт РОВНО один шаг (внутренний assertTrue не задваивает)")
+    void successfulDelegatingAssertSingleStep() {
+        TestResult result = allure.run("dedup", () -> AssertionErrors.assertNull("ссылка пуста", null));
+
+        long aboutAssert = result.getSteps().stream()
+                .filter(s -> s.getName().contains("ссылка пуста")).count();
+        assertThat(aboutAssert).isEqualTo(1); // сломай дедуп (убери счётчик глубины) → станет 2
+        // внутренний делегат assertTrue НЕ должен дать отдельный шаг «— верно»
+        assertThat(result.getSteps().stream().noneMatch(s -> s.getName().endsWith("— верно"))).isTrue();
+    }
+
+    @Test
+    @DisplayName("повторный install() не задваивает шаг (идемпотентность CAS)")
+    void installIsIdempotent() {
+        AllureSpringAssertionsInstrumentation.install();
+        AllureSpringAssertionsInstrumentation.install();
+
+        TestResult result = allure.run("idem", () ->
+                AssertionErrors.assertEquals("имя", "laptop", "laptop"));
+
+        long n = result.getSteps().stream().filter(s -> s.getName().contains("имя")).count();
+        assertThat(n).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("assertFalse (проходящий) логируется; fail шага не создаёт")
     void logsAssertFalseAndFailMakesNoStep() {
         TestResult result = allure.run("ff", () -> {

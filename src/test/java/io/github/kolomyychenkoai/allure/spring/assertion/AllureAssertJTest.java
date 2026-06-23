@@ -100,4 +100,42 @@ class AllureAssertJTest {
         assertThat(names).anyMatch(n -> n.contains("contains [a]"));    // varargs развёрнут
         assertThat(names).anyMatch(n -> n.contains("hasSize 2"));
     }
+
+    @Test
+    @DisplayName("успешный ассерт даёт РОВНО один шаг (делегация в super не задваивает)")
+    void successfulAssertSingleStep() {
+        TestResult result = allure.run("dedup", () -> assertThat("laptop").isEqualTo("laptop"));
+
+        long n = stepNames(result).stream().filter(s -> s.contains("isEqualTo")).count();
+        assertThat(n).isEqualTo(1); // сломай дедуп (убери счётчик глубины) → станет 2
+    }
+
+    @Test
+    @DisplayName("повторный install() не задваивает шаг (идемпотентность CAS)")
+    void installIsIdempotent() {
+        AllureAssertJInstrumentation.install(); // уже установлен в @BeforeAll — должен быть no-op
+        AllureAssertJInstrumentation.install();
+
+        TestResult result = allure.run("idem", () -> assertThat("x").isEqualTo("x"));
+
+        long n = stepNames(result).stream().filter(s -> s.contains("isEqualTo")).count();
+        assertThat(n).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("satisfies/matches ЛОГИРУЮТСЯ; навигация (get/extracting) — НЕТ")
+    void logsRealAssertionsNotNavigation() {
+        TestResult result = allure.run("nav", () -> {
+            assertThat("laptop").satisfies(s -> { });
+            assertThat("laptop").matches(s -> !s.isEmpty());
+            assertThat(java.util.Optional.of("x")).get().isEqualTo("x"); // get — навигация
+            assertThat(List.of("a")).extracting(o -> o).contains("a");    // extracting — навигация
+        });
+
+        List<String> names = stepNames(result);
+        assertThat(names).anyMatch(n -> n.contains("satisfies"));
+        assertThat(names).anyMatch(n -> n.contains("matches"));
+        assertThat(names).noneMatch(n -> n.contains(" — get"));      // навигация не логируется
+        assertThat(names).noneMatch(n -> n.contains("extracting"));
+    }
 }

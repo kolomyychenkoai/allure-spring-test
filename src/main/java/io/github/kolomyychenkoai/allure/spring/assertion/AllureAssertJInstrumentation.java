@@ -6,12 +6,14 @@ import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLog
 import net.bytebuddy.asm.Advice;
 import org.assertj.core.api.AbstractAssert;
 
+import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Stream;
 
 import static net.bytebuddy.matcher.ElementMatchers.isPublic;
 import static net.bytebuddy.matcher.ElementMatchers.isStatic;
 import static net.bytebuddy.matcher.ElementMatchers.isSubTypeOf;
-import static net.bytebuddy.matcher.ElementMatchers.named;
+import static net.bytebuddy.matcher.ElementMatchers.namedOneOf;
 import static net.bytebuddy.matcher.ElementMatchers.not;
 
 /**
@@ -36,6 +38,28 @@ import static net.bytebuddy.matcher.ElementMatchers.not;
 public final class AllureAssertJInstrumentation {
 
     private static final AtomicBoolean INSTALLED = new AtomicBoolean(false);
+
+    // Не-проверки AssertJ (проверено на assertj-core 3.27.x; при апгрейде дополнить).
+    // Конфигурация/описание ассерта (fluent, ничего не проверяют):
+    private static final String[] CONFIG_METHODS = {
+            "as", "describedAs", "withFailMessage", "withRepresentation", "overridingErrorMessage",
+            "usingComparator", "usingElementComparator", "usingRecursiveComparison", "usingDefaultComparator",
+            "usingRecursiveAssertion", "withThreadDumpOnError", "withAssertionInfo", "inHexadecimal", "inBinary"
+    };
+    // Извлечение/навигация (возвращают производный/под-элементный assert, сами не проверяют):
+    private static final String[] NAVIGATION_METHODS = {
+            "extracting", "filteredOn", "asInstanceOf", "asString", "asList",
+            "first", "last", "element", "elements", "singleElement", "get", "value", "newAbstractIterableAssert"
+    };
+    // Доступ к состоянию / Object-методы / внутренние фабрики ошибок + тривиальная
+    // precondition isNotNull (часто авто-вызывается в цепочках — не «интересная» проверка):
+    private static final String[] INTERNAL_METHODS = {
+            "getActual", "actual", "info", "myself", "objects", "throwUnsupportedExceptionOnEquals",
+            "hashCode", "equals", "toString", "failWithMessage", "failWithActualExpectedAndMessage", "isNotNull"
+    };
+    // ВАЖНО: настоящие проверки satisfies/returns/matches здесь НЕ перечислены — они логируются.
+    private static final String[] NON_ASSERTION_METHODS = Stream.of(
+            CONFIG_METHODS, NAVIGATION_METHODS, INTERNAL_METHODS).flatMap(Arrays::stream).toArray(String[]::new);
 
     // AssertJ-методы делегируют в super (isEqualTo → AbstractAssert.isEqualTo и т.п.) — оба
     // инструментируются. Считаем глубину вложенности: логируем только внешний (пользовательский)
@@ -69,48 +93,7 @@ public final class AllureAssertJInstrumentation {
         AllureInstrumentation.retransform(
                 isSubTypeOf(AbstractAssert.class),
                 (builder, type, cl, module, pd) -> builder.visit(Advice.to(AssertJAdvice.class)
-                        .on(isPublic()
-                                .and(not(isStatic()))
-                                .and(not(named("as")))
-                                .and(not(named("describedAs")))
-                                .and(not(named("withFailMessage")))
-                                .and(not(named("withRepresentation")))
-                                .and(not(named("overridingErrorMessage")))
-                                .and(not(named("usingComparator")))
-                                .and(not(named("usingElementComparator")))
-                                .and(not(named("usingRecursiveComparison")))
-                                .and(not(named("usingDefaultComparator")))
-                                .and(not(named("withThreadDumpOnError")))
-                                .and(not(named("withAssertionInfo")))
-                                .and(not(named("inHexadecimal")))
-                                .and(not(named("inBinary")))
-                                .and(not(named("usingRecursiveAssertion")))
-                                .and(not(named("extracting")))
-                                .and(not(named("filteredOn")))
-                                .and(not(named("asInstanceOf")))
-                                .and(not(named("asString")))
-                                .and(not(named("asList")))
-                                // навигация: возвращают assert на под-элемент, сами не проверяют
-                                .and(not(named("first")))
-                                .and(not(named("last")))
-                                .and(not(named("element")))
-                                .and(not(named("elements")))
-                                .and(not(named("singleElement")))
-                                .and(not(named("get"))) // OptionalAssert.get() и т.п. — навигация к значению
-                                .and(not(named("value")))
-                                .and(not(named("newAbstractIterableAssert")))
-                                .and(not(named("getActual")))
-                                .and(not(named("actual")))
-                                .and(not(named("info")))
-                                .and(not(named("myself")))
-                                .and(not(named("objects")))
-                                .and(not(named("throwUnsupportedExceptionOnEquals")))
-                                .and(not(named("hashCode")))
-                                .and(not(named("equals")))
-                                .and(not(named("toString")))
-                                .and(not(named("failWithMessage")))
-                                .and(not(named("failWithActualExpectedAndMessage")))
-                                .and(not(named("isNotNull"))))));
+                        .on(isPublic().and(not(isStatic())).and(not(namedOneOf(NON_ASSERTION_METHODS))))));
     }
 
     public static class AssertJAdvice {
