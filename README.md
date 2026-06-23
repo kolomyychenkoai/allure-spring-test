@@ -76,17 +76,21 @@ Maven:
 подключаешь библиотеку, если этой технологией пользуешься. Единственный неочевидный
 случай — **SQL** (нужен `datasource-proxy`, его обычно нет по умолчанию).
 
-| Что попадает в отчёт | Нужно на classpath |
-|---|---|
-| HTTP MockMvc, ассерты, логи приложения, конфигурация | ничего сверх зависимости |
-| Вызовы Spring Data репозиториев | `spring-boot-starter-data-jpa` (тянет AspectJ сам) |
-| **Реальный SQL** внутри вызовов репозитория | **`net.ttddyy:datasource-proxy`** ← легко забыть |
-| HTTP REST Assured | `io.rest-assured:rest-assured` |
-| WireMock (стабы/verify/запросы) | `org.wiremock:wiremock-standalone` |
-| Kafka (send/poll) | `org.apache.kafka:kafka-clients` (через `spring-kafka`) |
-| Mockito (заглушки/вызовы/проверки) | по согласию — см. раздел ниже |
+| Что попадает в отчёт | Нужно на classpath (всё в `<scope>test</scope>`) | Версия |
+|---|---|---|
+| HTTP MockMvc, ассерты, логи приложения, конфигурация | ничего сверх зависимости | — |
+| Вызовы Spring Data репозиториев | `spring-boot-starter-data-jpa` (тянет AspectJ сам) | из Spring Boot |
+| **Реальный SQL** внутри вызовов репозитория | **`net.ttddyy:datasource-proxy`** ← легко забыть | **указать явно** (напр. `1.10.1`) |
+| HTTP REST Assured | `io.rest-assured:rest-assured` | из Spring Boot |
+| WireMock (стабы/verify/запросы) | `org.wiremock:wiremock-standalone` | **указать явно** (напр. `3.13.2`) |
+| Kafka (send/poll) | `org.springframework.kafka:spring-kafka` (тянет `kafka-clients`); для встроенного брокера в тестах — `spring-kafka-test` | из Spring Boot |
+| Mockito (заглушки/вызовы/проверки) | по согласию — см. раздел ниже | — |
 
 Нет библиотеки на classpath — соответствующий модуль просто молчит, тесты не падают.
+
+⚠️ `datasource-proxy` и `wiremock-standalone` Spring Boot BOM **не** менеджит — без явной
+`<version>` сборка не разрешит зависимость. Остальные (`rest-assured`, `spring-kafka`,
+`kafka-clients`) берут версию из Spring Boot — её писать не нужно.
 
 ## Быстрый старт
 
