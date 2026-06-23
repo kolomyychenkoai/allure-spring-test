@@ -34,6 +34,10 @@ import static net.bytebuddy.matcher.ElementMatchers.not;
  * Шаг пишется ТОЛЬКО для успешного ассерта; упавший ассерт шага не создаёт — его падение
  * Allure показывает из коробки на уровне теста. Ставится один раз на JVM —
  * см. {@link AllureAssertionsListener}.
+ * <p>
+ * <b>Дизайн и хрупкость этого узла</b> (порядок загрузки классов, дедуп по глубине,
+ * отвергнутые альтернативы, что проверять при апгрейде) — ADR
+ * {@code docs/adr/0001-assertj-instrumentation.md}.
  */
 public final class AllureAssertJInstrumentation {
 
