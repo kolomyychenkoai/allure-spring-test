@@ -29,7 +29,7 @@ class WebTestClientReportIT {
     WebTestClient client;
 
     @Test
-    @DisplayName("GET через WebTestClient (с чтением тела) даёт HTTP-шаг")
+    @DisplayName("GET через WebTestClient (с чтением тела) даёт HTTP-шаг с телом ответа")
     void webTestClientCallAppearsInReport() {
         client.get().uri("/api/hello/world").exchange()
                 .expectStatus().isOk()
@@ -38,5 +38,25 @@ class WebTestClientReportIT {
         List<String> steps = CurrentReport.stepNames();
         assertTrue(steps.stream().anyMatch("HTTP GET /api/hello/world → 200"::equals),
                 () -> "нет HTTP-шага WebTestClient: " + steps);
+
+        String resp = CurrentReport.attachmentContent("HTTP Response").orElse("");
+        assertTrue(resp.contains("hello world"), () -> "HTTP Response без тела: " + resp);
+    }
+
+    @Test
+    @DisplayName("POST с телом: и тело запроса, и тело ответа в отчёте")
+    void webTestClientPostBodyAppearsInReport() {
+        client.post().uri("/api/echo")
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .bodyValue(java.util.Map.of("productName", "laptop")).exchange()
+                .expectStatus().isOk()
+                .expectBody().jsonPath("$.productName").isEqualTo("laptop");
+
+        List<String> steps = CurrentReport.stepNames();
+        assertTrue(steps.stream().anyMatch("HTTP POST /api/echo → 200"::equals),
+                () -> "нет POST-шага WebTestClient: " + steps);
+
+        String req = CurrentReport.attachmentContent("HTTP Request").orElse("");
+        assertTrue(req.contains("laptop"), () -> "тело POST-запроса не попало: " + req);
     }
 }

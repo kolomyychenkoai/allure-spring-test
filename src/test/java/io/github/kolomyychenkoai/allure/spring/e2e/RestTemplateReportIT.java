@@ -38,4 +38,27 @@ class RestTemplateReportIT {
         String resp = CurrentReport.attachmentContent("HTTP Response").orElse("");
         assertTrue(resp.contains("hello world"), () -> "HTTP Response без тела: " + resp);
     }
+
+    @Test
+    @DisplayName("POST с телом: и тело запроса, и тело ответа в отчёте")
+    void restTemplatePostBodyAppearsInReport() {
+        rest.postForEntity("/api/echo", java.util.Map.of("productName", "laptop"), String.class);
+
+        List<String> steps = CurrentReport.stepNames();
+        assertTrue(steps.stream().anyMatch("HTTP POST /api/echo → 200"::equals),
+                () -> "нет POST-шага TestRestTemplate: " + steps);
+
+        String req = CurrentReport.attachmentContent("HTTP Request").orElse("");
+        assertTrue(req.contains("laptop"), () -> "тело POST-запроса не попало: " + req);
+    }
+
+    @Test
+    @DisplayName("ошибочный статус (404) тоже даёт шаг (TestRestTemplate не бросает)")
+    void restTemplateErrorStatusAppearsInReport() {
+        rest.getForEntity("/api/does-not-exist", String.class);
+
+        List<String> steps = CurrentReport.stepNames();
+        assertTrue(steps.stream().anyMatch("HTTP GET /api/does-not-exist → 404"::equals),
+                () -> "нет шага для 404: " + steps);
+    }
 }
