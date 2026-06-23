@@ -7,9 +7,13 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.core.env.MapPropertySource;
 import org.springframework.core.env.StandardEnvironment;
 import org.springframework.mock.env.MockPropertySource;
 import org.springframework.test.context.TestContext;
+
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -82,6 +86,40 @@ class AllureConfigurationListenerTest {
 
         assertThat(allure.attachment(result, "Properties").orElseThrow())
                 .isEqualTo("No relevant properties");
+    }
+
+    private TestContext contextWithMap(Map<String, Object> map) {
+        StandardEnvironment env = new StandardEnvironment();
+        env.getPropertySources().addFirst(new MapPropertySource("test", map));
+        return TestContexts.withEnvironment(env);
+    }
+
+    @Test
+    @DisplayName("известный ключ со значением null → «<unset>» (не двусмысленное key=null)")
+    void unsetValueRendered() {
+        Map<String, Object> map = new HashMap<>();
+        map.put("allure.spring.config.include-prefixes", "custom.");
+        map.put("custom.nullable", null); // ключ есть в перечне, но значение null
+        TestContext ctx = contextWithMap(map);
+
+        TestResult result = allure.run("config-unset", () -> listener.beforeTestMethod(ctx));
+
+        assertThat(allure.attachment(result, "Properties").orElseThrow())
+                .contains("custom.nullable=<unset>");
+    }
+
+    @Test
+    @DisplayName("неразрешимый плейсхолдер ${...} → «<unresolved>», тест не падает")
+    void unresolvedPlaceholderRendered() {
+        Map<String, Object> map = new HashMap<>();
+        map.put("allure.spring.config.include-prefixes", "custom.");
+        map.put("custom.bad", "${definitely.missing.placeholder}");
+        TestContext ctx = contextWithMap(map);
+
+        TestResult result = allure.run("config-unresolved", () -> listener.beforeTestMethod(ctx));
+
+        assertThat(allure.attachment(result, "Properties").orElseThrow())
+                .contains("custom.bad=<unresolved>");
     }
 
     @Test
