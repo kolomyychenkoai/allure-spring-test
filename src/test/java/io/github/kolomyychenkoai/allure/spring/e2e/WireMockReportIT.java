@@ -8,10 +8,7 @@ import io.qameta.allure.Feature;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.MethodOrderer;
-import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import java.net.URI;
@@ -39,7 +36,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * ({@code AllureWireMockListenerTest}).
  */
 @SpringBootTest(classes = TestApp.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
-@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 @Epic("allure-spring-test")
 @Feature("WireMock (заглушки внешних сервисов)")
 class WireMockReportIT {
@@ -57,7 +53,6 @@ class WireMockReportIT {
     }
 
     @Test
-    @Order(1)
     @DisplayName("стабы, verify, near-miss, сценарии и сброс WireMock попадают в отчёт")
     void wireMockExchangesAppearInReport() throws Exception {
         String base = "http://localhost:" + wireMock.port();
@@ -102,15 +97,14 @@ class WireMockReportIT {
         assertTrue(stub.contains("/api/prices"), () -> "WireMock Stub: " + stub);
     }
 
-    @Test
-    @Order(2)
-    @DisplayName("пошаговые запросы к заглушке записаны в отчёт (end-to-end, afterTestMethod)")
-    void requestStepsWrittenToReport() {
+    @AfterAll
+    @DisplayName("пошаговые запросы к заглушке записаны в отчёт (end-to-end, без пустого теста)")
+    static void requestStepsWrittenToReport() {
         // request-листенер буферизует запросы и пишет шаги «Запрос к заглушке …» в
-        // afterTestMethod теста №1 — из тела не прочитать, но к этому тесту они уже на диске
+        // afterTestMethod — из тела не прочитать, но к @AfterAll они уже на диске; проверяем
+        // здесь, чтобы не плодить отдельный пустой тест-кейс в отчёте
         assertTrue(CurrentReport.anyResultFileContains("Запрос к заглушке: GET /api/prices"),
                 "нет шага запроса GET /api/prices (request-листенер не сработал?)");
-        // содержимое вложения запроса/ответа тоже записано реальной цепочкой
         assertTrue(CurrentReport.anyResultFileContains("WireMock Request"),
                 "нет вложения WireMock Request");
     }
