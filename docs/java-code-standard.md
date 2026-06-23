@@ -109,7 +109,9 @@
    всем потребителям и сломает их MockMaker. Потребитель добавляет файл сам (README).
 4. **Восстановление lifecycle — через `InMemoryAllure.uninstall`**, не `new
    AllureLifecycle()` (см. §3).
-5. **Падения ByteBuddy** видны шагом FAILED (`onThrowable` + `@Thrown`), не молча.
+5. **Сбой САМОГО инструментирования** (ByteBuddy/advice) логируется на WARNING
+   (`AllureInstrumentationLogger`), а не молча и НЕ фабрикованным FAILED-шагом. Упавшую
+   пользовательскую проверку отдаём Allure (см. §4) — шаг для неё не создаём.
 
 ## Как смотреть код
 
