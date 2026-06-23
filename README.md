@@ -1,27 +1,59 @@
 # allure-spring-test
 
-Zero-config [Allure](https://allurereport.org/) reporting for **Spring tests**.
-Add the dependency — and every test automatically gets two attachments in the
-Allure report, **without touching your test or application code**:
+Zero-config [Allure](https://allurereport.org/)-репортинг для **Spring-тестов**.
+Подключаешь зависимость — и каждый тест автоматически даёт богатый Allure-отчёт
+(HTTP-вызовы, SQL, Kafka, заглушки, ассерты, моки, логи, конфигурация) **без единой
+строчки кода в тестах и без правок приложения**.
 
-- **Application Logs** — everything logged (via SLF4J/Logback) during the test.
-- **Configuration** — a snapshot of the relevant Spring `Environment` properties
-  (secrets filtered out).
+Работает по тому же принципу, что `allure-junit5` / `allure-rest-assured`: JAR на
+test-classpath, который сам себя «вшивает». Точки входа — Spring `TestExecutionListener`
+(авторегистрация через `META-INF/spring.factories`), Spring Boot auto-configuration и
+байткод-инструментирование (ByteBuddy) там, где у библиотеки нет hook'а.
 
-It works the same way as `allure-junit5`, `allure-rest-assured` and friends: a JAR
-on the test classpath that wires itself in. Here the entry point is a Spring
-`TestExecutionListener` auto-registered via `META-INF/spring.factories`.
+**Главный принцип:** детерминизм вперёд, перехват — только у успешных операций. Падения
+показывает сам Allure (тест red + сообщение/стек), мы НЕ фабрикуем «красные» шаги.
 
-> Status: early (`0.1.0`). Currently ships the **logs** and **configuration**
-> capture. HTTP / DB / Kafka / assertion capture are planned as follow-up modules.
+---
 
-## Requirements
+## Содержание
+- [Что попадает в отчёт](#что-попадает-в-отчёт)
+- [Требования](#требования)
+- [Установка](#установка)
+- [Быстрый старт](#быстрый-старт)
+- [Просмотр отчёта](#просмотр-отчёта)
+- [Что именно логируется (по модулям)](#что-именно-логируется-по-модулям)
+- [Настройка (тумблеры)](#настройка-тумблеры)
+- [Mockito (по согласию)](#mockito-по-согласию)
+- [Как устроено](#как-устроено)
+- [Ограничения (by design)](#ограничения-by-design)
+- [Разработка и поддержка](#разработка-и-поддержка)
+- [Лицензия](#лицензия)
 
-- Java 21+
-- Spring (Spring Test) — typically via `spring-boot-starter-test`
-- An Allure JUnit integration so test results are recorded (e.g. `allure-junit5`)
+---
 
-## Install
+## Что попадает в отчёт
+
+Без кода в тестах, само:
+
+- **HTTP** — MockMvc и REST Assured: метод, путь, статус + тело запроса/ответа.
+- **База данных** — вызовы Spring Data репозиториев + реальный SQL внутри них.
+- **Kafka** — отправка (`producer.send`) и приём (`consumer.poll`) сообщений.
+- **WireMock** — заглушки, `verify`, near-miss (почему не сматчилось), состояния
+  сценариев, сброс, и каждый обслуженный запрос.
+- **Ассерты** — AssertJ, Hamcrest, Spring `AssertionErrors`: каждая успешная проверка
+  отдельным шагом с понятным именем.
+- **Mockito** (по согласию) — заглушки/вызовы/проверки моков.
+- **Логи приложения** — всё, что залогировано (SLF4J/Logback) за время теста.
+- **Конфигурация** — срез свойств Spring `Environment`.
+
+## Требования
+
+- **Java 21+**
+- **Spring (Spring Test)** — обычно через `spring-boot-starter-test`
+- **Allure JUnit-интеграция**, чтобы результаты вообще записывались (например `allure-junit5`)
+- ByteBuddy на test-classpath — обычно уже есть транзитивно (Mockito / spring-boot-starter-test)
+
+## Установка
 
 Maven:
 
@@ -34,116 +66,154 @@ Maven:
 </dependency>
 ```
 
-That's it. Any Spring-managed test (`@SpringBootTest`, `@SpringJUnitConfig`, …) now
-attaches logs and a configuration snapshot automatically.
+Больше ничего. Любой Spring-управляемый тест (`@SpringBootTest`, `@SpringJUnitConfig`, …)
+сразу начинает наполнять Allure-отчёт.
+
+## Быстрый старт
 
 ```java
 @SpringBootTest
+@AutoConfigureMockMvc
 class OrderServiceTest {
     private static final Logger log = LoggerFactory.getLogger(OrderServiceTest.class);
 
+    @Autowired MockMvc mockMvc;
+
     @Test
-    void createsOrder() {
-        log.info("creating order");   // <- ends up in the "Application Logs" attachment
-        // ...
+    void createsOrder() throws Exception {
+        log.info("создаём заказ");                 // → попадёт во вложение «Application Logs»
+
+        mockMvc.perform(post("/api/orders")        // → шаг «HTTP POST /api/orders → 200»
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"product\":\"laptop\"}"))
+            .andExpect(status().isOk());
+        // вызовы репозитория/SQL, Kafka, ассерты внутри — тоже окажутся в отчёте сами
     }
 }
 ```
 
-## View the report
+## Просмотр отчёта
 
 ```bash
-mvn test          # produces target/allure-results
-mvn allure:serve  # builds the report and opens it in your browser
-# or: mvn allure:report  ->  target/site/allure-maven-plugin/index.html
+mvn test          # пишет target/allure-results
+mvn allure:serve  # собирает отчёт и открывает в браузере
+# либо: mvn allure:report  →  target/site/allure-maven-plugin/index.html
 ```
 
-## Configuration
+Витрину смотреть во вкладке **Behaviors** (группировка по Epic/Feature) — там «живые»
+сценарии. Юнит-тесты библиотеки во вкладке **Suites** (для in-memory тестов файловый
+результат пустой — это нормально).
 
-All toggles are read from the Spring `Environment` (your `application.yml`/
-`application.properties`), with a system-property fallback. Everything is on by
-default.
+## Что именно логируется (по модулям)
 
-| Property | Default | Meaning |
+Перехватываются ВСЕ основные операции каждой библиотеки, автоматически:
+
+| Модуль | Что ловится | Шаг / вложения |
 |---|---|---|
-| `allure.spring.logs.enabled` | `true` | Attach the **Application Logs**. |
-| `allure.spring.config.enabled` | `true` | Attach the **Configuration** snapshot. |
-| `allure.spring.config.include-prefixes` | `spring.,server.,logging.,management.` | CSV of property-name prefixes included in the snapshot. |
+| **Spring MockMvc** | каждый `perform(...)`, любой HTTP-метод, query, не-2xx | `HTTP <METHOD> <path> → <status>` + `HTTP Request` / `HTTP Response` (+ `HTTP Exception`) |
+| **REST Assured** | каждый глобальный `given()...` запрос, любой метод | `HTTP <METHOD> <path> → <status>` + `HTTP Request` / `HTTP Response` |
+| **Spring Data (JPA)** | каждый метод репозитория + реальный SQL внутри | `DB <Repo>.<method>` со вложенным `SQL <OP> <таблица>` + `DB Call` / `DB Result` / `SQL Query` |
+| **Kafka** | `producer.send(record, callback)`, `consumer.poll(Duration)` | `Kafka: отправлено → …` / `Kafka: получено N сообщ.` + вложение сообщения |
+| **WireMock** | `stubFor`, `verify(...)`, `resetAll()` / статический `reset()`, каждый обслуженный запрос, near-miss, состояние сценария | `Создана заглушка …` / `Проверка обращений …` / `Запрос к заглушке …` / `Near-miss …` / `WireMock сценарий …` / `WireMock: сброс …` + Request/Response/Stub |
+| **AssertJ** | каждая **успешная** проверка на `AbstractAssert` и наследниках (вкл. кастомные ассерты) | `Проверка: значение X — <method> <args>` |
+| **Hamcrest** | `MatcherAssert.assertThat(...)` (2- и 3-арг) | `Проверка: [reason:] значение X, ожидалось <matcher>` |
+| **Spring-ассерты** | каждый успешный `AssertionErrors.assert*` | `Проверка: <message> — …` |
+| **Mockito** (по согласию) | каждое взаимодействие с моком (заглушка / вызов / проверка) | `Мок-заглушка/вызов/проверка: Class.method(args)` + `Mock Call` / `Mock Result` |
+| **Логи / конфигурация** | Logback-вывод за тест / срез `Environment` | вложение `Application Logs` / шаг `Configuration` + вложение `Properties` |
 
-> Note: values are **not** masked. The snapshot is scoped by prefix only — assume
-> test configuration uses non-sensitive (fake) data.
+> **Падения — зона Allure, а не отдельный шаг.** Шаг создаётся для УСПЕШНО завершённой
+> операции/проверки. Когда проверка падает — исключение пробрасывается, тест становится
+> red, и Allure кладёт сообщение+стек на уровень теста. Библиотека НЕ рисует «красный»
+> шаг и не дублирует текст исключения. (Единственное исключение — ошибка операции БД:
+> шаг помечается `BROKEN`, но без текста исключения.)
+
+## Настройка (тумблеры)
+
+Все тумблеры читаются из Spring `Environment` (`application.yml`/`.properties`) с
+фоллбэком на system property. По умолчанию всё ВКЛЮЧЕНО (кроме Mockito — см. ниже).
+
+| Свойство | По умолчанию | Что делает |
+|---|---|---|
+| `allure.spring.web.enabled` | `true` | HTTP-шаги MockMvc и REST Assured |
+| `allure.spring.data.enabled` | `true` | Шаги вызовов репозиториев (аспект) |
+| `allure.spring.datasource.enabled` | `true` | Реальный SQL (datasource-proxy) |
+| `allure.spring.kafka.enabled` | `true` | Kafka send/poll |
+| `allure.spring.wiremock.enabled` | `true` | WireMock стабы/verify/запросы/сброс |
+| `allure.spring.assertion.enabled` | `true` | Ассерты AssertJ / Hamcrest / Spring |
+| `allure.spring.mock.enabled` | `true`* | Логирование Mockito (*ещё требует SPI-файл, см. ниже) |
+| `allure.spring.logs.enabled` | `true` | Вложение `Application Logs` |
+| `allure.spring.config.enabled` | `true` | Шаг `Configuration` |
+| `allure.spring.config.include-prefixes` | `spring.,server.,logging.,management.` | CSV-префиксы свойств в срезе конфигурации |
+
+> Значения свойств в срезе **не маскируются** — срез ограничен только префиксами. В тестах
+> используйте нечувствительные (фейковые) данные.
 
 ```yaml
-# example: include your own namespace too
+# пример: добавить свой namespace в срез конфигурации
 allure:
   spring:
     config:
       include-prefixes: spring.,server.,logging.,management.,myapp.
 ```
 
-## Mockito (opt-in)
+## Mockito (по согласию)
 
-Mockito interaction logging (mock stub / call / verify steps) is **not enabled by
-default** — it works by registering a global Mockito `MockMaker`, which would otherwise
-be forced on every consumer and could clash with a project's own `MockMaker`. To enable
-it, add one file to your test resources:
+Логирование взаимодействий с моками НЕ включается само: оно работает через глобальный
+Mockito `MockMaker`, а его нельзя навязывать каждому потребителю (конфликт с его
+собственным `MockMaker`). Чтобы включить — добавь ОДИН файл в test-resources:
 
 `src/test/resources/mockito-extensions/org.mockito.plugins.MockMaker`
 ```
 io.github.kolomyychenkoai.allure.spring.mock.AllureMockitoMockMaker
 ```
 
-Note: this module relies on Mockito 5.x internals (the inline mock maker); keep Mockito
-at the version managed by `spring-boot-starter-test`.
+Модуль завязан на внутренности Mockito 5.x (inline mock maker) — держи Mockito на версии
+из `spring-boot-starter-test`.
 
-## How it works
+## Как устроено
 
-- `AllureApplicationLogsListener` attaches a Logback appender to the root logger
-  for the duration of each test, then writes the captured lines to Allure.
-- `AllureConfigurationListener` reads the `ConfigurableEnvironment` before each
-  test, filters by prefix and secrets, and attaches the result inside a
-  `Configuration` step.
-- Both are registered in `META-INF/spring.factories` under
-  `org.springframework.test.context.TestExecutionListener`, so Spring activates
-  them for every test — no annotations, no setup.
+- **`TestExecutionListener` + `spring.factories`** — логи (`AllureApplicationLogsListener`)
+  и конфигурация (`AllureConfigurationListener`) подключаются на каждый тест без аннотаций.
+- **Spring Boot auto-configuration** — аспект репозиториев, обёртка DataSource,
+  кастомайзер MockMvc подключаются сами (выключаются тумблерами).
+- **Байткод (ByteBuddy)** — там, где у библиотеки нет hook'а: ассерты (AssertJ/Hamcrest/
+  Spring), Kafka `send`/`poll`, WireMock `stubFor`/`verify`/`reset`. Установка идемпотентна
+  (один раз на JVM), сбой инструментирования логируется на WARNING и не роняет тест.
+- **Уровни тестов в самой библиотеке:** A — детерминированные in-memory проверки логики
+  (`InMemoryAllure`); B — «живые» `*ReportIT` (`@SpringBootTest`), которые гоняют реальную
+  цепочку и проверяют записанный отчёт. Подробности — в `docs/`.
 
-## Coverage — what gets logged
+## Ограничения (by design)
 
-Instrumentation captures all primary operations of each supported library, automatically:
+- **Реактивные репозитории** (Spring Data R2DBC) не покрыты — аспект ловит синхронную
+  (JPA) иерархию `Repository+`.
+- **Вручную собранный MockMvc** (`MockMvcBuilders.standaloneSetup(...)` мимо
+  авто-кастомайзера) не перехватывается — используй `@AutoConfigureMockMvc` / фикстуры Spring Boot.
+- **REST Assured** логирует только глобальный `given()` API; изолированный
+  `RequestSpecification` с локальными фильтрами не ловится.
+- **Частичные сбросы WireMock** (`resetMappings/resetRequests/resetScenarios`,
+  статические `resetAllRequests/resetScenario/resetAllScenarios`) не логируются — шаг даёт
+  только полный сброс (`resetAll()` / статический `reset()`).
+- **Параллельный запуск** (`@Execution(CONCURRENT)`) не поддержан: глобальные фильтры REST
+  Assured, буфер обменов WireMock и корневой лог-аппендер — общее состояние. Гонять
+  последовательно (forked-JVM surefire — норм).
 
-| Library | Logged | Step / attachment |
-|---|---|---|
-| Spring MockMvc | every `perform(...)`, any HTTP method | `HTTP <METHOD> <path> → <status>` + Request/Response (+ Exception) |
-| REST Assured | every global `given()...` request, any method | `HTTP <METHOD> <path> → <status>` + Request/Response |
-| Spring Data (JPA) | every repository method + the real SQL it runs | `DB <Repo>.<method>` + nested `SQL <OP> <table>` + Call/Result/Query |
-| Kafka | `producer.send(...)`, `consumer.poll(Duration)` | `Kafka: отправлено/получено` + message attachment |
-| WireMock | `stubFor`, `verify(...)`, `resetAll()` / static `reset()`, every served request, near-miss, scenario state | stub/verify/reset/near-miss steps + Request/Response |
-| AssertJ | every **passing** assertion on `AbstractAssert` & subtypes | `Проверка: значение X — <method> <args>` |
-| Hamcrest | `assertThat(actual, matcher)` (2- and 3-arg) | `Проверка: …` |
-| Spring asserts | every passing `AssertionErrors.assert*` | `Проверка: …` |
-| Mockito (opt-in) | every mock interaction (stub / call / verify) | `Мок-заглушка/вызов/проверка` + Call/Result/Verify |
-| App logs / config | per-test Logback output / `Environment` snapshot | `Application Logs` / `Configuration` + `Properties` |
+## Разработка и поддержка
 
-> **Failures are reported by Allure, not fabricated as steps.** Steps are emitted for
-> operations/checks that complete successfully. When a check fails, the exception
-> propagates, the test fails, and Allure records the message + stack at the test level —
-> the library does not create a "red" step or duplicate the exception text.
+Для тех, кто дорабатывает библиотеку:
 
-### Known limitations (by design)
+- `docs/acceptance-report-standard.md` — критерий приёмки по Allure-отчёту (+ эталонные модули).
+- `docs/java-code-standard.md` — кодекс качества кода (идиомы, потокобезопасность, грабли).
+- `docs/adr/0001-assertj-instrumentation.md` — решение по самому хрупкому узлу (AssertJ).
+- `internal/InstrumentationApiCanaryTest` — канарейки версионных допущений: при апгрейде
+  чужих библиотек краснеют точечно, показывая, какой матчер обновить.
+- `.claude/agents/` — мандаты ревьюеров (architect/security/java-lead/tester/maintainer).
 
-- **Reactive repositories** (Spring Data R2DBC) are not covered — the aspect targets the
-  synchronous (JPA) `Repository+` hierarchy only.
-- **Manually built MockMvc** (`MockMvcBuilders.standaloneSetup(...)` outside the
-  auto-configured customizer) is not intercepted — use `@AutoConfigureMockMvc` / Spring Boot fixtures.
-- **REST Assured** logs only the global `given()` API; an isolated `RequestSpecification`
-  with local-only filters is not captured.
-- **WireMock partial resets** (`resetMappings/resetRequests/resetScenarios`,
-  static `resetAllRequests/resetScenario/resetAllScenarios`) are not logged — only the full
-  reset (`resetAll()` / static `reset()`) emits a step.
-- **Parallel execution** (`@Execution(CONCURRENT)`) is not supported: REST Assured global
-  filters, the WireMock exchange buffer and the root log appender are shared/global state.
-  Run tests sequentially (forked-JVM surefire is fine).
+```bash
+mvn clean test            # полный прогон (офлайн, без Docker)
+mvn -q -DskipTests compile  # быстрый компайл-чек
+```
 
-## License
+## Лицензия
 
 [Apache-2.0](LICENSE).
