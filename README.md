@@ -207,7 +207,7 @@ io.github.kolomyychenkoai.allure.spring.mock.AllureMockitoMockMaker
 - `docs/adr/0001-assertj-instrumentation.md` — решение по самому хрупкому узлу (AssertJ).
 - `internal/InstrumentationApiCanaryTest` — канарейки версионных допущений: при апгрейде
   чужих библиотек краснеют точечно, показывая, какой матчер обновить.
-- `.claude/agents/` — мандаты ревьюеров (architect/security/java-lead/tester/maintainer).
+- `.claude/agents/` — мандаты ревьюеров (architect/security/java-lead/tester/maintainer/qa-lead).
 
 ```bash
 mvn clean test            # полный прогон (офлайн, без Docker)
