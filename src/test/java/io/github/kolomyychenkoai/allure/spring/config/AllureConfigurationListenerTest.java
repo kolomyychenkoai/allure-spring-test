@@ -121,17 +121,4 @@ class AllureConfigurationListenerTest {
         assertThat(allure.attachment(result, "Properties").orElseThrow())
                 .contains("custom.bad=<unresolved>");
     }
-
-    @Test
-    @DisplayName("при allure.spring.config.enabled=false шаг не создаётся")
-    void disabledByProperty() {
-        TestContext ctx = contextWith(new MockPropertySource()
-                .withProperty("allure.spring.config.enabled", "false")
-                .withProperty("spring.application.name", "demo"));
-
-        TestResult result = allure.run("config-disabled", () -> listener.beforeTestMethod(ctx));
-
-        assertThat(allure.hasStep(result, "Configuration")).isFalse();
-        assertThat(allure.attachment(result, "Properties")).isEmpty();
-    }
 }

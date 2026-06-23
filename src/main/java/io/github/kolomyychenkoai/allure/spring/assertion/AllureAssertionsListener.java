@@ -1,7 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.assertion;
 
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
-import io.github.kolomyychenkoai.allure.spring.internal.AllureSpringSettings;
 import org.springframework.core.Ordered;
 import org.springframework.test.context.TestContext;
 import org.springframework.test.context.TestExecutionListener;
@@ -13,9 +12,7 @@ import org.springframework.test.context.TestExecutionListener;
  * <p>
  * Перед установкой проверяется {@link AllureInstrumentation#available()} — если byte-buddy
  * нет на classpath, листенер тихо ничего не ставит (типы matcher/advice не линкуются).
- * Выключить целиком — system property {@code allure.spring.assertion.enabled=false}
- * (фича глобальная на JVM). Если конкретной библиотеки ассертов нет — её матчер просто
- * ничего не находит (no-op).
+ * Если конкретной библиотеки ассертов нет — её матчер просто ничего не находит (no-op).
  */
 public class AllureAssertionsListener implements TestExecutionListener, Ordered {
 
@@ -27,7 +24,7 @@ public class AllureAssertionsListener implements TestExecutionListener, Ordered 
     @Override
     public void beforeTestClass(TestContext testContext) {
         if (!AllureInstrumentation.available()
-                || !AllureSpringSettings.enabled(AllureSpringSettings.ASSERTION_ENABLED)) {
+) {
             return;
         }
         AllureSpringAssertionsInstrumentation.install();

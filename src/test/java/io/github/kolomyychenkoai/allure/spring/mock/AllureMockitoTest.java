@@ -124,5 +124,10 @@ class AllureMockitoTest {
         org.assertj.core.api.Assertions.assertThatCode(() ->
                 org.mockito.internal.verification.Times.class.getDeclaredField(MockitoInternals.WANTED_COUNT_FIELD))
                 .doesNotThrowAnyException();
+        // javadoc MockitoInternals обещает и AtLeast.wantedCount (atLeast/atMost) — тоже под канарейкой
+        org.assertj.core.api.Assertions.assertThatCode(() ->
+                org.mockito.internal.verification.AtLeast.class.getDeclaredField(MockitoInternals.WANTED_COUNT_FIELD))
+                .doesNotThrowAnyException();
     }
+
 }
