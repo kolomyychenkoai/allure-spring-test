@@ -99,6 +99,25 @@ class AllureWireMockVerifyTest {
     }
 
     @Test
+    @DisplayName("частичный сброс на инстансе (resetRequests) даёт шаг с именем метода")
+    void logsPartialReset() {
+        // server=null: снимок near-miss пропускается, проверяем сам шаг частичного сброса
+        TestResult result = allure.run("partial",
+                () -> AllureWireMockVerifyInstrumentation.onPartialReset(null, "resetRequests"));
+
+        assertThat(allure.hasStep(result, "WireMock: частичный сброс (resetRequests)")).isTrue();
+    }
+
+    @Test
+    @DisplayName("частичный сброс через статический DSL (resetAllRequests) тоже даёт шаг")
+    void logsStaticPartialReset() {
+        TestResult result = allure.run("static-partial",
+                () -> AllureWireMockVerifyInstrumentation.onStaticPartialReset("resetAllRequests"));
+
+        assertThat(allure.hasStep(result, "WireMock: частичный сброс (resetAllRequests)")).isTrue();
+    }
+
+    @Test
     @DisplayName("stubFor: шаг «Создана заглушка …» с вложением WireMock Stub")
     void logsStub() {
         StubMapping stub = get(urlPathEqualTo("/api/prices"))

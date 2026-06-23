@@ -9,14 +9,26 @@ import org.springframework.test.web.servlet.ResultHandler;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.Collections;
+import java.util.Set;
+import java.util.WeakHashMap;
 
 /**
  * Прицепляет каждый {@code mockMvc.perform(...)} к Allure-отчёту шагом
  * «HTTP METHOD uri → status» с вложениями «HTTP Request» и «HTTP Response».
- * Ставится автоматически через {@link AllureMockMvcAutoConfiguration}
- * (MockMvcBuilderCustomizer.alwaysDo) — код в тестах не нужен.
+ * <p>
+ * Подключается ДВУМЯ путями: {@link AllureMockMvcAutoConfiguration}
+ * (MockMvcBuilderCustomizer.alwaysDo — для авто-собранного MockMvc) и байткод-перехват
+ * {@link AllureMockMvcInstrumentation} на {@code perform()} (ловит и собранный руками
+ * {@code standaloneSetup}). Чтобы один вызов не дал ДВА шага, дедупим по identity
+ * {@link MvcResult}: и кастомайзер, и байткод видят один и тот же объект результата.
  */
 public class AllureMockMvcResultHandler implements ResultHandler {
+
+    // Уже залогированные результаты (identity, weak — не держим MvcResult в памяти).
+    // Объект результата один и тот же у обоих путей, поэтому второй вызов отсеивается.
+    private static final Set<MvcResult> LOGGED =
+            Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<>()));
 
     @Override
     public void handle(MvcResult result) {
@@ -24,6 +36,9 @@ public class AllureMockMvcResultHandler implements ResultHandler {
         try {
             if (!Allure.getLifecycle().getCurrentTestCase().isPresent()) {
                 return; // нет активного тест-кейса — не пишем шаг «в никуда» (единообразно с прочими модулями)
+            }
+            if (result != null && !LOGGED.add(result)) {
+                return; // этот результат уже залогирован вторым путём — без дублей
             }
             MockHttpServletRequest req = result.getRequest();
             MockHttpServletResponse resp = result.getResponse();
