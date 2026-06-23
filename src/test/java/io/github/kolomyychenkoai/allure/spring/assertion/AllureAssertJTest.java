@@ -98,6 +98,22 @@ class AllureAssertJTest {
     }
 
     @Test
+    @DisplayName("новые navigation/config-методы (map/size/usingDefaultElementComparator) шага НЕ создают")
+    void newNavigationAndConfigSkipped() {
+        TestResult result = allure.run("nav2", () -> {
+            assertThat(List.of("ab", "cde")).map(String::length).contains(2);       // map — навигация
+            assertThat(List.of("a", "b")).size().isGreaterThan(0);                  // size — навигация
+            assertThat(List.of("a")).usingDefaultElementComparator().contains("a"); // config
+        });
+
+        List<String> names = stepNames(result);
+        assertThat(names).noneMatch(n -> n.contains(" — map") || n.contains(" — size")
+                || n.contains("usingDefaultElementComparator"));
+        assertThat(names).anyMatch(n -> n.contains("contains"));
+        assertThat(names).anyMatch(n -> n.contains("isGreaterThan"));
+    }
+
+    @Test
     @DisplayName("успешный ассерт даёт РОВНО один шаг (делегация в super не задваивает)")
     void successfulAssertSingleStep() {
         TestResult result = allure.run("dedup", () -> assertThat("laptop").isEqualTo("laptop"));

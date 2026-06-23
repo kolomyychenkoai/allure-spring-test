@@ -48,18 +48,28 @@ public final class AllureAssertJInstrumentation {
     private static final String[] CONFIG_METHODS = {
             "as", "describedAs", "withFailMessage", "withRepresentation", "overridingErrorMessage",
             "usingComparator", "usingElementComparator", "usingRecursiveComparison", "usingDefaultComparator",
-            "usingRecursiveAssertion", "withThreadDumpOnError", "withAssertionInfo", "inHexadecimal", "inBinary"
+            "usingRecursiveAssertion", "withThreadDumpOnError", "withAssertionInfo", "inHexadecimal", "inBinary",
+            // семейство usingComparator*/using*ElementComparator*/usingEquals — тоже конфигурация:
+            "usingEquals", "usingComparatorForType", "usingComparatorForFields",
+            "usingComparatorForElementFieldsWithNames", "usingComparatorForElementFieldsWithType",
+            "usingDefaultElementComparator", "usingFieldByFieldElementComparator",
+            "usingRecursiveFieldByFieldElementComparator", "usingRecursiveFieldByFieldElementComparatorOnFields",
+            "usingRecursiveFieldByFieldElementComparatorIgnoringFields"
     };
     // Извлечение/навигация (возвращают производный/под-элементный assert, сами не проверяют):
     private static final String[] NAVIGATION_METHODS = {
             "extracting", "filteredOn", "asInstanceOf", "asString", "asList",
-            "first", "last", "element", "elements", "singleElement", "get", "value", "newAbstractIterableAssert"
+            "first", "last", "element", "elements", "singleElement", "get", "value", "newAbstractIterableAssert",
+            // ещё навигация/извлечение (возвращают производный assert, не проверяют):
+            "map", "flatMap", "flatExtracting", "extractingResultOf",
+            "filteredOnNull", "filteredOnAssertions", "size"
     };
     // Доступ к состоянию / Object-методы / внутренние фабрики ошибок + тривиальная
     // precondition isNotNull (часто авто-вызывается в цепочках — не «интересная» проверка):
     private static final String[] INTERNAL_METHODS = {
             "getActual", "actual", "info", "myself", "objects", "throwUnsupportedExceptionOnEquals",
-            "hashCode", "equals", "toString", "failWithMessage", "failWithActualExpectedAndMessage", "isNotNull"
+            "hashCode", "equals", "toString", "failWithMessage", "failWithActualExpectedAndMessage", "isNotNull",
+            "descriptionText", "getWritableAssertionInfo"
     };
     // ВАЖНО: настоящие проверки satisfies/returns/matches здесь НЕ перечислены — они логируются.
     private static final String[] NON_ASSERTION_METHODS = Stream.of(
