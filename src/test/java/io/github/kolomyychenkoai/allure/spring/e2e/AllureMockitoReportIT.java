@@ -59,17 +59,4 @@ class AllureMockitoReportIT {
 
         Mockito.verify(pricing, times(2)).price("laptop");    // ожидали ×2
     }
-
-    @Test
-    @DisplayName("проваленный verify виден шагом FAILED с текстом ошибки (тест проходит)")
-    void failedVerifyShowsAsFailedStep() {
-        Pricing pricing = Mockito.mock(Pricing.class);
-
-        new PricingCaller().callPrice(pricing, "laptop");     // вызвали 1 раз
-        try {
-            Mockito.verify(pricing, times(2)).price("laptop"); // ждали 2 → провал
-        } catch (AssertionError expected) {
-            // FAILED-шаг verify уже попал в отчёт; сам тест-кейс оставляем зелёным
-        }
-    }
 }

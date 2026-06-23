@@ -29,7 +29,8 @@ import static net.bytebuddy.matcher.ElementMatchers.not;
  * {@code matches} в blacklist НЕ входят — они логируются. При добавлении новых
  * fluent/navigation-методов в AssertJ их, возможно, нужно дописать сюда.
  * <p>
- * Шаг и при успехе (PASSED), и при падении (FAILED). Ставится один раз на JVM —
+ * Шаг пишется ТОЛЬКО для успешного ассерта; упавший ассерт шага не создаёт — его падение
+ * Allure показывает из коробки на уровне теста. Ставится один раз на JVM —
  * см. {@link AllureAssertionsListener}.
  */
 public final class AllureAssertJInstrumentation {

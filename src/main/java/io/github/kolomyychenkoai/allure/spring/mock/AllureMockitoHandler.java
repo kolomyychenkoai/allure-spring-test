@@ -4,10 +4,6 @@ import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureSpringSettings;
 import io.qameta.allure.Allure;
-import io.qameta.allure.AllureLifecycle;
-import io.qameta.allure.model.Status;
-import io.qameta.allure.model.StatusDetails;
-import io.qameta.allure.model.StepResult;
 import org.mockito.internal.progress.ThreadSafeMockingProgress;
 import org.mockito.invocation.Invocation;
 import org.mockito.invocation.InvocationContainer;
@@ -16,7 +12,6 @@ import org.mockito.mock.MockCreationSettings;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.util.UUID;
 
 /**
  * Обёртка над Mockito {@link MockHandler}: логирует взаимодействия с моками в Allure
@@ -62,22 +57,9 @@ public class AllureMockitoHandler<T> implements MockHandler<T> {
         boolean productionCall = !objectMethod && !verify
                 && isCalledFromProductionCode(invocation.getMock().getClass());
 
-        Object result;
-        try {
-            result = delegate.handle(invocation);
-        } catch (Throwable failure) {
-            // Провал verify бросается ИЗНУТРИ delegate.handle — покажем FAILED-шаг и пробросим.
-            if (verify) {
-                try {
-                    if (active()) {
-                        emitFailedVerify(invocation, verificationMode, failure);
-                    }
-                } catch (Throwable t) {
-                    AllureInstrumentationLogger.warn("Mockito", t);
-                }
-            }
-            throw failure;
-        }
+        // Провал verify/вызова бросается ИЗНУТРИ delegate.handle и пробрасывается наверх —
+        // тест падает, Allure показывает причину сам; фабриковать FAILED-шаг не нужно.
+        Object result = delegate.handle(invocation);
 
         try {
             if (!objectMethod && active()) {
@@ -113,37 +95,6 @@ public class AllureMockitoHandler<T> implements MockHandler<T> {
             Allure.step("Мок-заглушка: " + signature, step -> {
                 Allure.addAttachment("Mock Call", "text/plain", call);
             });
-        }
-    }
-
-    /** Проваленный verify: FAILED-шаг с вложениями «Mock Call» и «Mock Verify» (текст ошибки Mockito). */
-    private void emitFailedVerify(Invocation invocation, Object verificationMode, Throwable failure) {
-        String signature = render(invocation);
-        String count = wantedCount(verificationMode);
-        AllureLifecycle lifecycle = Allure.getLifecycle();
-        String stepId = UUID.randomUUID().toString();
-        boolean started = false;
-        try {
-            lifecycle.startStep(stepId, new StepResult()
-                    .setName("Мок-проверка не прошла: " + signature
-                            + (count != null ? " (ожидали " + count + ")" : ""))
-                    .setStatus(Status.FAILED));
-            started = true;
-            Allure.addAttachment("Mock Call", "text/plain", details(invocation));
-            String message = failure.getMessage();
-            if (message != null) {
-                Allure.addAttachment("Mock Verify", "text/plain", message);
-                // дублируем причину в statusDetails шага — видно сразу, без открытия вложения
-                lifecycle.updateStep(stepId, s -> s.setStatusDetails(new StatusDetails().setMessage(message)));
-            }
-        } finally {
-            if (started) {
-                try {
-                    lifecycle.stopStep(stepId);
-                } catch (Throwable ignored) {
-                    // шаг гарантированно закрываем
-                }
-            }
         }
     }
 

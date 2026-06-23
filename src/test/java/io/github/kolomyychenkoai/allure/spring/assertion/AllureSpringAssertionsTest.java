@@ -3,8 +3,6 @@ package io.github.kolomyychenkoai.allure.spring.assertion;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
-import io.qameta.allure.model.Status;
-import io.qameta.allure.model.StepResult;
 import io.qameta.allure.model.TestResult;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -75,8 +73,8 @@ class AllureSpringAssertionsTest {
     }
 
     @Test
-    @DisplayName("assertFalse и fail логируются (fail — со статусом FAILED)")
-    void logsAssertFalseAndFail() {
+    @DisplayName("assertFalse (проходящий) логируется; fail шага не создаёт")
+    void logsAssertFalseAndFailMakesNoStep() {
         TestResult result = allure.run("ff", () -> {
             AssertionErrors.assertFalse("не должно быть нулём", false);
             try {
@@ -87,19 +85,20 @@ class AllureSpringAssertionsTest {
         });
 
         assertThat(allure.hasStep(result, "Проверка: не должно быть нулём — неверно")).isTrue();
-        StepResult failStep = step(result, "Проверка провалена: принудительный провал");
-        assertThat(failStep.getStatus()).isEqualTo(Status.FAILED);
+        // упавший fail шага не создаёт — падение показывает Allure на уровне теста
+        assertThat(result.getSteps().stream()
+                .noneMatch(s -> s.getName().startsWith("Проверка провалена"))).isTrue();
     }
 
     @Test
-    @DisplayName("упавший ассерт виден в отчёте шагом со статусом FAILED")
-    void failedAssertIsVisibleAsFailedStep() {
+    @DisplayName("упавший ассерт шага НЕ создаёт (падение покажет Allure)")
+    void failedAssertProducesNoStep() {
         TestResult result = allure.run("fail-eq", () ->
                 assertThatThrownBy(() -> AssertionErrors.assertEquals("имя", "laptop", "phone"))
                         .isInstanceOf(AssertionError.class));
 
-        StepResult step = step(result, "Проверка: имя — ожидалось laptop, получено phone");
-        assertThat(step.getStatus()).isEqualTo(Status.FAILED);
+        assertThat(result.getSteps().stream()
+                .noneMatch(s -> s.getName().startsWith("Проверка: имя"))).isTrue();
     }
 
     @Test
@@ -116,39 +115,27 @@ class AllureSpringAssertionsTest {
     }
 
     @Test
-    @DisplayName("упавший assertFalse даёт РОВНО один шаг (внутренний fail не дублируется)")
-    void failingAssertFalseGivesSingleStep() {
+    @DisplayName("упавший assertFalse шага не создаёт")
+    void failingAssertFalseProducesNoStep() {
         TestResult result = allure.run("ff-fail", () ->
                 assertThatThrownBy(() -> AssertionErrors.assertFalse("должно быть ложью", true))
                         .isInstanceOf(AssertionError.class));
 
-        long aboutAssert = result.getSteps().stream()
-                .filter(s -> s.getName().contains("должно быть ложью")).count();
-        assertThat(aboutAssert).isEqualTo(1);
-        // делегированный fail НЕ должен породить отдельный шаг «Проверка провалена: …»
+        assertThat(result.getSteps().stream()
+                .noneMatch(s -> s.getName().contains("должно быть ложью"))).isTrue();
         assertThat(result.getSteps().stream()
                 .noneMatch(s -> s.getName().startsWith("Проверка провалена"))).isTrue();
     }
 
     @Test
-    @DisplayName("упавший assertTrue даёт РОВНО один шаг (внутренний fail не дублируется)")
-    void failingAssertTrueGivesSingleStep() {
+    @DisplayName("упавший assertTrue шага не создаёт")
+    void failingAssertTrueProducesNoStep() {
         TestResult result = allure.run("tt-fail", () ->
                 assertThatThrownBy(() -> AssertionErrors.assertTrue("должно быть истиной", false))
                         .isInstanceOf(AssertionError.class));
 
-        long aboutAssert = result.getSteps().stream()
-                .filter(s -> s.getName().contains("должно быть истиной")).count();
-        assertThat(aboutAssert).isEqualTo(1);
         assertThat(result.getSteps().stream()
-                .noneMatch(s -> s.getName().startsWith("Проверка провалена"))).isTrue();
-    }
-
-    private StepResult step(TestResult result, String name) {
-        return result.getSteps().stream()
-                .filter(s -> name.equals(s.getName()))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("нет шага: " + name));
+                .noneMatch(s -> s.getName().contains("должно быть истиной"))).isTrue();
     }
 }
 

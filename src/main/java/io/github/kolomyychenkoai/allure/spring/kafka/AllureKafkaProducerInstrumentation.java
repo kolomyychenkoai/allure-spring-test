@@ -4,14 +4,9 @@ import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import io.qameta.allure.Allure;
-import io.qameta.allure.AllureLifecycle;
-import io.qameta.allure.model.Status;
-import io.qameta.allure.model.StatusDetails;
-import io.qameta.allure.model.StepResult;
 import net.bytebuddy.asm.Advice;
 import org.apache.kafka.clients.producer.ProducerRecord;
 
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static net.bytebuddy.matcher.ElementMatchers.named;
@@ -22,8 +17,9 @@ import static net.bytebuddy.matcher.ElementMatchers.takesArguments;
  * ByteBuddy-инструментирование Kafka producer: при {@code KafkaProducer.send(record, callback)}
  * в отчёт пишется шаг «Kafka: отправлено → topic [key]» с вложением «Отправленное сообщение».
  * Матчим именно 2-арг send (1-арг send внутри делегирует в него) — без двойного шага.
- * Шаг ставится на ВЫХОДЕ из send: если send бросил синхронно (сериализация, буфер) — шаг
- * FAILED с причиной, иначе PASSED. Логирование — при активном тест-кейсе, всё в try/catch.
+ * Шаг пишется ТОЛЬКО для успешной отправки; если send бросил синхронно (сериализация,
+ * буфер) — шага нет, падение Allure показывает из коробки на уровне теста. Логирование —
+ * при активном тест-кейсе, всё в try/catch.
  * Установка идемпотентна (CAS-гард {@code INSTALLED}, потокобезопасно) — один раз на JVM.
  */
 public final class AllureKafkaProducerInstrumentation {
@@ -51,7 +47,8 @@ public final class AllureKafkaProducerInstrumentation {
     /** Логика логирования (вынесена из advice, чтобы тестировать без брокера). */
     public static void onSend(ProducerRecord<?, ?> record, Throwable thrown) {
         try {
-            if (record == null || !Allure.getLifecycle().getCurrentTestCase().isPresent()) {
+            // упавший send не логируем — падение покажет Allure (тест падает); шаг только для успешной отправки
+            if (thrown != null || record == null || !Allure.getLifecycle().getCurrentTestCase().isPresent()) {
                 return;
             }
             String stepName = "Kafka: отправлено → " + record.topic()
@@ -64,25 +61,9 @@ public final class AllureKafkaProducerInstrumentation {
                 sb.append("\nPartition: ").append(record.partition());
             }
             final String body = sb.toString();
-            // ручной lifecycle: статус шага зависит от исхода send (Allure.step(name, runnable)
-            // всегда ставит PASSED после лямбды, поэтому FAILED так не выставить)
-            AllureLifecycle lifecycle = Allure.getLifecycle();
-            String stepId = UUID.randomUUID().toString();
-            StepResult stepResult = new StepResult().setName(stepName)
-                    .setStatus(thrown == null ? Status.PASSED : Status.FAILED);
-            if (thrown != null) {
-                stepResult.setStatusDetails(new StatusDetails().setMessage(thrown.getMessage()));
-            }
-            boolean started = false;
-            try {
-                lifecycle.startStep(stepId, stepResult);
-                started = true;
+            Allure.step(stepName, step -> {
                 Allure.addAttachment("Отправленное сообщение", "text/plain", body);
-            } finally {
-                if (started) {
-                    lifecycle.stopStep(stepId);
-                }
-            }
+            });
         } catch (Throwable t) {
             AllureInstrumentationLogger.warn("KafkaSend", t);
         }

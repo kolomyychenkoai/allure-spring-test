@@ -3,7 +3,6 @@ package io.github.kolomyychenkoai.allure.spring.wiremock;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
-import io.qameta.allure.model.Status;
 import io.qameta.allure.model.StepResult;
 import io.qameta.allure.model.TestResult;
 import org.junit.jupiter.api.AfterEach;
@@ -67,17 +66,13 @@ class AllureWireMockVerifyTest {
     }
 
     @Test
-    @DisplayName("непрошедший verify виден шагом FAILED")
-    void failedVerifyIsFailedStep() {
+    @DisplayName("непрошедший verify шага НЕ создаёт (падение покажет Allure)")
+    void failedVerifyProducesNoStep() {
         TestResult result = allure.run("fail", () -> AllureWireMockVerifyInstrumentation.onVerify(
                 new Object[]{getRequestedFor(urlPathEqualTo("/api/prices"))},
                 new AssertionError("ожидалось обращение, которого не было")));
 
-        StepResult step = result.getSteps().stream()
-                .filter(s -> s.getName().startsWith("Проверка обращений"))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("нет шага verify"));
-        assertThat(step.getStatus()).isEqualTo(Status.FAILED);
+        assertThat(stepNames(result)).noneMatch(n -> n.startsWith("Проверка обращений"));
     }
 
     @Test

@@ -21,16 +21,19 @@ public final class AllureAdviceSupport {
     }
 
     /**
-     * Шаг отчёта с автоматическим статусом по факту падения ({@code thrown != null} → FAILED).
+     * Шаг отчёта для УСПЕШНО завершившейся проверки ({@code thrown == null}). Упавшую
+     * проверку НЕ логируем шагом — падение Allure показывает из коробки на уровне теста
+     * (сообщение + стек), фабриковать FAILED-шаг незачем.
+     * <p>
      * Только при активном тест-кейсе: ассерт-инструментирование инлайнится в AbstractAssert и
      * срабатывает на ЛЮБОЙ {@code assertThat} в JVM — в т.ч. на проверочных ассертах самих
      * тестов вне активного кейса; без гейта это сыпало бы «no test case running» в лог.
      */
     public static void step(String name, Throwable thrown) {
-        if (!Allure.getLifecycle().getCurrentTestCase().isPresent()) {
+        if (thrown != null || !Allure.getLifecycle().getCurrentTestCase().isPresent()) {
             return;
         }
-        Allure.step(name, thrown == null ? Status.PASSED : Status.FAILED);
+        Allure.step(name, Status.PASSED);
     }
 
     /**

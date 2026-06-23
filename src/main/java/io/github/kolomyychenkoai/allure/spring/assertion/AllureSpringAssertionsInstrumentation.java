@@ -12,18 +12,17 @@ import static net.bytebuddy.matcher.ElementMatchers.takesArguments;
 
 /**
  * ByteBuddy-инструментирование Spring-ассертов ({@code org.springframework.test.util.AssertionErrors}):
- * каждый assertEquals/assertNotEquals/assertTrue/assertFalse/assertNull/assertNotNull/fail
- * даёт в Allure-отчёте шаг «Проверка: …» — БЕЗ кода в тестах. Шаг создаётся и при УСПЕХЕ
- * (PASSED), и при ПАДЕНИИ (FAILED) — чтобы упавшая проверка была видна.
+ * каждый assertEquals/assertNotEquals/assertTrue/assertFalse/assertNull/assertNotNull даёт
+ * в Allure-отчёте шаг «Проверка: …» — БЕЗ кода в тестах. Шаг пишется ТОЛЬКО для УСПЕШНОЙ
+ * проверки; упавшая проверка шага не создаёт — её падение Allure показывает из коробки на
+ * уровне теста (исключение пробрасывается).
  * <p>
- * <b>Граф делегации Spring (важно для дедупа).</b> Внутри {@code AssertionErrors}:
- * {@code assertNull}/{@code assertNotNull} → {@code assertTrue}; {@code assertTrue} при
- * провале → {@code fail(String)}; {@code assertFalse} при провале → {@code fail(String)};
- * {@code assertEquals} при провале → {@code fail(String,Object,Object)} (3-арг, НЕ
- * инструментируется); {@code assertNotEquals} бросает {@code AssertionError} напрямую.
- * Поэтому один пользовательский ассерт может пройти через несколько инструментированных
- * методов. Чтобы НЕ задвоить шаг, считаем глубину вложенности (как в AssertJ): шаг пишет
- * только ВНЕШНИЙ (пользовательский) вызов, внутренние делегаты молчат — грабли #2 кодекса.
+ * <b>Граф делегации Spring (важно для дедупа УСПЕШНОГО пути).</b> Внутри {@code AssertionErrors}
+ * {@code assertNull}/{@code assertNotNull} → {@code assertTrue}: один пользовательский ассерт
+ * проходит через несколько инструментированных методов. Чтобы НЕ задвоить шаг, считаем
+ * глубину вложенности (как в AssertJ): шаг пишет только ВНЕШНИЙ (пользовательский) вызов.
+ * На пути ПАДЕНИЯ ({@code fail}, и т.п.) шага нет в любом случае, поэтому {@code fail} не
+ * инструментируем.
  * <p>
  * Advice инлайнится в байткод AssertionErrors, поэтому ссылается только на хелперы
  * {@code internal} + j.u.l-логгер. Ставится один раз на JVM — см. {@link AllureAssertionsListener}.
@@ -74,9 +73,7 @@ public final class AllureSpringAssertionsInstrumentation {
                         .visit(Advice.to(AssertNullAdvice.class)
                                 .on(named("assertNull").and(takesArguments(2))))
                         .visit(Advice.to(AssertNotNullAdvice.class)
-                                .on(named("assertNotNull").and(takesArguments(2))))
-                        .visit(Advice.to(FailAdvice.class)
-                                .on(named("fail").and(takesArguments(1)))));
+                                .on(named("assertNotNull").and(takesArguments(2)))));
     }
 
     public static class AssertEqualsAdvice {
@@ -221,28 +218,6 @@ public final class AllureSpringAssertionsInstrumentation {
                         : " — значение null"), thrown);
             } catch (Throwable t) {
                 AllureInstrumentationLogger.warn("SpringAssertNotNull", t);
-            }
-        }
-    }
-
-    public static class FailAdvice {
-        @Advice.OnMethodEnter
-        public static boolean onEnter() {
-            return enter();
-        }
-
-        @Advice.OnMethodExit(suppress = Throwable.class, onThrowable = Throwable.class)
-        public static void onExit(@Advice.Enter boolean outermost,
-                                  @Advice.Argument(0) String message,
-                                  @Advice.Thrown Throwable thrown) {
-            try {
-                exit();
-                if (!outermost) {
-                    return; // fail вызван изнутри assertTrue/assertFalse — внешний уже отчитается
-                }
-                AllureAdviceSupport.step("Проверка провалена: " + message, thrown);
-            } catch (Throwable t) {
-                AllureInstrumentationLogger.warn("SpringFail", t);
             }
         }
     }

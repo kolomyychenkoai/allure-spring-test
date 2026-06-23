@@ -64,10 +64,9 @@ public class AllureRepositoryAspect {
             finish(started, uuid, call.callText(), formatResponse(result), Status.PASSED);
             return result;
         } catch (Throwable error) {
-            // при падении шаг тоже заполняем — видно, ЧТО ушло в БД (диагностируемость)
-            finish(started, uuid, call.callText(),
-                    "<exception: " + error.getClass().getSimpleName() + ": " + error.getMessage() + ">",
-                    Status.BROKEN);
+            // помечаем шаг BROKEN (родная семантика Allure для ошибки), но текст исключения
+            // НЕ дублируем — его покажет Allure на уровне теста. «DB Call» (что ушло в БД) остаётся.
+            finish(started, uuid, call.callText(), null, Status.BROKEN);
             throw error;
         } finally {
             stopQuietly(started, uuid);
@@ -104,7 +103,9 @@ public class AllureRepositoryAspect {
         try {
             // вложения и статус — на ТЕКУЩИЙ (наш) шаг; SQL уже вложился сюда же во время proceed
             Allure.addAttachment("DB Call", "text/plain", callText);
-            Allure.addAttachment("DB Result", "text/plain", resultText);
+            if (resultText != null) { // при ошибке resultText == null — «DB Result» не пишем
+                Allure.addAttachment("DB Result", "text/plain", resultText);
+            }
             Allure.getLifecycle().updateStep(uuid, s -> s.setStatus(status));
         } catch (Throwable ignored) {
             // инструментирование не должно ронять тест

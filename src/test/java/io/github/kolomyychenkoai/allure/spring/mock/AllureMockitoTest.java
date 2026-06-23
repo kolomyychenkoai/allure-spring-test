@@ -5,7 +5,6 @@ import io.github.kolomyychenkoai.allure.spring.support.mock.Pricing;
 import io.github.kolomyychenkoai.allure.spring.support.mock.PricingCaller;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
-import io.qameta.allure.model.Status;
 import io.qameta.allure.model.StepResult;
 import io.qameta.allure.model.TestResult;
 import org.junit.jupiter.api.AfterEach;
@@ -83,26 +82,20 @@ class AllureMockitoTest {
     }
 
     @Test
-    @DisplayName("проваленный verify даёт FAILED-шаг с текстом ошибки во вложении")
-    void failedVerifyIsFailedStep() {
+    @DisplayName("проваленный verify шага НЕ создаёт (падение покажет Allure)")
+    void failedVerifyProducesNoStep() {
         Pricing pricing = Mockito.mock(Pricing.class);
 
         TestResult result = allure.run("fail", () -> {
             new PricingCaller().callPrice(pricing, "laptop");      // вызвали 1 раз
             try {
-                Mockito.verify(pricing, Mockito.times(2)).price("laptop"); // ждали 2 → провал
+                Mockito.verify(pricing, Mockito.times(2)).price("laptop"); // ждали 2 → провал (бросает)
             } catch (AssertionError expected) {
-                // ожидаемо: проверяем, что провал отразился в отчёте
+                // ожидаемо: упавший verify бросает; шага в отчёте быть не должно
             }
         });
 
-        StepResult failed = result.getSteps().stream()
-                .filter(s -> s.getName().startsWith("Мок-проверка не прошла:"))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("нет FAILED-шага verify"));
-        assertThat(failed.getStatus()).isEqualTo(Status.FAILED);
-        assertThat(failed.getName()).contains("ожидали ×2");
-        assertThat(allure.attachment(result, "Mock Verify").orElseThrow())
-                .containsIgnoringCase("laptop"); // текст ошибки Mockito с деталями
+        assertThat(stepNames(result)).noneMatch(n -> n.startsWith("Мок-проверка не прошла"));
+        assertThat(allure.attachment(result, "Mock Verify")).isEmpty();
     }
 }

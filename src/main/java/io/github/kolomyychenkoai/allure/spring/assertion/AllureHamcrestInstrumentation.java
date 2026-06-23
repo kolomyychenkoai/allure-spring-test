@@ -15,7 +15,8 @@ import static net.bytebuddy.matcher.ElementMatchers.takesArguments;
  * каждый assertThat даёт в отчёте шаг «Проверка: …» — без кода в тестах.
  * Патчим только 3-арг {@code assertThat(reason, actual, matcher)}; 2-арг
  * {@code assertThat(actual, matcher)} внутри зовёт его (reason=""), поэтому ловятся оба
- * без двойного шага. Шаг создаётся и при успехе (PASSED), и при падении (FAILED).
+ * без двойного шага. Шаг пишется ТОЛЬКО для успешной проверки; упавшая шага не создаёт —
+ * её падение Allure показывает из коробки на уровне теста.
  * Ставится один раз на JVM — см. {@link AllureAssertionsListener}.
  * <p>
  * Перегрузка {@code assertThat(String, boolean)} (без матчера) намеренно НЕ

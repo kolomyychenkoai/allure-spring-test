@@ -152,10 +152,11 @@ class AllureRepositoryAspectTest {
                 assertThatThrownBy(() -> aspect.logRepositoryCall(pjp))
                         .isInstanceOf(IllegalStateException.class));
 
+        // шаг создаётся (BROKEN) и показывает, ЧТО ушло в БД (DB Call), но текст исключения
+        // НЕ дублируем — его покажет Allure на уровне теста (DB Result при ошибке не пишем)
         assertThat(allure.hasStep(result, "DB FakeRepo.save")).isTrue();
-        assertThat(allure.attachment(result, "DB Result").orElseThrow())
-                .contains("exception")
-                .contains("constraint violation");
+        assertThat(allure.attachment(result, "DB Call").orElseThrow()).contains("bad");
+        assertThat(allure.attachment(result, "DB Result")).isEmpty();
     }
 
     @Test

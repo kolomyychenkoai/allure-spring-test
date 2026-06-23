@@ -66,7 +66,8 @@ class DataJpaReportIT {
     @Order(3)
     @DisplayName("ошибка репозитория видна шагом (BROKEN), исключение проброшено")
     void repositoryErrorIsVisibleAsBrokenStep() {
-        // findById(null) бросает в Spring Data — аспект покажет BROKEN-шаг с текстом и пробросит
+        // findById(null) бросает в Spring Data — аспект покажет BROKEN-шаг (без текста ошибки,
+        // его покажет Allure на уровне теста) и пробросит
         assertThatThrownBy(() -> widgets.findById(null))
                 .isInstanceOf(RuntimeException.class);
     }

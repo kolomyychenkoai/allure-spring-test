@@ -56,8 +56,8 @@ class AllureAdviceSupportTest {
     }
 
     @Test
-    @DisplayName("step: статус PASSED без исключения, FAILED — с ним")
-    void stepStatusByThrown() {
+    @DisplayName("step: успешная проверка → PASSED-шаг; упавшая → шага НЕТ")
+    void stepLogsOnlySuccess() {
         InMemoryAllure allure = new InMemoryAllure().install();
         try {
             TestResult result = allure.run("steps", () -> {
@@ -65,7 +65,8 @@ class AllureAdviceSupportTest {
                 AllureAdviceSupport.step("упал", new RuntimeException("x"));
             });
             assertThat(step(result, "ок").getStatus()).isEqualTo(Status.PASSED);
-            assertThat(step(result, "упал").getStatus()).isEqualTo(Status.FAILED);
+            // упавшую проверку шагом не логируем — падение покажет Allure на уровне теста
+            assertThat(result.getSteps().stream().noneMatch(s -> "упал".equals(s.getName()))).isTrue();
         } finally {
             allure.uninstall();
         }

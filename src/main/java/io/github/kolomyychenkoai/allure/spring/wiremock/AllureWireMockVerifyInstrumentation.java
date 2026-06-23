@@ -8,12 +8,9 @@ import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import io.qameta.allure.Allure;
-import io.qameta.allure.AllureLifecycle;
 import io.qameta.allure.model.Status;
-import io.qameta.allure.model.StepResult;
 import net.bytebuddy.asm.Advice;
 
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static net.bytebuddy.matcher.ElementMatchers.named;
@@ -23,7 +20,8 @@ import static net.bytebuddy.matcher.ElementMatchers.named;
  * <ul>
  *   <li>{@code stubFor} → шаг «Создана заглушка …» в момент создания (живой, верный порядок,
  *       переживает {@code resetAll()});</li>
- *   <li>{@code verify(...)} → шаг «Проверка обращений к заглушке (×N)» (PASSED/FAILED);</li>
+ *   <li>{@code verify(...)} → шаг «Проверка обращений к заглушке (×N)» только для УСПЕШНОЙ
+ *       проверки; упавший verify шага не создаёт (падение покажет Allure на уровне теста);</li>
  *   <li>{@code WireMockServer.resetAll} → перед сбросом снимает near-miss и состояния
  *       сценариев со СЕРВЕРА (иначе reset их сотрёт до afterTestMethod), затем шаг
  *       «WireMock: сброс заглушек»;</li>
@@ -71,13 +69,11 @@ public final class AllureWireMockVerifyInstrumentation {
         }
     }
 
-    /** Логика логирования verify (вынесена из advice). */
+    /** Логика логирования verify (вынесена из advice). Шаг — только для УСПЕШНОЙ проверки. */
     public static void onVerify(Object[] args, Throwable thrown) {
-        AllureLifecycle lifecycle = Allure.getLifecycle();
-        String stepId = UUID.randomUUID().toString();
-        boolean started = false;
         try {
-            if (!lifecycle.getCurrentTestCase().isPresent()) {
+            // упавший verify не логируем — падение покажет Allure (тест падает)
+            if (thrown != null || !AllureWireMockSteps.active()) {
                 return;
             }
             String count = null;
@@ -93,22 +89,12 @@ public final class AllureWireMockVerifyInstrumentation {
                     }
                 }
             }
-            String name = "Проверка обращений к заглушке" + (count != null ? " (" + count + ")" : "");
-            lifecycle.startStep(stepId, new StepResult()
-                    .setName(name)
-                    .setStatus(thrown == null ? Status.PASSED : Status.FAILED));
-            started = true;
-            Allure.addAttachment("Условие проверки", "text/plain", pattern);
+            final String condition = pattern;
+            Allure.step("Проверка обращений к заглушке" + (count != null ? " (" + count + ")" : ""), step -> {
+                Allure.addAttachment("Условие проверки", "text/plain", condition);
+            });
         } catch (Throwable t) {
             AllureInstrumentationLogger.warn("WireMockVerify", t);
-        } finally {
-            if (started) {
-                try {
-                    lifecycle.stopStep(stepId);
-                } catch (Throwable ignored) {
-                    // шаг гарантированно закрываем
-                }
-            }
         }
     }
 

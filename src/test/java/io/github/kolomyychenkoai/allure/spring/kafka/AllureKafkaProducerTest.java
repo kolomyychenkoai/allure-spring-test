@@ -3,8 +3,6 @@ package io.github.kolomyychenkoai.allure.spring.kafka;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
-import io.qameta.allure.model.Status;
-import io.qameta.allure.model.StepResult;
 import io.qameta.allure.model.TestResult;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.AfterEach;
@@ -62,18 +60,15 @@ class AllureKafkaProducerTest {
     }
 
     @Test
-    @DisplayName("упавший send (синхронно): шаг FAILED с причиной")
-    void failedSendIsFailedStep() {
+    @DisplayName("упавший send (синхронно): шаг НЕ создаётся (падение покажет Allure)")
+    void failedSendProducesNoStep() {
         ProducerRecord<String, String> record =
                 new ProducerRecord<>("order-events", "k1", "{\"id\":9}");
 
         TestResult result = allure.run("send-fail", () ->
                 AllureKafkaProducerInstrumentation.onSend(record, new RuntimeException("брокер недоступен")));
 
-        StepResult step = result.getSteps().stream()
-                .filter(s -> s.getName().startsWith("Kafka: отправлено"))
-                .findFirst().orElseThrow();
-        assertThat(step.getStatus()).isEqualTo(Status.FAILED);
-        assertThat(step.getStatusDetails().getMessage()).contains("брокер недоступен");
+        assertThat(result.getSteps().stream()
+                .noneMatch(s -> s.getName().startsWith("Kafka: отправлено"))).isTrue();
     }
 }
