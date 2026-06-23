@@ -1,8 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.assertion;
 
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
-import io.qameta.allure.Epic;
-import io.qameta.allure.Feature;
 import io.qameta.allure.model.StepResult;
 import io.qameta.allure.model.TestResult;
 import org.hamcrest.MatcherAssert;
@@ -23,8 +21,6 @@ import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
 
 /** Уровень A: детерминированная проверка содержимого отчёта для Hamcrest. */
-@Epic("allure-spring-test")
-@Feature("Hamcrest")
 class AllureHamcrestTest {
 
     @BeforeAll

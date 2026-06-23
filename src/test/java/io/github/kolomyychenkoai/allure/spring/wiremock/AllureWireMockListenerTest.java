@@ -5,8 +5,6 @@ import com.github.tomakehurst.wiremock.http.Request;
 import com.github.tomakehurst.wiremock.http.RequestMethod;
 import com.github.tomakehurst.wiremock.http.Response;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
-import io.qameta.allure.Epic;
-import io.qameta.allure.Feature;
 import io.qameta.allure.model.TestResult;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,8 +16,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /** Уровень A: детерминированная проверка содержимого отчёта для WireMock-листенера. */
-@Epic("allure-spring-test")
-@Feature("WireMock (заглушки внешних сервисов)")
 class AllureWireMockListenerTest {
 
     private InMemoryAllure allure;

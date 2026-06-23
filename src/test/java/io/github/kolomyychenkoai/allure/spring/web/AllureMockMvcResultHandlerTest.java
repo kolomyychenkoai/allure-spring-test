@@ -2,8 +2,6 @@ package io.github.kolomyychenkoai.allure.spring.web;
 
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.github.kolomyychenkoai.allure.spring.support.WebTestApp;
-import io.qameta.allure.Epic;
-import io.qameta.allure.Feature;
 import io.qameta.allure.model.TestResult;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,8 +21,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * Гоняем обработчик через реальный путь MockMvc (standaloneSetup + alwaysDo), но без
  * Spring-контекста — быстро и надёжно.
  */
-@Epic("allure-spring-test")
-@Feature("HTTP-вызовы (MockMvc)")
 class AllureMockMvcResultHandlerTest {
 
     private InMemoryAllure allure;

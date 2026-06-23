@@ -1,8 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.kafka;
 
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
-import io.qameta.allure.Epic;
-import io.qameta.allure.Feature;
 import io.qameta.allure.model.TestResult;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.AfterEach;
@@ -13,8 +11,6 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** Уровень A: проверка содержимого отчёта для Kafka producer без брокера (логика onSend). */
-@Epic("allure-spring-test")
-@Feature("Kafka")
 class AllureKafkaProducerTest {
 
     private InMemoryAllure allure;

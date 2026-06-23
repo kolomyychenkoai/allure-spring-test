@@ -3,8 +3,6 @@ package io.github.kolomyychenkoai.allure.spring.web;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
-import io.qameta.allure.Epic;
-import io.qameta.allure.Feature;
 import io.qameta.allure.model.TestResult;
 import io.restassured.RestAssured;
 import org.junit.jupiter.api.AfterEach;
@@ -26,8 +24,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Поднимаем лёгкий in-process HttpServer (JDK) и применяем фильтр per-request —
  * без Spring и без глобального состояния RestAssured.
  */
-@Epic("allure-spring-test")
-@Feature("HTTP-вызовы (RestAssured)")
 class AllureRestAssuredFilterTest {
 
     private InMemoryAllure allure;

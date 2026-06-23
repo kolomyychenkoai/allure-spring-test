@@ -1,8 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.internal;
 
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
-import io.qameta.allure.Epic;
-import io.qameta.allure.Feature;
 import io.qameta.allure.model.Status;
 import io.qameta.allure.model.StepResult;
 import io.qameta.allure.model.TestResult;
@@ -16,8 +14,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * ({@code safe}) и выбор статуса шага ({@code step}) — ветки, на которые опираются все
  * инструментирующие модули.
  */
-@Epic("allure-spring-test")
-@Feature("internal")
 class AllureAdviceSupportTest {
 
     @Test
