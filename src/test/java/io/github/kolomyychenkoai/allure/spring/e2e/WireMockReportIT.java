@@ -61,7 +61,7 @@ class WireMockReportIT {
         wireMock.stubFor(get(urlPathEqualTo("/api/prices")).willReturn(okJson("{\"price\":9.99}")));
         wireMock.stubFor(post(urlPathEqualTo("/api/orders"))
                 .willReturn(aResponse().withStatus(201).withBody("{\"id\":7}")));
-        send(client, base + "/api/prices", null);
+        int pricesStatus = send(client, base + "/api/prices", null);
         send(client, base + "/api/orders", "{\"productName\":\"laptop\"}");
 
         wireMock.stubFor(get(urlPathEqualTo("/api/flaky")).inScenario("retry")
@@ -72,7 +72,11 @@ class WireMockReportIT {
         send(client, base + "/api/flaky", null);
         send(client, base + "/api/flaky", null);
 
-        send(client, base + "/api/does-not-exist", null); // 404 → near-miss
+        int missStatus = send(client, base + "/api/does-not-exist", null); // 404 → near-miss
+
+        // санити: трафик реально дошёл до сервера (иначе near-miss/шаги не из ниоткуда)
+        assertTrue(pricesStatus == 200, "стаб /api/prices не ответил 200: " + pricesStatus);
+        assertTrue(missStatus == 404, "незаматченный запрос не дал 404: " + missStatus);
 
         wireMock.verify(getRequestedFor(urlPathEqualTo("/api/prices")));
         wireMock.verify(2, getRequestedFor(urlPathEqualTo("/api/flaky")));
@@ -89,10 +93,10 @@ class WireMockReportIT {
         assertTrue(steps.contains("WireMock: сброс заглушек"), () -> "" + steps);
     }
 
-    private static void send(HttpClient client, String url, String body) throws Exception {
+    private static int send(HttpClient client, String url, String body) throws Exception {
         HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(url));
         HttpRequest req = body == null ? b.build()
                 : b.header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build();
-        client.send(req, HttpResponse.BodyHandlers.ofString());
+        return client.send(req, HttpResponse.BodyHandlers.ofString()).statusCode();
     }
 }
