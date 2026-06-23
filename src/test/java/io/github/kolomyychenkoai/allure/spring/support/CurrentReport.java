@@ -7,10 +7,12 @@ import io.qameta.allure.model.StepResult;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 /**
  * Чтение шагов/вложений ИЗ ТЕКУЩЕГО (реального) Allure тест-кейса — для уровня B.
@@ -64,6 +66,28 @@ public final class CurrentReport {
                     StandardCharsets.UTF_8));
         } catch (IOException e) {
             return Optional.empty();
+        }
+    }
+
+    /**
+     * Есть ли среди УЖЕ ЗАПИСАННЫХ на диск результатов файл (вложение/результат) с данным
+     * текстом. Нужно для контента, который листенер пишет в {@code afterTestMethod} (логи,
+     * пошаговые WireMock-запросы): из тела теста его не прочитать, но к следующему
+     * упорядоченному тесту Allure уже положил файл в {@code allure.results.directory}. Так
+     * level-B проверяет такой контент через реальную цепочку, а не только на уровне A.
+     */
+    public static boolean anyResultFileContains(String text) {
+        Path dir = Paths.get(System.getProperty("allure.results.directory", "allure-results"));
+        try (Stream<Path> files = Files.list(dir)) {
+            return files.filter(Files::isRegularFile).anyMatch(p -> {
+                try {
+                    return Files.readString(p, StandardCharsets.UTF_8).contains(text);
+                } catch (IOException e) {
+                    return false; // бинарный/нечитаемый файл — пропускаем
+                }
+            });
+        } catch (IOException e) {
+            return false;
         }
     }
 
