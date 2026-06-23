@@ -65,8 +65,28 @@ Maven:
 </dependency>
 ```
 
-Больше ничего. Любой Spring-управляемый тест (`@SpringBootTest`, `@SpringJUnitConfig`, …)
-сразу начинает наполнять Allure-отчёт.
+Любой Spring-управляемый тест (`@SpringBootTest`, `@SpringJUnitConfig`, …) сразу начинает
+наполнять Allure-отчёт.
+
+### Что для какой интеграции нужно на classpath
+
+Базовый набор работает только от зависимости (+ `allure-junit5`). Перехват каждой
+внешней технологии включается, ТОЛЬКО если её библиотека есть на test-classpath — модуль
+сам её не тянет (всё `provided`/`optional`, чтобы не навязывать лишнее). Логично: ты
+подключаешь библиотеку, если этой технологией пользуешься. Единственный неочевидный
+случай — **SQL** (нужен `datasource-proxy`, его обычно нет по умолчанию).
+
+| Что попадает в отчёт | Нужно на classpath |
+|---|---|
+| HTTP MockMvc, ассерты, логи приложения, конфигурация | ничего сверх зависимости |
+| Вызовы Spring Data репозиториев | `spring-boot-starter-data-jpa` (тянет AspectJ сам) |
+| **Реальный SQL** внутри вызовов репозитория | **`net.ttddyy:datasource-proxy`** ← легко забыть |
+| HTTP REST Assured | `io.rest-assured:rest-assured` |
+| WireMock (стабы/verify/запросы) | `org.wiremock:wiremock-standalone` |
+| Kafka (send/poll) | `org.apache.kafka:kafka-clients` (через `spring-kafka`) |
+| Mockito (заглушки/вызовы/проверки) | по согласию — см. раздел ниже |
+
+Нет библиотеки на classpath — соответствующий модуль просто молчит, тесты не падают.
 
 ## Быстрый старт
 
@@ -97,6 +117,22 @@ class OrderServiceTest {
 mvn test          # пишет target/allure-results
 mvn allure:serve  # собирает отчёт и открывает в браузере
 # либо: mvn allure:report  →  target/site/allure-maven-plugin/index.html
+```
+
+⚠️ По умолчанию Allure пишет результаты в `./allure-results` (корень проекта), и тогда
+`allure:serve`/`report` их не найдут в `target`. Чтобы результаты шли в `target/allure-results`
+(и `mvn clean` их подчищал), укажи каталог в surefire — ОДИН раз в `pom.xml`:
+
+```xml
+<plugin>
+    <groupId>org.apache.maven.plugins</groupId>
+    <artifactId>maven-surefire-plugin</artifactId>
+    <configuration>
+        <systemPropertyVariables>
+            <allure.results.directory>${project.build.directory}/allure-results</allure.results.directory>
+        </systemPropertyVariables>
+    </configuration>
+</plugin>
 ```
 
 Витрину смотреть во вкладке **Behaviors** (группировка по Epic/Feature) — там «живые»
