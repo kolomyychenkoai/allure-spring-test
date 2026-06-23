@@ -1,8 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.kafka;
 
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
-import io.qameta.allure.Epic;
-import io.qameta.allure.Feature;
 import io.qameta.allure.model.TestResult;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -18,8 +16,6 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** Уровень A: проверка содержимого отчёта для Kafka consumer без брокера (логика onPoll). */
-@Epic("allure-spring-test")
-@Feature("Kafka")
 class AllureKafkaConsumerTest {
 
     private InMemoryAllure allure;

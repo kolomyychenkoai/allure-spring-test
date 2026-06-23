@@ -1,8 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.assertion;
 
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
-import io.qameta.allure.Epic;
-import io.qameta.allure.Feature;
 import io.qameta.allure.model.TestResult;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -18,8 +16,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * Уровень A: детерминированная проверка содержимого отчёта для Spring-ассертов.
  * Инструментирование ставится один раз, ассерты зовутся напрямую — без Spring-контекста.
  */
-@Epic("allure-spring-test")
-@Feature("Spring-ассерты")
 class AllureSpringAssertionsTest {
 
     @BeforeAll

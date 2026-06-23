@@ -1,8 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.wiremock;
 
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
-import io.qameta.allure.Epic;
-import io.qameta.allure.Feature;
 import io.qameta.allure.model.StepResult;
 import io.qameta.allure.model.TestResult;
 import org.junit.jupiter.api.AfterEach;
@@ -31,8 +29,6 @@ import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** Уровень A: проверка содержимого отчёта для WireMock verify/reset (без брокера). */
-@Epic("allure-spring-test")
-@Feature("WireMock (заглушки внешних сервисов)")
 class AllureWireMockVerifyTest {
 
     private InMemoryAllure allure;

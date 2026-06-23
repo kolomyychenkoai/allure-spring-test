@@ -3,8 +3,6 @@ package io.github.kolomyychenkoai.allure.spring.mock;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.github.kolomyychenkoai.allure.spring.support.mock.Pricing;
 import io.github.kolomyychenkoai.allure.spring.support.mock.PricingCaller;
-import io.qameta.allure.Epic;
-import io.qameta.allure.Feature;
 import io.qameta.allure.model.StepResult;
 import io.qameta.allure.model.TestResult;
 import org.junit.jupiter.api.AfterEach;
@@ -18,8 +16,6 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** Уровень A: детерминированная проверка содержимого отчёта для Mockito. */
-@Epic("allure-spring-test")
-@Feature("Mockito (моки)")
 class AllureMockitoTest {
 
     private InMemoryAllure allure;
