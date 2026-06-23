@@ -118,11 +118,16 @@ Instrumentation captures all primary operations of each supported library, autom
 | Spring Data (JPA) | every repository method + the real SQL it runs | `DB <Repo>.<method>` + nested `SQL <OP> <table>` + Call/Result/Query |
 | Kafka | `producer.send(...)`, `consumer.poll(Duration)` | `Kafka: отправлено/получено` + message attachment |
 | WireMock | `stubFor`, `verify(...)`, `resetAll()` / static `reset()`, every served request, near-miss, scenario state | stub/verify/reset/near-miss steps + Request/Response |
-| AssertJ | every assertion on `AbstractAssert` & subtypes | `Проверка: значение X — <method> <args>` (PASSED/FAILED) |
+| AssertJ | every **passing** assertion on `AbstractAssert` & subtypes | `Проверка: значение X — <method> <args>` |
 | Hamcrest | `assertThat(actual, matcher)` (2- and 3-arg) | `Проверка: …` |
-| Spring asserts | `AssertionErrors.assert*` / `fail` | `Проверка: …` |
+| Spring asserts | every passing `AssertionErrors.assert*` | `Проверка: …` |
 | Mockito (opt-in) | every mock interaction (stub / call / verify) | `Мок-заглушка/вызов/проверка` + Call/Result/Verify |
 | App logs / config | per-test Logback output / `Environment` snapshot | `Application Logs` / `Configuration` + `Properties` |
+
+> **Failures are reported by Allure, not fabricated as steps.** Steps are emitted for
+> operations/checks that complete successfully. When a check fails, the exception
+> propagates, the test fails, and Allure records the message + stack at the test level —
+> the library does not create a "red" step or duplicate the exception text.
 
 ### Known limitations (by design)
 
