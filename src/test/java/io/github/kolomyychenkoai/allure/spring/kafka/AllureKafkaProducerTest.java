@@ -96,12 +96,14 @@ class AllureKafkaProducerTest {
     }
 
     @Test
-    @DisplayName("без активного тест-кейса send не пишет шаг и не бросает")
+    @DisplayName("без активного тест-кейса send НИЧЕГО не пишет в отчёт")
     void noStepWithoutActiveCase() {
         // setUp установил InMemoryAllure, но allure.run не вызывали → активного кейса нет
         ProducerRecord<String, String> record = new ProducerRecord<>("order-events", "k1", "v");
 
-        org.assertj.core.api.Assertions.assertThatCode(() ->
-                AllureKafkaProducerInstrumentation.onSend(record)).doesNotThrowAnyException();
+        AllureKafkaProducerInstrumentation.onSend(record);
+
+        // убери гейт активного кейса → Allure.step/addAttachment запишут байты вложения → покраснеет
+        assertThat(allure.wroteNothing()).isTrue();
     }
 }

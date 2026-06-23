@@ -115,11 +115,12 @@ class AllureMockMvcResultHandlerTest {
     }
 
     @Test
-    @DisplayName("без активного тест-кейса обработчик молчит и не падает")
+    @DisplayName("без активного тест-кейса обработчик НИЧЕГО не пишет в отчёт")
     void noStepWithoutActiveCase() throws Exception {
-        // setUp установил InMemoryAllure, но allure.run не звали → активного кейса нет;
-        // perform идёт мимо allure.run, значит handle отработает без активного кейса
-        org.assertj.core.api.Assertions.assertThatCode(() ->
-                mockMvc.perform(get("/api/hello/{name}", "world"))).doesNotThrowAnyException();
+        // perform идёт мимо allure.run → handle отработает без активного кейса
+        mockMvc.perform(get("/api/hello/{name}", "world"));
+
+        // убери гейт активного кейса → Allure.step/addAttachment запишут байты вложения → покраснеет
+        assertThat(allure.wroteNothing()).isTrue();
     }
 }

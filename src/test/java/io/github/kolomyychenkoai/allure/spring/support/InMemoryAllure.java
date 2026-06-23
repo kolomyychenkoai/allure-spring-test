@@ -86,6 +86,16 @@ public final class InMemoryAllure implements AllureResultsWriter {
         return result.getSteps().stream().anyMatch(s -> name.equals(s.getName()));
     }
 
+    /**
+     * Записано ли в отчёт ХОТЬ ЧТО-ТО (результат теста или байты вложения). Для тестов
+     * гейта активного кейса: вызов инструментирования БЕЗ {@code run(...)} не должен писать
+     * ничего. Если гейт убрать — {@code Allure.step}/{@code addAttachment} запишут байты
+     * вложения через этот writer даже без активного кейса, и проверка покраснеет.
+     */
+    public boolean wroteNothing() {
+        return results.isEmpty() && attachmentBytes.isEmpty();
+    }
+
     private static List<Attachment> allAttachments(List<Attachment> top, List<StepResult> steps) {
         List<Attachment> all = new ArrayList<>(top);
         for (StepResult step : steps) {
