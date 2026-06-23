@@ -56,6 +56,12 @@ public final class AllureInstrumentation {
             new AgentBuilder.Default()
                     .disableClassFormatChanges()
                     .with(AgentBuilder.RedefinitionStrategy.RETRANSFORMATION)
+                    // Reiterating: повторно сканирует загруженные классы, пока набор не стабилизируется —
+                    // ловит и УЖЕ загруженные классы (иерархию AssertJ, рано подтянутую Spring/surefire),
+                    // и те, что подгружаются во время самой ретрансформации. Без этого методы из рано
+                    // загруженных абстрактных классов (AbstractCharSequenceAssert.startsWith,
+                    // AbstractIterableAssert.contains) оставались без advice и пропадали из отчёта.
+                    .with(AgentBuilder.RedefinitionStrategy.DiscoveryStrategy.Reiterating.INSTANCE)
                     .type(typeMatcher)
                     .transform(transformer)
                     .installOn(instrumentation);
