@@ -121,6 +121,17 @@ class AllureRestAssuredFilterTest {
     }
 
     @Test
+    @DisplayName("без активного тест-кейса фильтр не пишет шаг и не роняет вызов")
+    void noStepWithoutActiveTestCase() {
+        // вне allure.run(...) активного Allure тест-кейса нет → фильтр должен тихо пропустить
+        io.restassured.response.Response response = given()
+                .filter(new AllureRestAssuredFilter())
+                .when().get(base + "/ping");
+
+        assertThat(response.statusCode()).isEqualTo(200); // HTTP-вызов не сломан, шаг не пишется
+    }
+
+    @Test
     @DisplayName("не-200 (404) отражается в имени шага")
     void includesNon200Status() {
         TestResult result = allure.run("ra-404", () ->

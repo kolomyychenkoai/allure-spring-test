@@ -3,7 +3,6 @@ package io.github.kolomyychenkoai.allure.spring.wiremock;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
-import io.qameta.allure.model.Status;
 import io.qameta.allure.model.StepResult;
 import io.qameta.allure.model.TestResult;
 import org.junit.jupiter.api.AfterEach;
@@ -13,8 +12,12 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import com.github.tomakehurst.wiremock.stubbing.StubMapping;
+
+import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.lessThan;
+import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -63,24 +66,42 @@ class AllureWireMockVerifyTest {
     }
 
     @Test
-    @DisplayName("непрошедший verify виден шагом FAILED")
-    void failedVerifyIsFailedStep() {
+    @DisplayName("непрошедший verify шага НЕ создаёт (падение покажет Allure)")
+    void failedVerifyProducesNoStep() {
         TestResult result = allure.run("fail", () -> AllureWireMockVerifyInstrumentation.onVerify(
                 new Object[]{getRequestedFor(urlPathEqualTo("/api/prices"))},
                 new AssertionError("ожидалось обращение, которого не было")));
 
-        StepResult step = result.getSteps().stream()
-                .filter(s -> s.getName().startsWith("Проверка обращений"))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("нет шага verify"));
-        assertThat(step.getStatus()).isEqualTo(Status.FAILED);
+        assertThat(stepNames(result)).noneMatch(n -> n.startsWith("Проверка обращений"));
     }
 
     @Test
     @DisplayName("resetAll даёт шаг «WireMock: сброс заглушек»")
     void logsResetAll() {
-        TestResult result = allure.run("reset", AllureWireMockVerifyInstrumentation::onResetAll);
+        // server=null: near-miss/сценарии не снимаются, проверяем сам шаг сброса
+        TestResult result = allure.run("reset", () -> AllureWireMockVerifyInstrumentation.onResetAll(null));
 
         assertThat(allure.hasStep(result, "WireMock: сброс заглушек")).isTrue();
+    }
+
+    @Test
+    @DisplayName("статический WireMock.reset() (старый DSL) тоже даёт шаг сброса")
+    void logsStaticReset() {
+        TestResult result = allure.run("static-reset", AllureWireMockVerifyInstrumentation::onStaticReset);
+
+        assertThat(allure.hasStep(result, "WireMock: сброс заглушек")).isTrue();
+    }
+
+    @Test
+    @DisplayName("stubFor: шаг «Создана заглушка …» с вложением WireMock Stub")
+    void logsStub() {
+        StubMapping stub = get(urlPathEqualTo("/api/prices"))
+                .willReturn(okJson("{\"price\":9.99}")).build();
+
+        TestResult result = allure.run("stub", () ->
+                AllureWireMockVerifyInstrumentation.onStub(stub));
+
+        assertThat(allure.hasStep(result, "Создана заглушка: GET /api/prices → 200")).isTrue();
+        assertThat(allure.attachment(result, "WireMock Stub")).isPresent();
     }
 }

@@ -1,5 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.kafka;
 
+import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import io.qameta.allure.Allure;
@@ -23,6 +24,7 @@ import static net.bytebuddy.matcher.ElementMatchers.takesArgument;
  * <p>
  * Перехватывается {@code poll(Duration)} (современный API). Deprecated {@code poll(long)}
  * намеренно не матчим — современный код его не использует.
+ * Установка идемпотентна (CAS-гард {@code INSTALLED}, потокобезопасно) — один раз на JVM.
  */
 public final class AllureKafkaConsumerInstrumentation {
 
@@ -57,8 +59,8 @@ public final class AllureKafkaConsumerInstrumentation {
                 sb.append("Topic: ").append(record.topic())
                         .append("\nPartition: ").append(record.partition())
                         .append("\nOffset: ").append(record.offset())
-                        .append("\nKey: ").append(record.key())
-                        .append("\nValue: ").append(record.value());
+                        .append("\nKey: ").append(AllureAdviceSupport.safe(record.key()))
+                        .append("\nValue: ").append(AllureAdviceSupport.safe(record.value()));
             }
             final String body = sb.toString();
             Allure.step("Kafka: получено " + records.count() + " сообщ.", step -> {

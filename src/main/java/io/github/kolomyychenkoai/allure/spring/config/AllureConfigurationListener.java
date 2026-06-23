@@ -33,7 +33,7 @@ public class AllureConfigurationListener implements TestExecutionListener, Order
 
     @Override
     public void beforeTestMethod(TestContext testContext) {
-        Environment base = environment(testContext);
+        Environment base = AllureSpringSettings.environment(testContext);
         if (!AllureSpringSettings.enabled(base, AllureSpringSettings.CONFIG_ENABLED)) {
             return;
         }
@@ -55,19 +55,26 @@ public class AllureConfigurationListener implements TestExecutionListener, Order
 
         final String config = keys.stream()
                 .filter(k -> prefixes.stream().anyMatch(k::startsWith))
-                .map(k -> k + "=" + env.getProperty(k))
+                .map(k -> k + "=" + safeProperty(env, k))
                 .collect(Collectors.joining("\n"));
 
-        Allure.step("Configuration", () ->
-                Allure.addAttachment("Properties", "text/plain",
-                        config.isEmpty() ? "No relevant properties" : config));
+        Allure.step("Configuration", () -> {
+            Allure.addAttachment("Properties", "text/plain",
+                    config.isEmpty() ? "No relevant properties" : config);
+        });
     }
 
-    private static Environment environment(TestContext testContext) {
+    /**
+     * Безопасно резолвит значение свойства: {@code null} → {@code <unset>}, неразрешимый
+     * плейсхолдер {@code ${...}} (бросает) → {@code <unresolved>}. Чтобы один кривой
+     * плейсхолдер не уронил сам тест и в отчёте не было неоднозначного «key=null».
+     */
+    private static String safeProperty(Environment env, String key) {
         try {
-            return testContext.getApplicationContext().getEnvironment();
-        } catch (Throwable ignored) {
-            return null;
+            String value = env.getProperty(key);
+            return value != null ? value : "<unset>";
+        } catch (RuntimeException e) {
+            return "<unresolved>"; // неразрешимый плейсхолдер ${...} — не роняем срез/тест
         }
     }
 }

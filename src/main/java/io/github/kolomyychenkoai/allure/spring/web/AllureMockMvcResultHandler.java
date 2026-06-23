@@ -1,5 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.web;
 
+import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import io.qameta.allure.Allure;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -19,22 +20,30 @@ public class AllureMockMvcResultHandler implements ResultHandler {
 
     @Override
     public void handle(MvcResult result) {
-        MockHttpServletRequest req = result.getRequest();
-        MockHttpServletResponse resp = result.getResponse();
-
-        String query = req.getQueryString();
-        String uri = (query != null) ? req.getRequestURI() + "?" + query : req.getRequestURI();
-        String stepName = "HTTP " + req.getMethod() + " " + uri + " → " + resp.getStatus();
-
-        Allure.step(stepName, step -> {
-            Allure.addAttachment("HTTP Request", "text/plain", formatRequest(req));
-            Allure.addAttachment("HTTP Response", "text/plain", formatResponse(resp));
-            Exception resolved = result.getResolvedException();
-            if (resolved != null) {
-                // при ошибке контроллера — причина в отчёт (иначе виден «→ 500» без объяснения)
-                Allure.addAttachment("HTTP Exception", "text/plain", stackTrace(resolved));
+        // всё в try — инструментирование не должно ронять тест потребителя (§4 кодекса)
+        try {
+            if (!Allure.getLifecycle().getCurrentTestCase().isPresent()) {
+                return; // нет активного тест-кейса — не пишем шаг «в никуда» (единообразно с прочими модулями)
             }
-        });
+            MockHttpServletRequest req = result.getRequest();
+            MockHttpServletResponse resp = result.getResponse();
+
+            String query = req.getQueryString();
+            String uri = (query != null) ? req.getRequestURI() + "?" + query : req.getRequestURI();
+            String stepName = AllureHttp.stepName(req.getMethod(), uri, resp.getStatus());
+
+            Allure.step(stepName, step -> {
+                Allure.addAttachment("HTTP Request", "text/plain", formatRequest(req));
+                Allure.addAttachment("HTTP Response", "text/plain", formatResponse(resp));
+                Exception resolved = result.getResolvedException();
+                if (resolved != null) {
+                    // при ошибке контроллера — причина в отчёт (иначе виден «→ 500» без объяснения)
+                    Allure.addAttachment("HTTP Exception", "text/plain", stackTrace(resolved));
+                }
+            });
+        } catch (Throwable t) {
+            AllureInstrumentationLogger.warn("MockMvc", t);
+        }
     }
 
     private static String stackTrace(Throwable ex) {
@@ -54,7 +63,11 @@ public class AllureMockMvcResultHandler implements ResultHandler {
         var headerNames = req.getHeaderNames();
         while (headerNames.hasMoreElements()) {
             String name = headerNames.nextElement();
-            sb.append(name).append(": ").append(req.getHeader(name)).append('\n');
+            // все значения мультизначного заголовка (Cookie/Accept и т.п.), не только первое
+            var values = req.getHeaders(name);
+            while (values.hasMoreElements()) {
+                sb.append(name).append(": ").append(values.nextElement()).append('\n');
+            }
         }
 
         String body = bodyOf(req);
@@ -69,7 +82,10 @@ public class AllureMockMvcResultHandler implements ResultHandler {
         sb.append(resp.getStatus()).append('\n');
 
         for (String name : resp.getHeaderNames()) {
-            sb.append(name).append(": ").append(resp.getHeader(name)).append('\n');
+            // все значения (напр. несколько Set-Cookie), а не только первое
+            for (String value : resp.getHeaders(name)) {
+                sb.append(name).append(": ").append(value).append('\n');
+            }
         }
 
         String body = bodyOf(resp);

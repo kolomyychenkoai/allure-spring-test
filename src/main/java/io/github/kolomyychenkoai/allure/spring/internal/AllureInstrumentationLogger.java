@@ -8,7 +8,9 @@ import java.util.logging.Logger;
  * Используется java.util.logging, а НЕ SLF4J: advice-классы инлайнятся в чужой байткод,
  * где ссылка на SLF4J недоступна из-за ограничений загрузки классов.
  * <p>
- * Чтобы увидеть отладку инструментирования: {@code logger().setLevel(Level.FINE)}.
+ * Сбой инструментирования логируется на {@link Level#WARNING} — он виден по умолчанию
+ * (JUL печатает WARNING в stderr), но тест НЕ роняет. Подробную трассу при отладке можно
+ * включить через {@code logger().setLevel(Level.FINE)}.
  */
 public final class AllureInstrumentationLogger {
 
@@ -17,11 +19,18 @@ public final class AllureInstrumentationLogger {
     private AllureInstrumentationLogger() {
     }
 
+    /** Корневой JUL-логгер библиотеки — для тонкой настройки уровня/handler'ов. */
     public static Logger logger() {
         return LOGGER;
     }
 
+    /**
+     * Залогировать сбой инструментирования компонента {@code component} на
+     * {@link Level#WARNING}: виден по умолчанию, но тест не роняет. Сообщение строится
+     * лениво (supplier), сам {@code t} прикладывается — стек печатается даже если
+     * {@code getMessage()} == {@code null}.
+     */
     public static void warn(String component, Throwable t) {
-        LOGGER.log(Level.FINE, "[Allure " + component + "] " + t.getMessage(), t);
+        LOGGER.log(Level.WARNING, t, () -> "[Allure " + component + "] сбой инструментирования (тест не затронут)");
     }
 }

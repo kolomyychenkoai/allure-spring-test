@@ -21,4 +21,10 @@ public class Widget extends BaseEntity {
     public void setName(String name) {
         this.name = name;
     }
+
+    @Override
+    public String toString() {
+        // порядок полей как в аспекте (describeEntity: поля класса, затем суперкласса)
+        return "Widget{name=" + name + ", id=" + getId() + "}";
+    }
 }

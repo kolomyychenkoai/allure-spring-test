@@ -76,4 +76,27 @@ class AllureKafkaConsumerTest {
 
         assertThat(allure.attachment(result, "Принятые сообщения")).isEmpty();
     }
+
+    @Test
+    @DisplayName("null records: шаг не создаётся, не бросает")
+    void nullRecordsNoStep() {
+        TestResult result = allure.run("null", () ->
+                AllureKafkaConsumerInstrumentation.onPoll(null));
+
+        assertThat(allure.attachment(result, "Принятые сообщения")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("без активного тест-кейса poll НИЧЕГО не пишет в отчёт")
+    void noStepWithoutActiveCase() {
+        // setUp установил InMemoryAllure, но allure.run не вызывали → активного кейса нет
+        TopicPartition tp = new TopicPartition("order-events", 0);
+        ConsumerRecords<String, String> records = new ConsumerRecords<>(Map.of(tp,
+                List.of(new ConsumerRecord<>("order-events", 0, 5L, "k", "v"))));
+
+        AllureKafkaConsumerInstrumentation.onPoll(records);
+
+        // убери гейт активного кейса → Allure.step/addAttachment запишут байты вложения → покраснеет
+        assertThat(allure.wroteNothing()).isTrue();
+    }
 }

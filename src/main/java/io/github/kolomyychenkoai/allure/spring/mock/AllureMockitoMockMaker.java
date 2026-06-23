@@ -11,11 +11,12 @@ import java.util.Optional;
  * Кастомный Mockito {@link MockMaker}: оборачивает дефолтный inline-maker и подменяет
  * {@link MockHandler} на {@link AllureMockitoHandler}, который логирует взаимодействия с
  * моками в Allure. Активируется через SPI-файл
- * {@code META-INF/mockito-extensions/org.mockito.plugins.MockMaker} — код в тестах не нужен.
+ * {@code mockito-extensions/org.mockito.plugins.MockMaker} в корне test-classpath —
+ * код в тестах не нужен (opt-in, см. README).
  * <p>
  * ВНИМАНИЕ (радиус): SPI-файл делает этот maker глобальным для ВСЕХ моков в JVM
  * потребителя. Поведение моков не меняется (делегируем всё дефолтному maker'у),
- * добавляется только логирование.
+ * добавляется только логирование (выключается {@code allure.spring.mock.enabled=false}).
  */
 public class AllureMockitoMockMaker implements MockMaker {
 

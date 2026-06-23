@@ -1,9 +1,8 @@
 package io.github.kolomyychenkoai.allure.spring.assertion;
 
+import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
-import io.qameta.allure.Allure;
-import io.qameta.allure.model.Status;
 import net.bytebuddy.asm.Advice;
 
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -13,34 +12,47 @@ import static net.bytebuddy.matcher.ElementMatchers.takesArguments;
 
 /**
  * ByteBuddy-инструментирование Spring-ассертов ({@code org.springframework.test.util.AssertionErrors}):
- * каждый assertEquals/assertNotEquals/assertTrue/assertFalse/assertNull/assertNotNull/fail
- * даёт в Allure-отчёте шаг «Assert: …» — БЕЗ кода в тестах. Шаг создаётся и при УСПЕХЕ
- * (Status.PASSED), и при ПАДЕНИИ ассерта (Status.FAILED) — чтобы упавшая проверка была
- * видна в отчёте. Advice инлайнится в байткод AssertionErrors, поэтому ссылается только
- * на Allure + j.u.l-логгер. Ставится один раз на JVM — см. {@link AllureAssertionsListener}.
+ * каждый assertEquals/assertNotEquals/assertTrue/assertFalse/assertNull/assertNotNull даёт
+ * в Allure-отчёте шаг «Проверка: …» — БЕЗ кода в тестах. Шаг пишется ТОЛЬКО для УСПЕШНОЙ
+ * проверки; упавшая проверка шага не создаёт — её падение Allure показывает из коробки на
+ * уровне теста (исключение пробрасывается).
+ * <p>
+ * <b>Граф делегации Spring (важно для дедупа УСПЕШНОГО пути).</b> Внутри {@code AssertionErrors}
+ * {@code assertNull}/{@code assertNotNull} → {@code assertTrue}: один пользовательский ассерт
+ * проходит через несколько инструментированных методов. Чтобы НЕ задвоить шаг, считаем
+ * глубину вложенности (как в AssertJ): шаг пишет только ВНЕШНИЙ (пользовательский) вызов.
+ * На пути ПАДЕНИЯ ({@code fail}, и т.п.) шага нет в любом случае, поэтому {@code fail} не
+ * инструментируем.
+ * <p>
+ * Advice инлайнится в байткод AssertionErrors, поэтому ссылается только на хелперы
+ * {@code internal} + j.u.l-логгер. Ставится один раз на JVM — см. {@link AllureAssertionsListener}.
  */
 public final class AllureSpringAssertionsInstrumentation {
 
     private static final AtomicBoolean INSTALLED = new AtomicBoolean(false);
 
-    // Spring assertFalse/assertNull/assertNotNull внутри зовут assertTrue — чтобы не было
-    // двойного шага, на время делегирующего ассерта помечаем поток и внутренний assertTrue молчит.
-    private static final ThreadLocal<Boolean> DELEGATING = ThreadLocal.withInitial(() -> Boolean.FALSE);
+    // Глубина вложенности инструментированных вызовов в текущем потоке. Внешний
+    // (пользовательский) вызов — глубина 1; внутренние делегаты (assertTrue, fail) — глубже.
+    private static final ThreadLocal<Integer> DEPTH = ThreadLocal.withInitial(() -> 0);
 
     private AllureSpringAssertionsInstrumentation() {
     }
 
-    public static boolean delegating() {
-        return DELEGATING.get();
+    /** Вход в инструментированный метод; {@code true} — это ВНЕШНИЙ (пользовательский) вызов. Только для inline-advice. */
+    public static boolean enter() {
+        int depth = DEPTH.get() + 1;
+        DEPTH.set(depth);
+        return depth == 1;
     }
 
-    public static void delegating(boolean value) {
-        DELEGATING.set(value);
-    }
-
-    /** Шаг с автоматическим статусом по факту падения. */
-    public static void step(String name, Throwable thrown) {
-        Allure.step(name, thrown == null ? Status.PASSED : Status.FAILED);
+    /** Выход из инструментированного метода (всегда парен {@link #enter()}). Только для inline-advice. */
+    public static void exit() {
+        int depth = DEPTH.get() - 1;
+        if (depth <= 0) {
+            DEPTH.remove(); // вернулись к нулю — не держим boxed 0 в пуле потоков surefire
+        } else {
+            DEPTH.set(depth);
+        }
     }
 
     public static void install() {
@@ -61,21 +73,29 @@ public final class AllureSpringAssertionsInstrumentation {
                         .visit(Advice.to(AssertNullAdvice.class)
                                 .on(named("assertNull").and(takesArguments(2))))
                         .visit(Advice.to(AssertNotNullAdvice.class)
-                                .on(named("assertNotNull").and(takesArguments(2))))
-                        .visit(Advice.to(FailAdvice.class)
-                                .on(named("fail").and(takesArguments(1)))));
+                                .on(named("assertNotNull").and(takesArguments(2)))));
     }
 
     public static class AssertEqualsAdvice {
+        @Advice.OnMethodEnter
+        public static boolean onEnter() {
+            return enter();
+        }
+
         @Advice.OnMethodExit(suppress = Throwable.class, onThrowable = Throwable.class)
-        public static void onExit(@Advice.Argument(0) String message,
+        public static void onExit(@Advice.Enter boolean outermost,
+                                  @Advice.Argument(0) String message,
                                   @Advice.Argument(1) Object expected,
                                   @Advice.Argument(2) Object actual,
                                   @Advice.Thrown Throwable thrown) {
             try {
-                step("Проверка: " + message + (thrown == null
-                        ? " — ожидалось " + expected + " = " + actual
-                        : " — ожидалось " + expected + ", получено " + actual), thrown);
+                exit();
+                if (!outermost) {
+                    return;
+                }
+                AllureAdviceSupport.step("Проверка: " + message + (thrown == null
+                        ? " — ожидалось " + AllureAdviceSupport.safe(expected) + " = " + AllureAdviceSupport.safe(actual)
+                        : " — ожидалось " + AllureAdviceSupport.safe(expected) + ", получено " + AllureAdviceSupport.safe(actual)), thrown);
             } catch (Throwable t) {
                 AllureInstrumentationLogger.warn("SpringAssertEquals", t);
             }
@@ -83,15 +103,25 @@ public final class AllureSpringAssertionsInstrumentation {
     }
 
     public static class AssertNotEqualsAdvice {
+        @Advice.OnMethodEnter
+        public static boolean onEnter() {
+            return enter();
+        }
+
         @Advice.OnMethodExit(suppress = Throwable.class, onThrowable = Throwable.class)
-        public static void onExit(@Advice.Argument(0) String message,
+        public static void onExit(@Advice.Enter boolean outermost,
+                                  @Advice.Argument(0) String message,
                                   @Advice.Argument(1) Object unexpected,
                                   @Advice.Argument(2) Object actual,
                                   @Advice.Thrown Throwable thrown) {
             try {
-                step("Проверка: " + message + (thrown == null
-                        ? " — " + unexpected + " ≠ " + actual
-                        : " — значения равны: " + actual), thrown);
+                exit();
+                if (!outermost) {
+                    return;
+                }
+                AllureAdviceSupport.step("Проверка: " + message + (thrown == null
+                        ? " — " + AllureAdviceSupport.safe(unexpected) + " ≠ " + AllureAdviceSupport.safe(actual)
+                        : " — значения равны: " + AllureAdviceSupport.safe(actual)), thrown);
             } catch (Throwable t) {
                 AllureInstrumentationLogger.warn("SpringAssertNotEquals", t);
             }
@@ -99,14 +129,21 @@ public final class AllureSpringAssertionsInstrumentation {
     }
 
     public static class AssertTrueAdvice {
+        @Advice.OnMethodEnter
+        public static boolean onEnter() {
+            return enter();
+        }
+
         @Advice.OnMethodExit(suppress = Throwable.class, onThrowable = Throwable.class)
-        public static void onExit(@Advice.Argument(0) String message, @Advice.Thrown Throwable thrown) {
+        public static void onExit(@Advice.Enter boolean outermost,
+                                  @Advice.Argument(0) String message,
+                                  @Advice.Thrown Throwable thrown) {
             try {
-                // внутренний вызов из assertFalse/assertNull/assertNotNull — пропускаем (не дублируем)
-                if (delegating()) {
-                    return;
+                exit();
+                if (!outermost) {
+                    return; // внутренний делегат (из assertNull/assertNotNull) — не дублируем
                 }
-                step("Проверка: " + message + (thrown == null ? " — верно" : " — неверно"), thrown);
+                AllureAdviceSupport.step("Проверка: " + message + (thrown == null ? " — верно" : " — неверно"), thrown);
             } catch (Throwable t) {
                 AllureInstrumentationLogger.warn("SpringAssertTrue", t);
             }
@@ -114,16 +151,21 @@ public final class AllureSpringAssertionsInstrumentation {
     }
 
     public static class AssertFalseAdvice {
-        @Advice.OnMethodEnter(suppress = Throwable.class)
-        public static void onEnter() {
-            delegating(true);
+        @Advice.OnMethodEnter
+        public static boolean onEnter() {
+            return enter();
         }
 
         @Advice.OnMethodExit(suppress = Throwable.class, onThrowable = Throwable.class)
-        public static void onExit(@Advice.Argument(0) String message, @Advice.Thrown Throwable thrown) {
+        public static void onExit(@Advice.Enter boolean outermost,
+                                  @Advice.Argument(0) String message,
+                                  @Advice.Thrown Throwable thrown) {
             try {
-                delegating(false);
-                step("Проверка: " + message + (thrown == null ? " — неверно" : " — верно"), thrown);
+                exit();
+                if (!outermost) {
+                    return;
+                }
+                AllureAdviceSupport.step("Проверка: " + message + (thrown == null ? " — неверно" : " — верно"), thrown);
             } catch (Throwable t) {
                 AllureInstrumentationLogger.warn("SpringAssertFalse", t);
             }
@@ -131,20 +173,24 @@ public final class AllureSpringAssertionsInstrumentation {
     }
 
     public static class AssertNullAdvice {
-        @Advice.OnMethodEnter(suppress = Throwable.class)
-        public static void onEnter() {
-            delegating(true);
+        @Advice.OnMethodEnter
+        public static boolean onEnter() {
+            return enter();
         }
 
         @Advice.OnMethodExit(suppress = Throwable.class, onThrowable = Throwable.class)
-        public static void onExit(@Advice.Argument(0) String message,
+        public static void onExit(@Advice.Enter boolean outermost,
+                                  @Advice.Argument(0) String message,
                                   @Advice.Argument(1) Object actual,
                                   @Advice.Thrown Throwable thrown) {
             try {
-                delegating(false);
-                step("Проверка: " + message + (thrown == null
+                exit();
+                if (!outermost) {
+                    return;
+                }
+                AllureAdviceSupport.step("Проверка: " + message + (thrown == null
                         ? " — значение null"
-                        : " — значение " + actual + ", не null"), thrown);
+                        : " — значение " + AllureAdviceSupport.safe(actual) + ", не null"), thrown);
             } catch (Throwable t) {
                 AllureInstrumentationLogger.warn("SpringAssertNull", t);
             }
@@ -152,33 +198,26 @@ public final class AllureSpringAssertionsInstrumentation {
     }
 
     public static class AssertNotNullAdvice {
-        @Advice.OnMethodEnter(suppress = Throwable.class)
-        public static void onEnter() {
-            delegating(true);
+        @Advice.OnMethodEnter
+        public static boolean onEnter() {
+            return enter();
         }
 
         @Advice.OnMethodExit(suppress = Throwable.class, onThrowable = Throwable.class)
-        public static void onExit(@Advice.Argument(0) String message,
+        public static void onExit(@Advice.Enter boolean outermost,
+                                  @Advice.Argument(0) String message,
                                   @Advice.Argument(1) Object actual,
                                   @Advice.Thrown Throwable thrown) {
             try {
-                delegating(false);
-                step("Проверка: " + message + (thrown == null
-                        ? " — значение " + actual + " не null"
+                exit();
+                if (!outermost) {
+                    return;
+                }
+                AllureAdviceSupport.step("Проверка: " + message + (thrown == null
+                        ? " — значение " + AllureAdviceSupport.safe(actual) + " не null"
                         : " — значение null"), thrown);
             } catch (Throwable t) {
                 AllureInstrumentationLogger.warn("SpringAssertNotNull", t);
-            }
-        }
-    }
-
-    public static class FailAdvice {
-        @Advice.OnMethodEnter(suppress = Throwable.class)
-        public static void onEnter(@Advice.Argument(0) String message) {
-            try {
-                Allure.step("Проверка провалена: " + message, Status.FAILED);
-            } catch (Throwable t) {
-                AllureInstrumentationLogger.warn("SpringFail", t);
             }
         }
     }

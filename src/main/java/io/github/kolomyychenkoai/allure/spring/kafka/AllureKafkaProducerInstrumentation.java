@@ -1,5 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.kafka;
 
+import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import io.qameta.allure.Allure;
@@ -16,7 +17,10 @@ import static net.bytebuddy.matcher.ElementMatchers.takesArguments;
  * ByteBuddy-инструментирование Kafka producer: при {@code KafkaProducer.send(record, callback)}
  * в отчёт пишется шаг «Kafka: отправлено → topic [key]» с вложением «Отправленное сообщение».
  * Матчим именно 2-арг send (1-арг send внутри делегирует в него) — без двойного шага.
- * Логирование — при активном тест-кейсе, всё в try/catch. Ставится один раз на JVM.
+ * Шаг пишется ТОЛЬКО для успешной отправки; если send бросил синхронно (сериализация,
+ * буфер) — шага нет, падение Allure показывает из коробки на уровне теста. Логирование —
+ * при активном тест-кейсе, всё в try/catch.
+ * Установка идемпотентна (CAS-гард {@code INSTALLED}, потокобезопасно) — один раз на JVM.
  */
 public final class AllureKafkaProducerInstrumentation {
 
@@ -35,18 +39,24 @@ public final class AllureKafkaProducerInstrumentation {
                         .on(named("send").and(takesArgument(0, ProducerRecord.class)).and(takesArguments(2)))));
     }
 
-    /** Логика логирования (вынесена из advice, чтобы тестировать без брокера). */
+    /** Успешная отправка (для тестов/совместимости). */
     public static void onSend(ProducerRecord<?, ?> record) {
+        onSend(record, null);
+    }
+
+    /** Логика логирования (вынесена из advice, чтобы тестировать без брокера). */
+    public static void onSend(ProducerRecord<?, ?> record, Throwable thrown) {
         try {
-            if (record == null || !Allure.getLifecycle().getCurrentTestCase().isPresent()) {
+            // упавший send не логируем — падение покажет Allure (тест падает); шаг только для успешной отправки
+            if (thrown != null || record == null || !Allure.getLifecycle().getCurrentTestCase().isPresent()) {
                 return;
             }
             String stepName = "Kafka: отправлено → " + record.topic()
-                    + (record.key() != null ? " [" + record.key() + "]" : "");
+                    + (record.key() != null ? " [" + AllureAdviceSupport.safe(record.key()) + "]" : "");
             StringBuilder sb = new StringBuilder()
                     .append("Topic: ").append(record.topic())
-                    .append("\nKey: ").append(record.key())
-                    .append("\nValue: ").append(record.value());
+                    .append("\nKey: ").append(AllureAdviceSupport.safe(record.key()))
+                    .append("\nValue: ").append(AllureAdviceSupport.safe(record.value()));
             if (record.partition() != null) {
                 sb.append("\nPartition: ").append(record.partition());
             }
@@ -60,9 +70,10 @@ public final class AllureKafkaProducerInstrumentation {
     }
 
     public static class SendAdvice {
-        @Advice.OnMethodEnter(suppress = Throwable.class)
-        public static void onEnter(@Advice.Argument(0) ProducerRecord<?, ?> record) {
-            onSend(record);
+        @Advice.OnMethodExit(suppress = Throwable.class, onThrowable = Throwable.class)
+        public static void onExit(@Advice.Argument(0) ProducerRecord<?, ?> record,
+                                  @Advice.Thrown Throwable thrown) {
+            onSend(record, thrown);
         }
     }
 }

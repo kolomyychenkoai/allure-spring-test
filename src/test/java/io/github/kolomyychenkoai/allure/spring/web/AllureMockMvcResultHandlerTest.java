@@ -102,4 +102,25 @@ class AllureMockMvcResultHandlerTest {
         assertThat(allure.attachment(result, "HTTP Exception").orElseThrow())
                 .contains("boom for test");
     }
+
+    @Test
+    @DisplayName("мультизначный заголовок запроса: показаны ВСЕ значения, не только первое")
+    void includesAllHeaderValues() {
+        TestResult result = perform("mockmvc-multiheader",
+                get("/api/hello/{name}", "world").header("X-Multi", "a").header("X-Multi", "b"));
+
+        assertThat(allure.attachment(result, "HTTP Request").orElseThrow())
+                .contains("X-Multi: a")
+                .contains("X-Multi: b");
+    }
+
+    @Test
+    @DisplayName("без активного тест-кейса обработчик НИЧЕГО не пишет в отчёт")
+    void noStepWithoutActiveCase() throws Exception {
+        // perform идёт мимо allure.run → handle отработает без активного кейса
+        mockMvc.perform(get("/api/hello/{name}", "world"));
+
+        // убери гейт активного кейса → Allure.step/addAttachment запишут байты вложения → покраснеет
+        assertThat(allure.wroteNothing()).isTrue();
+    }
 }

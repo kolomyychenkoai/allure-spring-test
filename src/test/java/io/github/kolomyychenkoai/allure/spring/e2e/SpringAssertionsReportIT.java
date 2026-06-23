@@ -10,7 +10,7 @@ import org.springframework.test.util.AssertionErrors;
 
 /**
  * Уровень B: «живой» прогон. В тесте обычные Spring-ассерты (AssertionErrors),
- * НИКАКОГО Allure.step — шаги «Assert: …» появляются сами через байткод-инструментирование
+ * НИКАКОГО Allure.step — шаги «Проверка: …» появляются сами через байткод-инструментирование
  * (AllureAssertionsListener из spring.factories). Смотреть: {@code mvn allure:serve}.
  */
 @SpringBootTest(classes = TestApp.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)

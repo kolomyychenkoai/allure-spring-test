@@ -1,5 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.data;
 
+import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 import io.qameta.allure.Allure;
 import io.qameta.allure.model.Status;
 import io.qameta.allure.model.StepResult;
@@ -32,6 +33,11 @@ import java.util.stream.Collectors;
  * Гейтинг — по активному Allure тест-кейсу (а НЕ по хардкоду пакетов): логируем все
  * обращения к БД, пока идёт тест (в т.ч. сквозь прод-код), и молчим во время старта
  * контекста. Так модуль не привязан к структуре пакетов потребителя.
+ * <p>
+ * Pointcut ловит ВСЕ методы любого {@code Repository+} (Crud/Jpa/PagingAndSorting +
+ * derived-методы). Ограничение: REACTIVE-репозитории (Spring Data R2DBC,
+ * {@code ReactiveCrudRepository}) НЕ охвачены — нужен отдельный аспект; модуль рассчитан
+ * на синхронный (JPA) стек.
  */
 @Aspect
 public class AllureRepositoryAspect {
@@ -58,10 +64,9 @@ public class AllureRepositoryAspect {
             finish(started, uuid, call.callText(), formatResponse(result), Status.PASSED);
             return result;
         } catch (Throwable error) {
-            // при падении шаг тоже заполняем — видно, ЧТО ушло в БД (диагностируемость)
-            finish(started, uuid, call.callText(),
-                    "<exception: " + error.getClass().getSimpleName() + ": " + error.getMessage() + ">",
-                    Status.BROKEN);
+            // помечаем шаг BROKEN (родная семантика Allure для ошибки), но текст исключения
+            // НЕ дублируем — его покажет Allure на уровне теста. «DB Call» (что ушло в БД) остаётся.
+            finish(started, uuid, call.callText(), null, Status.BROKEN);
             throw error;
         } finally {
             stopQuietly(started, uuid);
@@ -98,7 +103,9 @@ public class AllureRepositoryAspect {
         try {
             // вложения и статус — на ТЕКУЩИЙ (наш) шаг; SQL уже вложился сюда же во время proceed
             Allure.addAttachment("DB Call", "text/plain", callText);
-            Allure.addAttachment("DB Result", "text/plain", resultText);
+            if (resultText != null) { // при ошибке resultText == null — «DB Result» не пишем
+                Allure.addAttachment("DB Result", "text/plain", resultText);
+            }
             Allure.getLifecycle().updateStep(uuid, s -> s.setStatus(status));
         } catch (Throwable ignored) {
             // инструментирование не должно ронять тест
@@ -116,9 +123,18 @@ public class AllureRepositoryAspect {
     }
 
     private static String repositoryName(ProceedingJoinPoint pjp) {
-        Class<?>[] ifaces = pjp.getTarget().getClass().getInterfaces();
-        return ifaces.length > 0 ? ifaces[0].getSimpleName()
-                : pjp.getTarget().getClass().getSimpleName();
+        Class<?> target = pjp.getTarget().getClass();
+        // первый прикладной интерфейс (порядок getInterfaces() не гарантирован, первым может
+        // оказаться служебный org.springframework.aop.SpringProxy/Advised) — это репозиторий потребителя.
+        // spring-data не в compile-classpath (pointcut — строкой), поэтому фильтруем по имени пакета.
+        for (Class<?> iface : target.getInterfaces()) {
+            String name = iface.getName();
+            if (!name.startsWith("org.springframework.") && !name.startsWith("java.")) {
+                return iface.getSimpleName();
+            }
+        }
+        Class<?>[] ifaces = target.getInterfaces();
+        return ifaces.length > 0 ? ifaces[0].getSimpleName() : target.getSimpleName();
     }
 
     private String formatRequest(String repoName, String methodName, Object[] args) {
@@ -141,8 +157,10 @@ public class AllureRepositoryAspect {
             return opt.map(this::describe).orElse("Optional.empty");
         }
         if (result instanceof Collection<?> col) {
-            return "Collection size: " + col.size() + "\n\n"
-                    + col.stream().map(this::describe).collect(Collectors.joining("\n"));
+            int cap = 20; // не раздуваем отчёт на больших выборках
+            String items = col.stream().limit(cap).map(this::describe).collect(Collectors.joining("\n"));
+            String more = col.size() > cap ? "\n… и ещё " + (col.size() - cap) : "";
+            return "Collection size: " + col.size() + "\n\n" + items + more;
         }
         return describe(result);
     }
@@ -159,7 +177,7 @@ public class AllureRepositoryAspect {
         if (clazz.isAnnotationPresent(jakarta.persistence.Entity.class)) {
             return describeEntity(obj, clazz);
         }
-        return obj.toString();
+        return AllureAdviceSupport.safe(obj); // безопасный рендер: toString может бросить + лимит длины
     }
 
     private String describeEntity(Object obj, Class<?> clazz) {
@@ -187,7 +205,7 @@ public class AllureRepositoryAspect {
         StringJoiner sj = new StringJoiner(", ", clazz.getSimpleName() + "{", "}");
         for (Field field : fields) {
             try {
-                sj.add(field.getName() + "=" + field.get(obj));
+                sj.add(field.getName() + "=" + AllureAdviceSupport.safe(field.get(obj)));
             } catch (Throwable e) {
                 // напр. LazyInitializationException по ленивой связи — не теряем остальные поля
                 sj.add(field.getName() + "=?");

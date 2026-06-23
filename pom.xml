@@ -235,6 +235,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
                 <configuration>
                     <!-- сохранять имена параметров: нужно Spring MVC (@PathVariable/@RequestParam) -->
                     <parameters>true</parameters>
@@ -244,6 +245,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.5.4</version>
                 <configuration>
                     <!-- помимо *Test гоняем и *IT (живой отчёт ReportSmokeIT) в обычном test-phase -->
                     <includes>
@@ -268,10 +270,25 @@
                 </configuration>
             </plugin>
 
+            <!-- Имя модуля JPMS фиксируем заранее (до module-info): стабильно для потребителей -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.4.1</version>
+                <configuration>
+                    <archive>
+                        <manifestEntries>
+                            <Automatic-Module-Name>io.github.kolomyychenkoai.allure.spring</Automatic-Module-Name>
+                        </manifestEntries>
+                    </archive>
+                </configuration>
+            </plugin>
+
             <!-- Готовим артефакты к Maven Central (подпись gpg и публикацию настроим позже) -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-source-plugin</artifactId>
+                <version>3.3.1</version>
                 <executions>
                     <execution>
                         <id>attach-sources</id>
@@ -283,6 +300,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-javadoc-plugin</artifactId>
+                <version>3.11.2</version>
                 <configuration>
                     <doclint>none</doclint>
                     <failOnError>false</failOnError>

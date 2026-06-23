@@ -1,19 +1,15 @@
 package io.github.kolomyychenkoai.allure.spring.mock;
 
+import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
+import io.github.kolomyychenkoai.allure.spring.internal.AllureSpringSettings;
 import io.qameta.allure.Allure;
-import io.qameta.allure.AllureLifecycle;
-import io.qameta.allure.model.Status;
-import io.qameta.allure.model.StepResult;
-import org.mockito.internal.progress.ThreadSafeMockingProgress;
 import org.mockito.invocation.Invocation;
 import org.mockito.invocation.InvocationContainer;
 import org.mockito.invocation.MockHandler;
 import org.mockito.mock.MockCreationSettings;
 
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.util.UUID;
 
 /**
  * Обёртка над Mockito {@link MockHandler}: логирует взаимодействия с моками в Allure
@@ -23,12 +19,24 @@ import java.util.UUID;
  * Логируем только при активном Allure тест-кейсе; всё в try/catch.
  * <p>
  * Различение «заглушка vs вызов» — best-effort по стеку (прямой вызов из теста =
- * настройка заглушки, через прод-класс = вызов); завязано на суффиксы Test/Tests/IT.
- * «Проверка» определяется надёжно по состоянию Mockito; кратность (ожидали ×N) —
- * best-effort из режима verify. Настроенное возвращаемое значение у заглушки в момент
- * {@code when(...)} ещё не задано (thenReturn идёт после), поэтому показывается у вызова.
+ * настройка заглушки, через прод-класс = вызов); завязано на суффиксы имён тест-классов
+ * {@link #TEST_CLASS_SUFFIXES}. «Проверка» определяется надёжно по состоянию Mockito;
+ * кратность (ожидали ×N) — best-effort из режима verify, для {@code atLeast/atMost}
+ * показывается как точное число (без «≥/≤»). Настроенное возвращаемое значение у заглушки
+ * в момент {@code when(...)} ещё не задано (thenReturn идёт после), поэтому показывается у вызова.
+ * <p>
+ * Выключается system property {@code allure.spring.mock.enabled=false} (фича глобальна на JVM).
+ * <b>Хрупкость:</b> определение verify/кратности завязано на внутренние поля Mockito 5.x
+ * ({@code ThreadSafeMockingProgress.verificationMode}, {@code Times.wantedCount}); при апгрейде
+ * Mockito проверить. Деградация мягкая: при смене внутренностей кратность/детект тихо
+ * отключаются (шаг без ×N), тест не падает.
  */
 public class AllureMockitoHandler<T> implements MockHandler<T> {
+
+    private static final boolean ENABLED = AllureSpringSettings.enabled(AllureSpringSettings.MOCK_ENABLED);
+
+    // Суффиксы имён тест-классов: прямой вызов мока из такого класса = настройка заглушки, не прод-вызов.
+    private static final String[] TEST_CLASS_SUFFIXES = {"Test", "Tests", "IT"};
 
     private final MockHandler<T> delegate;
 
@@ -38,28 +46,18 @@ public class AllureMockitoHandler<T> implements MockHandler<T> {
 
     @Override
     public Object handle(Invocation invocation) throws Throwable {
+        if (!ENABLED) {
+            return delegate.handle(invocation); // фича выключена — прозрачное делегирование
+        }
         boolean objectMethod = isObjectMethod(invocation.getMethod());
-        Object verificationMode = objectMethod ? null : verificationMode();
+        Object verificationMode = objectMethod ? null : MockitoInternals.verificationMode();
         boolean verify = verificationMode != null;
         boolean productionCall = !objectMethod && !verify
                 && isCalledFromProductionCode(invocation.getMock().getClass());
 
-        Object result;
-        try {
-            result = delegate.handle(invocation);
-        } catch (Throwable failure) {
-            // Провал verify бросается ИЗНУТРИ delegate.handle — покажем FAILED-шаг и пробросим.
-            if (verify) {
-                try {
-                    if (active()) {
-                        emitFailedVerify(invocation, verificationMode, failure);
-                    }
-                } catch (Throwable t) {
-                    AllureInstrumentationLogger.warn("Mockito", t);
-                }
-            }
-            throw failure;
-        }
+        // Провал verify/вызова бросается ИЗНУТРИ delegate.handle и пробрасывается наверх —
+        // тест падает, Allure показывает причину сам; фабриковать FAILED-шаг не нужно.
+        Object result = delegate.handle(invocation);
 
         try {
             if (!objectMethod && active()) {
@@ -80,13 +78,13 @@ public class AllureMockitoHandler<T> implements MockHandler<T> {
         String signature = render(invocation);
         final String call = details(invocation);
         if (verify) {
-            String count = wantedCount(verificationMode);
+            String count = MockitoInternals.wantedCount(verificationMode);
             Allure.step("Мок-проверка: " + signature + (count != null ? " (ожидали " + count + ")" : ""),
                     step -> {
                         Allure.addAttachment("Mock Call", "text/plain", call);
                     });
         } else if (productionCall) {
-            final String res = String.valueOf(result);
+            final String res = AllureAdviceSupport.safe(result);
             Allure.step("Мок-вызов: " + signature + " → " + res, step -> {
                 Allure.addAttachment("Mock Call", "text/plain", call);
                 Allure.addAttachment("Mock Result", "text/plain", res);
@@ -95,35 +93,6 @@ public class AllureMockitoHandler<T> implements MockHandler<T> {
             Allure.step("Мок-заглушка: " + signature, step -> {
                 Allure.addAttachment("Mock Call", "text/plain", call);
             });
-        }
-    }
-
-    /** Проваленный verify: FAILED-шаг с вложениями «Mock Call» и «Mock Verify» (текст ошибки Mockito). */
-    private void emitFailedVerify(Invocation invocation, Object verificationMode, Throwable failure) {
-        String signature = render(invocation);
-        String count = wantedCount(verificationMode);
-        AllureLifecycle lifecycle = Allure.getLifecycle();
-        String stepId = UUID.randomUUID().toString();
-        boolean started = false;
-        try {
-            lifecycle.startStep(stepId, new StepResult()
-                    .setName("Мок-проверка не прошла: " + signature
-                            + (count != null ? " (ожидали " + count + ")" : ""))
-                    .setStatus(Status.FAILED));
-            started = true;
-            Allure.addAttachment("Mock Call", "text/plain", details(invocation));
-            String message = failure.getMessage();
-            if (message != null) {
-                Allure.addAttachment("Mock Verify", "text/plain", message);
-            }
-        } finally {
-            if (started) {
-                try {
-                    lifecycle.stopStep(stepId);
-                } catch (Throwable ignored) {
-                    // шаг гарантированно закрываем
-                }
-            }
         }
     }
 
@@ -142,7 +111,7 @@ public class AllureMockitoHandler<T> implements MockHandler<T> {
             if (i > 0) {
                 sb.append(", ");
             }
-            sb.append(String.valueOf(args[i]));
+            sb.append(AllureAdviceSupport.safe(args[i]));
         }
         return sb.toString();
     }
@@ -155,7 +124,7 @@ public class AllureMockitoHandler<T> implements MockHandler<T> {
         if (args != null && args.length > 0) {
             sb.append("\nArguments:");
             for (int i = 0; i < args.length; i++) {
-                sb.append("\n  [").append(i).append("]: ").append(String.valueOf(args[i]));
+                sb.append("\n  [").append(i).append("]: ").append(AllureAdviceSupport.safe(args[i]));
             }
         }
         return sb.toString();
@@ -173,55 +142,6 @@ public class AllureMockitoHandler<T> implements MockHandler<T> {
 
     private boolean isObjectMethod(Method method) {
         return method.getDeclaringClass() == Object.class;
-    }
-
-    /** Режим verify (или null) — verify(mock) выставляет verificationMode на MockingProgress. */
-    private Object verificationMode() {
-        try {
-            Object progress = ThreadSafeMockingProgress.mockingProgress();
-            Field field = progress.getClass().getDeclaredField("verificationMode");
-            field.setAccessible(true);
-            return field.get(progress);
-        } catch (Throwable t) {
-            AllureInstrumentationLogger.warn("MockitoVerifyDetection", t);
-            return null;
-        }
-    }
-
-    /**
-     * Ожидаемая кратность из режима verify (best-effort). Режим обёрнут в несколько слоёв:
-     * Localized&lt;VerificationMode&gt; (поле {@code object}) → MockAwareVerificationMode
-     * (поле {@code mode}) → Times/AtLeast… (поле {@code wantedCount}). Разворачиваем слой
-     * за слоем, пока не найдём {@code wantedCount}.
-     */
-    private static String wantedCount(Object verificationMode) {
-        Object mode = verificationMode;
-        for (int depth = 0; mode != null && depth < 5; depth++) {
-            try {
-                Field field = mode.getClass().getDeclaredField("wantedCount");
-                field.setAccessible(true);
-                return "×" + field.getInt(mode);
-            } catch (NoSuchFieldException notHere) {
-                mode = unwrapMode(mode);
-            } catch (Throwable ignored) {
-                return null;
-            }
-        }
-        return null;
-    }
-
-    /** Снять один слой обёртки режима verify: Localized.object или MockAwareVerificationMode.mode. */
-    private static Object unwrapMode(Object wrapper) {
-        for (String fieldName : new String[]{"object", "mode"}) {
-            try {
-                Field field = wrapper.getClass().getDeclaredField(fieldName);
-                field.setAccessible(true);
-                return field.get(wrapper);
-            } catch (Throwable ignored) {
-                // пробуем следующее имя поля
-            }
-        }
-        return null;
     }
 
     /**
@@ -257,8 +177,10 @@ public class AllureMockitoHandler<T> implements MockHandler<T> {
                     || className.contains("ByteBuddy")) {
                 continue;
             }
-            if (className.endsWith("Test") || className.endsWith("Tests") || className.endsWith("IT")) {
-                return false; // прямой вызов из теста — это настройка заглушки
+            for (String suffix : TEST_CLASS_SUFFIXES) {
+                if (className.endsWith(suffix)) {
+                    return false; // прямой вызов из теста — это настройка заглушки
+                }
             }
             return true; // любой другой прикладной код — прод-вызов
         }

@@ -6,13 +6,17 @@ import io.github.kolomyychenkoai.allure.spring.support.jpa.WidgetRepository;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Уровень B: «живой» прогон на H2. Тест пишет обычный код с обычными ассертами —
@@ -24,12 +28,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(classes = JpaTestApp.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @Epic("allure-spring-test")
 @Feature("База данных (JPA)")
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class) // фикс порядка → id в отчёте детерминированы
 class DataJpaReportIT {
 
     @Autowired
     private WidgetRepository widgets;
 
     @Test
+    @Order(1)
     @DisplayName("сохранение и чтение Widget через репозиторий")
     void savesAndReadsWidget() {
         Widget saved = widgets.save(new Widget("gadget"));
@@ -44,6 +50,7 @@ class DataJpaReportIT {
     }
 
     @Test
+    @Order(2)
     @DisplayName("UPDATE и DELETE тоже ловятся как реальный SQL")
     void updateAndDeleteAreLogged() {
         Widget saved = widgets.save(new Widget("old"));
@@ -53,5 +60,15 @@ class DataJpaReportIT {
 
         widgets.deleteById(saved.getId());   // → DELETE
         assertThat(widgets.findById(saved.getId())).isEmpty();
+    }
+
+    @Test
+    @Order(3)
+    @DisplayName("ошибка репозитория видна шагом (BROKEN), исключение проброшено")
+    void repositoryErrorIsVisibleAsBrokenStep() {
+        // findById(null) бросает в Spring Data — аспект покажет BROKEN-шаг (без текста ошибки,
+        // его покажет Allure на уровне теста) и пробросит
+        assertThatThrownBy(() -> widgets.findById(null))
+                .isInstanceOf(RuntimeException.class);
     }
 }

@@ -69,4 +69,47 @@ class AllureApplicationLogsListenerTest {
 
         assertThat(allure.attachment(result, "Application Logs")).isEmpty();
     }
+
+    @Test
+    @DisplayName("без логов во время теста → вложение «No logs captured»")
+    void emptyBufferRendersPlaceholder() {
+        TestContext ctx = TestContexts.withEnvironment(new StandardEnvironment());
+
+        // before и after подряд, без логирования между ними
+        TestResult result = allure.run("empty-logs", () -> {
+            listener.beforeTestMethod(ctx);
+            listener.afterTestMethod(ctx);
+        });
+
+        assertThat(allure.attachment(result, "Application Logs").orElseThrow())
+                .isEqualTo("No logs captured");
+    }
+
+    @Test
+    @DisplayName("аппендер снимается с root-логгера — нет утечки между тестами")
+    void appenderDetachedFromRootNoLeak() {
+        ch.qos.logback.classic.Logger root = (ch.qos.logback.classic.Logger)
+                LoggerFactory.getLogger(ch.qos.logback.classic.Logger.ROOT_LOGGER_NAME);
+        long before = appenderCount(root);
+        TestContext ctx = TestContexts.withEnvironment(new StandardEnvironment());
+
+        allure.run("leak-check", () -> {
+            listener.beforeTestMethod(ctx);
+            log.info("во время теста");
+            listener.afterTestMethod(ctx);
+        });
+
+        // сломай detachAppender — счётчик вырастет, тест покраснеет
+        assertThat(appenderCount(root)).isEqualTo(before);
+    }
+
+    private static long appenderCount(ch.qos.logback.classic.Logger root) {
+        long count = 0;
+        var it = root.iteratorForAppenders();
+        while (it.hasNext()) {
+            it.next();
+            count++;
+        }
+        return count;
+    }
 }

@@ -1,9 +1,8 @@
 package io.github.kolomyychenkoai.allure.spring.assertion;
 
+import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
-import io.qameta.allure.Allure;
-import io.qameta.allure.model.Status;
 import net.bytebuddy.asm.Advice;
 
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -16,11 +15,13 @@ import static net.bytebuddy.matcher.ElementMatchers.takesArguments;
  * каждый assertThat даёт в отчёте шаг «Проверка: …» — без кода в тестах.
  * Патчим только 3-арг {@code assertThat(reason, actual, matcher)}; 2-арг
  * {@code assertThat(actual, matcher)} внутри зовёт его (reason=""), поэтому ловятся оба
- * без двойного шага. Шаг создаётся и при успехе (PASSED), и при падении (FAILED).
+ * без двойного шага. Шаг пишется ТОЛЬКО для успешной проверки; упавшая шага не создаёт —
+ * её падение Allure показывает из коробки на уровне теста.
  * Ставится один раз на JVM — см. {@link AllureAssertionsListener}.
  * <p>
  * Перегрузка {@code assertThat(String, boolean)} (без матчера) намеренно НЕ
- * перехватывается — это не матчер-проверка; покрываются только matcher-формы.
+ * перехватывается — это не matcher-проверка (просто boolean + reason), её аналог в отчёте
+ * дают Spring-ассерты/AssertJ; покрываются только matcher-формы ({@code Matcher}-аргумент).
  */
 public final class AllureHamcrestInstrumentation {
 
@@ -48,8 +49,8 @@ public final class AllureHamcrestInstrumentation {
                                   @Advice.Thrown Throwable thrown) {
             try {
                 String label = (reason != null && !reason.isEmpty()) ? reason + ": " : "";
-                Allure.step("Проверка: " + label + "значение " + actual + ", ожидалось " + matcher,
-                        thrown == null ? Status.PASSED : Status.FAILED);
+                AllureAdviceSupport.step("Проверка: " + label + "значение " + AllureAdviceSupport.safe(actual)
+                        + ", ожидалось " + AllureAdviceSupport.safe(matcher), thrown);
             } catch (Throwable t) {
                 AllureInstrumentationLogger.warn("Hamcrest", t);
             }

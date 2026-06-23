@@ -58,4 +58,52 @@ class AllureKafkaProducerTest {
         assertThat(allure.attachment(result, "Отправленное сообщение").orElseThrow())
                 .contains("Key: null");
     }
+
+    @Test
+    @DisplayName("упавший send (синхронно): шаг НЕ создаётся (падение покажет Allure)")
+    void failedSendProducesNoStep() {
+        ProducerRecord<String, String> record =
+                new ProducerRecord<>("order-events", "k1", "{\"id\":9}");
+
+        TestResult result = allure.run("send-fail", () ->
+                AllureKafkaProducerInstrumentation.onSend(record, new RuntimeException("брокер недоступен")));
+
+        assertThat(result.getSteps().stream()
+                .noneMatch(s -> s.getName().startsWith("Kafka: отправлено"))).isTrue();
+    }
+
+    @Test
+    @DisplayName("партиция записи попадает в тело вложения")
+    void logsPartition() {
+        ProducerRecord<String, String> record =
+                new ProducerRecord<>("order-events", 0, "k1", "{\"id\":1}");
+
+        TestResult result = allure.run("part", () ->
+                AllureKafkaProducerInstrumentation.onSend(record));
+
+        assertThat(allure.attachment(result, "Отправленное сообщение").orElseThrow())
+                .contains("Partition: 0");
+    }
+
+    @Test
+    @DisplayName("null record: шаг не создаётся, не бросает")
+    void nullRecordNoStep() {
+        ProducerRecord<String, String> none = null;
+        TestResult result = allure.run("null", () ->
+                AllureKafkaProducerInstrumentation.onSend(none));
+
+        assertThat(allure.attachment(result, "Отправленное сообщение")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("без активного тест-кейса send НИЧЕГО не пишет в отчёт")
+    void noStepWithoutActiveCase() {
+        // setUp установил InMemoryAllure, но allure.run не вызывали → активного кейса нет
+        ProducerRecord<String, String> record = new ProducerRecord<>("order-events", "k1", "v");
+
+        AllureKafkaProducerInstrumentation.onSend(record);
+
+        // убери гейт активного кейса → Allure.step/addAttachment запишут байты вложения → покраснеет
+        assertThat(allure.wroteNothing()).isTrue();
+    }
 }
