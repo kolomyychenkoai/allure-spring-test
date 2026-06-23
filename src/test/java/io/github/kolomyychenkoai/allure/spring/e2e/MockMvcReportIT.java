@@ -49,5 +49,11 @@ class MockMvcReportIT {
         assertTrue(steps.contains("HTTP POST /api/echo → 200"), () -> "нет POST-шага: " + steps);
         assertTrue(steps.contains("HTTP GET /api/search?q=laptop → 200"), () -> "нет query-шага: " + steps);
         assertTrue(steps.contains("HTTP GET /api/does-not-exist → 404"), () -> "нет 404-шага: " + steps);
+
+        // содержимое вложений пришло через реальную цепочку (не только имя шага)
+        String req = CurrentReport.attachmentContent("HTTP Request").orElse("");
+        assertTrue(req.contains("GET /api/hello/world"), () -> "HTTP Request без метода/пути: " + req);
+        String resp = CurrentReport.attachmentContent("HTTP Response").orElse("");
+        assertTrue(resp.contains("hello world"), () -> "HTTP Response без тела: " + resp);
     }
 }

@@ -48,5 +48,11 @@ class RestAssuredReportIT {
         assertTrue(steps.contains("HTTP GET /api/hello/world → 200"), () -> "" + steps);
         assertTrue(steps.contains("HTTP POST /api/echo → 200"), () -> "" + steps);
         assertTrue(steps.contains("HTTP GET /api/does-not-exist → 404"), () -> "" + steps);
+
+        // содержимое вложений пришло через реальную цепочку
+        String req = CurrentReport.attachmentContent("HTTP Request").orElse("");
+        assertTrue(req.contains("/api/hello/world"), () -> "HTTP Request без пути: " + req);
+        String resp = CurrentReport.attachmentContent("HTTP Response").orElse("");
+        assertTrue(resp.contains("world"), () -> "HTTP Response без тела: " + resp);
     }
 }

@@ -4,8 +4,13 @@ import io.qameta.allure.Allure;
 import io.qameta.allure.model.Attachment;
 import io.qameta.allure.model.StepResult;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Чтение шагов/вложений ИЗ ТЕКУЩЕГО (реального) Allure тест-кейса — для уровня B.
@@ -35,6 +40,31 @@ public final class CurrentReport {
     public static List<String> attachmentNames() {
         return steps().stream().flatMap(s -> s.getAttachments().stream())
                 .map(Attachment::getName).toList();
+    }
+
+    /**
+     * СОДЕРЖИМОЕ вложения по имени. Allure пишет байты вложения на диск (в
+     * {@code allure.results.directory}) в момент addAttachment — во время теста файл уже
+     * есть, поэтому читаем его по {@code source}. Так level-B проверяет, что РЕАЛЬНАЯ цепочка
+     * (а не только прямая логика на уровне A) положила во вложение правильное содержимое.
+     */
+    public static Optional<String> attachmentContent(String name) {
+        String source = steps().stream()
+                .flatMap(s -> s.getAttachments().stream())
+                .filter(a -> name.equals(a.getName()))
+                .map(Attachment::getSource)
+                .filter(s -> s != null && !s.isBlank())
+                .findFirst().orElse(null);
+        if (source == null) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(Files.readString(
+                    Paths.get(System.getProperty("allure.results.directory", "allure-results"), source),
+                    StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            return Optional.empty();
+        }
     }
 
     private static void flatten(List<StepResult> steps, List<StepResult> out) {

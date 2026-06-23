@@ -56,7 +56,9 @@ class DataJpaReportIT {
                 () -> "" + steps);
         assertTrue(steps.stream().anyMatch(n -> n.startsWith("DB ") && n.contains("WidgetRepository.findAll")),
                 () -> "" + steps);
-        assertTrue(CurrentReport.attachmentNames().contains("DB Result"), "нет вложения DB Result");
+        // содержимое вложений (что ушло в БД / что вернулось) через реальную цепочку
+        assertTrue(CurrentReport.attachmentContent("DB Result").orElse("").contains("gadget"),
+                () -> "DB Result без сущности: " + CurrentReport.attachmentContent("DB Result"));
     }
 
     @Test

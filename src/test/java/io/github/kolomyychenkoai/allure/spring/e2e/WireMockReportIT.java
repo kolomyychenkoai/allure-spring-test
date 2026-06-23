@@ -91,6 +91,10 @@ class WireMockReportIT {
                 () -> "" + steps);
         assertTrue(steps.stream().anyMatch(n -> n.contains("сценарий") && n.contains("retry")), () -> "" + steps);
         assertTrue(steps.contains("WireMock: сброс заглушек"), () -> "" + steps);
+
+        // содержимое вложения стаба через реальную цепочку
+        String stub = CurrentReport.attachmentContent("WireMock Stub").orElse("");
+        assertTrue(stub.contains("/api/prices"), () -> "WireMock Stub: " + stub);
     }
 
     private static int send(HttpClient client, String url, String body) throws Exception {

@@ -63,6 +63,12 @@ class KafkaReportIT {
         assertTrue(steps.stream().anyMatch(n -> n.startsWith("Kafka: отправлено → order-events") && n.contains("k1")),
                 () -> "" + steps);
         assertTrue(steps.stream().anyMatch(n -> n.startsWith("Kafka: получено")), () -> "" + steps);
+
+        // содержимое вложений (topic/key/value) через реальную цепочку
+        String sent = CurrentReport.attachmentContent("Отправленное сообщение").orElse("");
+        assertTrue(sent.contains("Topic: order-events") && sent.contains("\"id\":7"), () -> "sent: " + sent);
+        String got = CurrentReport.attachmentContent("Принятые сообщения").orElse("");
+        assertTrue(got.contains("\"id\":7"), () -> "received: " + got);
     }
 
     private ConsumerRecords<String, String> pollUntilReceived(KafkaConsumer<String, String> consumer) {

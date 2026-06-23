@@ -42,6 +42,12 @@ class AllureMockitoReportIT {
                 && n.contains("999.99")), () -> "" + steps);
         assertTrue(steps.stream().anyMatch(n -> n.startsWith("Мок-проверка:") && n.contains("ожидали ×1")),
                 () -> "" + steps);
+
+        // содержимое вложений (метод+аргументы / результат) через реальную цепочку
+        String call = CurrentReport.attachmentContent("Mock Call").orElse("");
+        assertTrue(call.contains("Pricing.price") && call.contains("laptop"), () -> "Mock Call: " + call);
+        String res = CurrentReport.attachmentContent("Mock Result").orElse("");
+        assertTrue(res.contains("999.99"), () -> "Mock Result: " + res);
     }
 
     @Test
