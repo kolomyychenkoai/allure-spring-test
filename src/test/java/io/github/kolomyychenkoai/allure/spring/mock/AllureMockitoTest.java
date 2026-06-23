@@ -76,7 +76,7 @@ class AllureMockitoTest {
 
         List<String> names = stepNames(result);
         assertThat(names).anyMatch(n -> n.startsWith("Мок-вызов:") && n.contains("total")
-                && n.contains("laptop") && n.contains("2") && n.contains("1999.98"));
+                && n.contains("laptop, 2") && n.contains("1999.98")); // аргумент «2» заякорен, не просто цифра
         assertThat(names).anyMatch(n -> n.startsWith("Мок-вызов:") && n.contains("mouse")
                 && n.contains("0.0")); // нестабленный метод вернул дефолт
     }

@@ -49,7 +49,7 @@ class AllureKafkaConsumerTest {
         assertThat(allure.attachment(result, "Принятые сообщения").orElseThrow())
                 .contains("Topic: order-events")
                 .contains("Key: k1")
-                .contains("id");
+                .contains("\"id\":7"); // значение payload, а не короткий токен «id»
     }
 
     @Test
