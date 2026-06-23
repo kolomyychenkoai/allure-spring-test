@@ -2,7 +2,6 @@ package io.github.kolomyychenkoai.allure.spring.mock;
 
 import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
-import io.github.kolomyychenkoai.allure.spring.internal.AllureSpringSettings;
 import io.qameta.allure.Allure;
 import org.mockito.invocation.Invocation;
 import org.mockito.invocation.InvocationContainer;

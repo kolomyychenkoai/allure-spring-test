@@ -33,20 +33,15 @@ class AllureConfigurationListenerTest {
         allure.uninstall();
     }
 
-    private TestContext contextWith(MockPropertySource props) {
-        StandardEnvironment env = new StandardEnvironment();
-        env.getPropertySources().addFirst(props);
-        return TestContexts.withEnvironment(env);
-    }
-
     @Test
-    @DisplayName("свойства по дефолтным префиксам попадают в шаг Configuration (маскирования нет)")
-    void attachesPropertiesByPrefix() {
-        TestContext ctx = contextWith(new MockPropertySource()
+    @DisplayName("свойства приложения попадают в шаг Configuration (маскирования нет)")
+    void attachesApplicationProperties() {
+        StandardEnvironment env = new StandardEnvironment();
+        env.getPropertySources().addFirst(new MockPropertySource()
                 .withProperty("spring.application.name", "demo")
-                .withProperty("server.port", "8080")
-                .withProperty("spring.datasource.password", "hunter2")
-                .withProperty("custom.foo", "bar"));
+                .withProperty("custom.foo", "bar")
+                .withProperty("spring.datasource.password", "hunter2"));
+        TestContext ctx = TestContexts.withEnvironment(env);
 
         TestResult result = allure.run("config", () -> listener.beforeTestMethod(ctx));
 
@@ -54,53 +49,18 @@ class AllureConfigurationListenerTest {
         String props = allure.attachment(result, "Properties").orElseThrow();
         assertThat(props)
                 .contains("spring.application.name=demo")
-                .contains("server.port=8080")
-                .contains("spring.datasource.password=hunter2") // маскирования нет — значение видно
-                .doesNotContain("custom.foo");                  // не входит в дефолтные префиксы
-    }
-
-    @Test
-    @DisplayName("список префиксов настраивается через allure.spring.config.include-prefixes")
-    void honoursCustomPrefixes() {
-        TestContext ctx = contextWith(new MockPropertySource()
-                .withProperty("allure.spring.config.include-prefixes", "custom.")
-                .withProperty("custom.foo", "bar")
-                .withProperty("spring.application.name", "demo"));
-
-        TestResult result = allure.run("config-prefixes", () -> listener.beforeTestMethod(ctx));
-
-        String props = allure.attachment(result, "Properties").orElseThrow();
-        assertThat(props)
                 .contains("custom.foo=bar")
-                .doesNotContain("spring.application.name");
-    }
-
-    @Test
-    @DisplayName("нет свойств под префиксами → вложение «No relevant properties»")
-    void noRelevantProperties() {
-        TestContext ctx = contextWith(new MockPropertySource()
-                .withProperty("allure.spring.config.include-prefixes", "zzz.nonexistent.")
-                .withProperty("custom.foo", "bar"));
-
-        TestResult result = allure.run("config-empty", () -> listener.beforeTestMethod(ctx));
-
-        assertThat(allure.attachment(result, "Properties").orElseThrow())
-                .isEqualTo("No relevant properties");
-    }
-
-    private TestContext contextWithMap(Map<String, Object> map) {
-        StandardEnvironment env = new StandardEnvironment();
-        env.getPropertySources().addFirst(new MapPropertySource("test", map));
-        return TestContexts.withEnvironment(env);
+                .contains("spring.datasource.password=hunter2");
     }
 
     @Test
     @DisplayName("известный ключ со значением null → «<unset>» (не двусмысленное key=null)")
     void unsetValueRendered() {
         Map<String, Object> map = new HashMap<>();
-        map.put("allure.spring.config.include-prefixes", "custom.");
-        map.put("custom.nullable", null); // ключ есть в перечне, но значение null
-        TestContext ctx = contextWithMap(map);
+        map.put("custom.nullable", null);
+        StandardEnvironment env = new StandardEnvironment();
+        env.getPropertySources().addFirst(new MapPropertySource("test", map));
+        TestContext ctx = TestContexts.withEnvironment(env);
 
         TestResult result = allure.run("config-unset", () -> listener.beforeTestMethod(ctx));
 
@@ -112,9 +72,10 @@ class AllureConfigurationListenerTest {
     @DisplayName("неразрешимый плейсхолдер ${...} → «<unresolved>», тест не падает")
     void unresolvedPlaceholderRendered() {
         Map<String, Object> map = new HashMap<>();
-        map.put("allure.spring.config.include-prefixes", "custom.");
         map.put("custom.bad", "${definitely.missing.placeholder}");
-        TestContext ctx = contextWithMap(map);
+        StandardEnvironment env = new StandardEnvironment();
+        env.getPropertySources().addFirst(new MapPropertySource("test", map));
+        TestContext ctx = TestContexts.withEnvironment(env);
 
         TestResult result = allure.run("config-unresolved", () -> listener.beforeTestMethod(ctx));
 
