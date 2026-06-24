@@ -156,10 +156,10 @@ class AllureWireMockVerifyTest {
             assertThat(stepNames(result)).anyMatch(n -> n.contains("сценарий") && n.contains("retry"));
             assertThat(allure.hasStep(result, "WireMock: сброс заглушек")).isTrue();
 
-            // near-miss — это BROKEN-шаг (не PASSED) и несёт diff во вложении, а не только имя
+            // near-miss — ИНФОРМАЦИОННЫЙ PASSED-шаг (тест им не роняем) и несёт diff во вложении
             StepResult nearMiss = result.getSteps().stream()
                     .filter(s -> s.getName().startsWith("Near-miss:")).findFirst().orElseThrow();
-            assertThat(nearMiss.getStatus()).isEqualTo(Status.BROKEN);
+            assertThat(nearMiss.getStatus()).isEqualTo(Status.PASSED);
             assertThat(allure.attachment(result, "Near miss (почему не сматчилось)").orElseThrow())
                     .isNotBlank();
         } finally {
