@@ -1,5 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.web;
 
+import io.github.kolomyychenkoai.allure.spring.web.internal.AllureRestAssuredFilter;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;

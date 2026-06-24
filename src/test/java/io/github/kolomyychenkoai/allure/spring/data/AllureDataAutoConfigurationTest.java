@@ -1,5 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.data;
 
+import io.github.kolomyychenkoai.allure.spring.data.internal.AllureRepositoryAspect;
 import net.ttddyy.dsproxy.support.ProxyDataSource;
 import net.ttddyy.dsproxy.support.ProxyDataSourceBuilder;
 import org.junit.jupiter.api.DisplayName;

@@ -1,4 +1,4 @@
-package io.github.kolomyychenkoai.allure.spring.kafka;
+package io.github.kolomyychenkoai.allure.spring.kafka.internal;
 
 import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;

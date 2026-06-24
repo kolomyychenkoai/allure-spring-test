@@ -1,4 +1,4 @@
-package io.github.kolomyychenkoai.allure.spring.web;
+package io.github.kolomyychenkoai.allure.spring.web.internal;
 
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
@@ -17,7 +17,7 @@ import static net.bytebuddy.matcher.ElementMatchers.named;
  * (байткод на конструкторах) — ловит и {@code TestRestTemplate} (внутри него RestTemplate),
  * и ручной {@code new RestTemplate()}. Код в тестах не нужен.
  * <p>
- * Установка идемпотентна (CAS-гард), ставится из {@link AllureRestTemplateListener}. Сбой
+ * Установка идемпотентна (CAS-гард), ставится из {@code AllureRestTemplateListener}. Сбой
  * инструментирования логируется на WARNING и не роняет тест. RestTemplate, созданные ДО
  * установки, не охвачены (конструктор уже отработал) — но бины теста создаются после
  * {@code beforeTestClass}, где идёт установка.

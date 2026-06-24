@@ -1,4 +1,4 @@
-package io.github.kolomyychenkoai.allure.spring.web;
+package io.github.kolomyychenkoai.allure.spring.web.internal;
 
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import io.qameta.allure.Allure;
@@ -15,7 +15,7 @@ import java.util.WeakHashMap;
  * Прицепляет каждый {@code mockMvc.perform(...)} к Allure-отчёту шагом
  * «HTTP METHOD uri → status» с вложениями «HTTP Request» и «HTTP Response».
  * <p>
- * Подключается ДВУМЯ путями: {@link AllureMockMvcAutoConfiguration}
+ * Подключается ДВУМЯ путями: {@code AllureMockMvcAutoConfiguration}
  * (MockMvcBuilderCustomizer.alwaysDo — для авто-собранного MockMvc) и байткод-перехват
  * {@link AllureMockMvcInstrumentation} на {@code perform()} (ловит и собранный руками
  * {@code standaloneSetup}). Чтобы один вызов не дал ДВА шага, дедупим по identity

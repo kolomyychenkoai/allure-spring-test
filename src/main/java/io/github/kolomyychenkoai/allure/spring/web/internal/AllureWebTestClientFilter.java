@@ -1,4 +1,4 @@
-package io.github.kolomyychenkoai.allure.spring.web;
+package io.github.kolomyychenkoai.allure.spring.web.internal;
 
 import org.springframework.web.reactive.function.client.ClientRequest;
 import org.springframework.web.reactive.function.client.ClientResponse;
@@ -14,8 +14,8 @@ import reactor.core.publisher.Mono;
  * <p>
  * Срабатывает на реактивном потоке без активного Allure-кейса, поэтому лишь буферизует обмен
  * ({@link AllureWebTestClientLogger#capture}); шаги проигрываются на тест-потоке в
- * {@code afterTestMethod} ({@link AllureWebTestClientListener}). Подключается из
- * {@link AllureWebTestClientAutoConfiguration}, код в тестах не нужен.
+ * {@code afterTestMethod} ({@code AllureWebTestClientListener}). Подключается из
+ * {@code AllureWebTestClientAutoConfiguration}, код в тестах не нужен.
  */
 public final class AllureWebTestClientFilter implements ExchangeFilterFunction {
 

@@ -1,4 +1,4 @@
-package io.github.kolomyychenkoai.allure.spring.wiremock;
+package io.github.kolomyychenkoai.allure.spring.wiremock.internal;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.CountMatchingStrategy;

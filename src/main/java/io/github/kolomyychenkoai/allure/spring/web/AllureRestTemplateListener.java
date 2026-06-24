@@ -2,6 +2,7 @@ package io.github.kolomyychenkoai.allure.spring.web;
 
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.internal.ClassPresence;
+import io.github.kolomyychenkoai.allure.spring.web.internal.AllureRestTemplateInstrumentation;
 import org.springframework.core.Ordered;
 import org.springframework.test.context.TestContext;
 import org.springframework.test.context.TestExecutionListener;

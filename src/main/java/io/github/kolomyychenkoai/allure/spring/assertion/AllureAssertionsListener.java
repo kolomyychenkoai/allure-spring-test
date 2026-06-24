@@ -1,5 +1,8 @@
 package io.github.kolomyychenkoai.allure.spring.assertion;
 
+import io.github.kolomyychenkoai.allure.spring.assertion.internal.AllureAssertJInstrumentation;
+import io.github.kolomyychenkoai.allure.spring.assertion.internal.AllureHamcrestInstrumentation;
+import io.github.kolomyychenkoai.allure.spring.assertion.internal.AllureSpringAssertionsInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
 import org.springframework.core.Ordered;
 import org.springframework.test.context.TestContext;

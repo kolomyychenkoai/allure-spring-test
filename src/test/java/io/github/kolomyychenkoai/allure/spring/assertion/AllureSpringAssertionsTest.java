@@ -1,5 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.assertion;
 
+import io.github.kolomyychenkoai.allure.spring.assertion.internal.AllureSpringAssertionsInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.qameta.allure.model.TestResult;
 import org.junit.jupiter.api.AfterEach;

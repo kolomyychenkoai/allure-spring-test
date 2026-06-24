@@ -1,4 +1,4 @@
-package io.github.kolomyychenkoai.allure.spring.kafka;
+package io.github.kolomyychenkoai.allure.spring.kafka.internal;
 
 import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
@@ -27,7 +27,7 @@ import static net.bytebuddy.matcher.ElementMatchers.takesArgument;
  *       СРАЗУ (виден в отчёте этого теста по ходу выполнения);</li>
  *   <li>{@code @KafkaListener} — контейнер-слушатель крутит {@code poll} на СВОЁМ потоке,
  *       где активного кейса нет → записи буферизуем и проигрываем на тест-потоке в
- *       {@code afterTestMethod} (см. {@link AllureKafkaListener}). Иначе самый частый
+ *       {@code afterTestMethod} (см. {@code AllureKafkaListener}). Иначе самый частый
  *       паттерн приёма не давал бы ни одного consumer-шага.</li>
  * </ul>
  * Окно привязки буфера = выполнение тест-метода (буфер чистится в {@code beforeTestMethod}):
@@ -79,8 +79,8 @@ public final class AllureKafkaConsumerInstrumentation {
         }
     }
 
-    /** Проигрывает буфер на ТЕКУЩЕМ (тест-)потоке. Зовётся из {@link AllureKafkaListener#afterTestMethod}. */
-    static void flush() {
+    /** Проигрывает буфер на ТЕКУЩЕМ (тест-)потоке. Зовётся из {@code AllureKafkaListener#afterTestMethod}. */
+    public static void flush() {
         if (!Allure.getLifecycle().getCurrentTestCase().isPresent()) {
             BUFFER.clear(); // нет активного кейса — привязать не к чему, не копим между тестами
             return;
@@ -95,8 +95,8 @@ public final class AllureKafkaConsumerInstrumentation {
         }
     }
 
-    /** Чистит буфер между тестами (из {@link AllureKafkaListener#beforeTestMethod}). */
-    static void clear() {
+    /** Чистит буфер между тестами (из {@code AllureKafkaListener#beforeTestMethod}). */
+    public static void clear() {
         BUFFER.clear();
     }
 
