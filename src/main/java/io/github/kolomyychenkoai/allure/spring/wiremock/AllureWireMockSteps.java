@@ -50,7 +50,12 @@ final class AllureWireMockSteps {
         }
     }
 
-    /** Near-miss для незаматченных запросов. Вызывать ПЕРЕД {@code resetAll}, иначе журнал стёрт. */
+    /**
+     * Near-miss для незаматченных запросов. Вызывать ПЕРЕД {@code resetAll}, иначе журнал стёрт.
+     * Шаг ИНФОРМАЦИОННЫЙ (PASSED): сам по себе near-miss тест не роняет — это диагностика
+     * «почему запрос не сматчился» (diff во вложении). Красить в BROKEN без падающего теста
+     * не надо (§ стандарта: не фабрикуем failed-узлы; падение, если оно есть, покажет Allure).
+     */
     static void nearMisses(WireMockServer server) {
         try {
             if (server == null || !active()) {
@@ -66,7 +71,7 @@ final class AllureWireMockSteps {
                 String candidate = stubRequestLine(nearMiss.getStubMapping());
                 StepResult step = new StepResult()
                         .setName("Near-miss: " + method + " " + url + " ≉ заглушка " + candidate)
-                        .setStatus(Status.BROKEN);
+                        .setStatus(Status.PASSED);
                 step.getAttachments().add(new Attachment()
                         .setName("Near miss (почему не сматчилось)")
                         .setType("text/plain")
