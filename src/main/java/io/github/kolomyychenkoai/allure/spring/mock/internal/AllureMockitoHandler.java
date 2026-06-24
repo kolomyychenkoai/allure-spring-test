@@ -1,4 +1,4 @@
-package io.github.kolomyychenkoai.allure.spring.mock;
+package io.github.kolomyychenkoai.allure.spring.mock.internal;
 
 import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;

@@ -1,5 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.mock;
 
+import io.github.kolomyychenkoai.allure.spring.mock.internal.MockitoInternals;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.github.kolomyychenkoai.allure.spring.support.mock.Pricing;
 import io.github.kolomyychenkoai.allure.spring.support.mock.PricingCaller;

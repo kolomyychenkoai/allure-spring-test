@@ -1,5 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.mock;
 
+import io.github.kolomyychenkoai.allure.spring.mock.internal.AllureMockitoHandler;
 import org.mockito.internal.creation.bytebuddy.InlineByteBuddyMockMaker;
 import org.mockito.invocation.MockHandler;
 import org.mockito.mock.MockCreationSettings;

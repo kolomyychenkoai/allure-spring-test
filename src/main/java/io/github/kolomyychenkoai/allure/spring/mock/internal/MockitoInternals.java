@@ -1,4 +1,4 @@
-package io.github.kolomyychenkoai.allure.spring.mock;
+package io.github.kolomyychenkoai.allure.spring.mock.internal;
 
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import org.mockito.internal.progress.ThreadSafeMockingProgress;
@@ -16,11 +16,11 @@ import java.lang.reflect.Field;
  * Имена полей вынесены в константы — на них же висит канарейка-тест (упадёт осмысленно,
  * если поле уедет при bump). Деградация мягкая: не нашли поле → null, кратность просто не покажем.
  */
-final class MockitoInternals {
+public final class MockitoInternals {
 
-    static final String VERIFICATION_MODE_FIELD = "verificationMode";
-    static final String WANTED_COUNT_FIELD = "wantedCount";
-    static final String[] MODE_WRAPPER_FIELDS = {"object", "mode"};
+    public static final String VERIFICATION_MODE_FIELD = "verificationMode";
+    public static final String WANTED_COUNT_FIELD = "wantedCount";
+    public static final String[] MODE_WRAPPER_FIELDS = {"object", "mode"};
 
     private MockitoInternals() {
     }
