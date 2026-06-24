@@ -1,5 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.wiremock;
 
+import io.github.kolomyychenkoai.allure.spring.wiremock.internal.AllureWireMockListener;
 import com.github.tomakehurst.wiremock.http.HttpHeaders;
 import com.github.tomakehurst.wiremock.http.Request;
 import com.github.tomakehurst.wiremock.http.RequestMethod;

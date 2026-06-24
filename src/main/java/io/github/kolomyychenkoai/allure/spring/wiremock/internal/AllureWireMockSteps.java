@@ -1,4 +1,4 @@
-package io.github.kolomyychenkoai.allure.spring.wiremock;
+package io.github.kolomyychenkoai.allure.spring.wiremock.internal;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.stubbing.Scenario;
@@ -17,12 +17,12 @@ import java.util.UUID;
 
 /**
  * Общие шаги Allure-отчёта для WireMock-модуля: заглушки, near-miss, состояния сценариев.
- * Вызывается и из listener'а ({@link AllureWireMockTestListener#afterTestMethod}), и из
+ * Вызывается и из listener'а ({@code AllureWireMockTestListener#afterTestMethod}), и из
  * байткод-advice ({@code stubFor}/{@code resetAll}) — чтобы шаги попадали в отчёт даже когда
  * тест в конце зовёт {@code resetAll()} (сброс стирает стабы/журнал/сценарии). НЕ публичный API.
  * Всё под проверкой активного тест-кейса и в try/catch — инструментирование не роняет тест.
  */
-final class AllureWireMockSteps {
+public final class AllureWireMockSteps {
 
     private AllureWireMockSteps() {
     }
@@ -56,7 +56,7 @@ final class AllureWireMockSteps {
      * «почему запрос не сматчился» (diff во вложении). Красить в BROKEN без падающего теста
      * не надо (§ стандарта: не фабрикуем failed-узлы; падение, если оно есть, покажет Allure).
      */
-    static void nearMisses(WireMockServer server) {
+    public static void nearMisses(WireMockServer server) {
         try {
             if (server == null || !active()) {
                 return;
@@ -84,7 +84,7 @@ final class AllureWireMockSteps {
     }
 
     /** Итоговые состояния сценариев (stateful-заглушки). Вызывать ПЕРЕД {@code resetAll}. */
-    static void scenarios(WireMockServer server) {
+    public static void scenarios(WireMockServer server) {
         try {
             if (server == null || !active()) {
                 return;

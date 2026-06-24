@@ -1,5 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.wiremock;
 
+import io.github.kolomyychenkoai.allure.spring.wiremock.internal.AllureWireMockVerifyInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.qameta.allure.model.Status;
 import io.qameta.allure.model.StepResult;

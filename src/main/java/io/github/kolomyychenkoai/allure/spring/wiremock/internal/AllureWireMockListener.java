@@ -1,4 +1,4 @@
-package io.github.kolomyychenkoai.allure.spring.wiremock;
+package io.github.kolomyychenkoai.allure.spring.wiremock.internal;
 
 import com.github.tomakehurst.wiremock.http.HttpHeaders;
 import com.github.tomakehurst.wiremock.http.Request;
@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
  * Собирает каждый запрос, попавший в WireMock, и выкладывает их как шаги Allure
- * на тест-потоке (через {@link AllureWireMockTestListener#afterTestMethod}).
+ * на тест-потоке (через {@code AllureWireMockTestListener#afterTestMethod}).
  * <p>
  * WireMock вызывает листенер на своём Jetty-потоке, где активного Allure-тест-кейса
  * нет — поэтому буферизуем и проигрываем на правильном потоке.
@@ -41,8 +41,8 @@ public final class AllureWireMockListener {
         }
     }
 
-    /** Вызывается из {@link AllureWireMockTestListener#afterTestMethod} на тест-потоке. */
-    static void flushToAllure() {
+    /** Вызывается из {@code AllureWireMockTestListener#afterTestMethod} на тест-потоке. */
+    public static void flushToAllure() {
         if (!Allure.getLifecycle().getCurrentTestCase().isPresent()) {
             clear();
             return;
@@ -65,7 +65,7 @@ public final class AllureWireMockListener {
     }
 
     /** Чистит буфер между тестами. */
-    static void clear() {
+    public static void clear() {
         EXCHANGES.clear();
     }
 
