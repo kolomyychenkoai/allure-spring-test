@@ -47,6 +47,71 @@ class InstrumentationApiCanaryTest {
         }
     }
 
+    /** Есть ли класс на classpath (для канареек на сам класс, а не его метод). */
+    private static boolean classPresent(String className) {
+        try {
+            Class.forName(className);
+            return true;
+        } catch (ClassNotFoundException e) {
+            return false;
+        }
+    }
+
+    @Test
+    @DisplayName("Web: MockMvc.perform и RestTemplate.getInterceptors (матчеры web-модуля)")
+    void webMatchers() {
+        assertTrue(hasMethod("org.springframework.test.web.servlet.MockMvc", "perform", -1, null),
+                "MockMvc.perform уехал → обнови матчер в AllureMockMvcInstrumentation");
+        assertTrue(hasMethod("org.springframework.web.client.RestTemplate", "getInterceptors", 0, null),
+                "RestTemplate.getInterceptors уехал → AllureRestTemplateInstrumentation вешает интерсептор через него");
+    }
+
+    @Test
+    @DisplayName("WireMock сбросы: static resetAllRequests/resetScenario/resetAllScenarios + WireMockServer resetMappings/resetRequests/resetScenarios")
+    void wireMockResetMatchers() {
+        String stat = "com.github.tomakehurst.wiremock.client.WireMock";
+        assertTrue(hasMethod(stat, "resetAllRequests", -1, null), "WireMock.resetAllRequests уехал → AllureWireMockVerifyInstrumentation");
+        assertTrue(hasMethod(stat, "resetScenario", -1, null), "WireMock.resetScenario уехал → AllureWireMockVerifyInstrumentation");
+        assertTrue(hasMethod(stat, "resetAllScenarios", -1, null), "WireMock.resetAllScenarios уехал → AllureWireMockVerifyInstrumentation");
+        String server = "com.github.tomakehurst.wiremock.WireMockServer";
+        assertTrue(hasMethod(server, "resetMappings", -1, null), "WireMockServer.resetMappings уехал → AllureWireMockVerifyInstrumentation");
+        assertTrue(hasMethod(server, "resetRequests", -1, null), "WireMockServer.resetRequests уехал → AllureWireMockVerifyInstrumentation");
+        assertTrue(hasMethod(server, "resetScenarios", -1, null), "WireMockServer.resetScenarios уехал → AllureWireMockVerifyInstrumentation");
+    }
+
+    @Test
+    @DisplayName("WireMock near-miss/сценарии: API снятия журнала ДО сброса (AllureWireMockSteps)")
+    void wireMockNearMissApi() {
+        String server = "com.github.tomakehurst.wiremock.WireMockServer";
+        assertTrue(hasMethod(server, "findNearMissesForAllUnmatchedRequests", -1, null),
+                "WireMockServer.findNearMissesForAllUnmatchedRequests уехал → AllureWireMockSteps.nearMisses");
+        assertTrue(hasMethod(server, "getAllScenarios", -1, null),
+                "WireMockServer.getAllScenarios уехал → AllureWireMockSteps.scenarios");
+        String nearMiss = "com.github.tomakehurst.wiremock.verification.NearMiss";
+        assertTrue(hasMethod(nearMiss, "getDiff", -1, null), "NearMiss.getDiff уехал → AllureWireMockSteps");
+        assertTrue(hasMethod(nearMiss, "getRequest", -1, null), "NearMiss.getRequest уехал → AllureWireMockSteps");
+        assertTrue(hasMethod(nearMiss, "getStubMapping", -1, null), "NearMiss.getStubMapping уехал → AllureWireMockSteps");
+        String scenario = "com.github.tomakehurst.wiremock.stubbing.Scenario";
+        assertTrue(hasMethod(scenario, "getName", -1, null), "Scenario.getName уехал → AllureWireMockSteps.scenarios");
+        assertTrue(hasMethod(scenario, "getState", -1, null), "Scenario.getState уехал → AllureWireMockSteps.scenarios");
+    }
+
+    @Test
+    @DisplayName("datasource-proxy: ExecutionInfo/QueryInfo и DefaultQueryLogEntryCreator.getLogEntry(...5)")
+    void dataSourceProxyApi() {
+        assertTrue(classPresent("net.ttddyy.dsproxy.ExecutionInfo"), "datasource-proxy ExecutionInfo уехал → AllureDataSourceListener");
+        assertTrue(classPresent("net.ttddyy.dsproxy.QueryInfo"), "datasource-proxy QueryInfo уехал → AllureDataSourceListener");
+        assertTrue(hasMethod("net.ttddyy.dsproxy.listener.logging.DefaultQueryLogEntryCreator", "getLogEntry", 5, null),
+                "DefaultQueryLogEntryCreator.getLogEntry(ExecutionInfo, List, boolean, boolean, boolean) уехал → AllureDataSourceListener");
+    }
+
+    @Test
+    @DisplayName("Mockito MockMaker: InlineByteBuddyMockMaker (дефолтный inline-maker, который оборачиваем)")
+    void mockitoMockMakerPresent() {
+        assertTrue(classPresent("org.mockito.internal.creation.bytebuddy.InlineByteBuddyMockMaker"),
+                "InlineByteBuddyMockMaker уехал → AllureMockitoMockMaker оборачивает именно его (иначе NoClassDefFound у всех моков потребителя)");
+    }
+
     @Test
     @DisplayName("Kafka: KafkaProducer.send(ProducerRecord, Callback) и KafkaConsumer.poll(Duration)")
     void kafkaMatchers() {

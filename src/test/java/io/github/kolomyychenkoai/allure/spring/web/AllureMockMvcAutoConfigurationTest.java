@@ -9,8 +9,8 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Уровень A: тумблер HTTP-модуля. Падает, если кастомайзер MockMvc перестанет
- * включаться по умолчанию или выключаться по {@code allure.spring.web.enabled=false}.
+ * Уровень A: авто-активация HTTP-модуля. Падает, если кастомайзер MockMvc перестанет
+ * регистрироваться по умолчанию (когда MockMvc есть на classpath).
  */
 class AllureMockMvcAutoConfigurationTest {
 

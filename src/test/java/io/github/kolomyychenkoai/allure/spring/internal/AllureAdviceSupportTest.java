@@ -69,13 +69,13 @@ class AllureAdviceSupportTest {
     }
 
     @Test
-    @DisplayName("step: без активного тест-кейса шаг не пишется и не бросает")
+    @DisplayName("step: без активного тест-кейса в отчёт ничего не уходит")
     void stepNoActiveTestCase() {
         InMemoryAllure allure = new InMemoryAllure().install();
         try {
-            // вне allure.run(...) активного кейса нет → step должен тихо вернуться
-            org.assertj.core.api.Assertions.assertThatCode(() ->
-                    AllureAdviceSupport.step("вне кейса", null)).doesNotThrowAnyException();
+            // вне allure.run(...) активного кейса нет → step должен тихо вернуться, ничего не записав
+            AllureAdviceSupport.step("вне кейса", null);
+            assertThat(allure.wroteNothing()).isTrue();
         } finally {
             allure.uninstall();
         }

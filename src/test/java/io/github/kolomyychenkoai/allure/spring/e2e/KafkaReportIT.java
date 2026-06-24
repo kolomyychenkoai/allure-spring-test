@@ -52,6 +52,10 @@ class KafkaReportIT {
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
 
+        // повторный install() — CAS-гард обязан сделать no-op; если CAS убрать, advice навесится
+        // второй раз и одна отправка даст ДВА шага (см. assert «ровно один» ниже)
+        io.github.kolomyychenkoai.allure.spring.kafka.AllureKafkaProducerInstrumentation.install();
+
         try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props)) {
             consumer.subscribe(List.of("order-events"));
             template.send("order-events", "k1", "{\"id\":7}").get(10, TimeUnit.SECONDS);
@@ -63,6 +67,9 @@ class KafkaReportIT {
         assertTrue(steps.stream().anyMatch(n -> n.startsWith("Kafka: отправлено → order-events") && n.contains("k1")),
                 () -> "" + steps);
         assertTrue(steps.stream().anyMatch(n -> n.startsWith("Kafka: получено")), () -> "" + steps);
+        // одна отправка = РОВНО один шаг (CAS-дедуп install не задвоил advice)
+        long sentCount = steps.stream().filter(n -> n.startsWith("Kafka: отправлено → order-events")).count();
+        assertTrue(sentCount == 1, () -> "ожидался ровно один шаг отправки (CAS), а есть " + sentCount + ": " + steps);
 
         // содержимое вложений (topic/key/value) через реальную цепочку
         String sent = CurrentReport.attachmentContent("Отправленное сообщение").orElse("");

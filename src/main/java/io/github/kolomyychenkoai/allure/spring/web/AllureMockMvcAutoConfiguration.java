@@ -10,8 +10,7 @@ import org.springframework.test.web.servlet.ResultHandler;
  * Авто-активация HTTP-логирования MockMvc: регистрирует
  * {@link MockMvcBuilderCustomizer}, который вешает {@link AllureMockMvcResultHandler}
  * на каждый собираемый MockMvc (через {@code alwaysDo}). Включается сама, если MockMvc
- * есть на classpath — потребителю писать ничего не нужно. Выключить —
- * {@code allure.spring.web.enabled=false} (общий тумблер HTTP-модуля, с RestAssured).
+ * есть на classpath — потребителю писать ничего не нужно.
  * Регистрируется через {@code META-INF/spring/...AutoConfiguration.imports}.
  * <p>
  * Ограничение: handler цепляется через {@code MockMvcBuilderCustomizer.alwaysDo} — это
