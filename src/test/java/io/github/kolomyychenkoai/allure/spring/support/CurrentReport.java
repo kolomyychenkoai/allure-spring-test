@@ -91,6 +91,33 @@ public final class CurrentReport {
         }
     }
 
+    /**
+     * Есть ли среди записанных файлов ОДИН, содержащий ВСЕ перечисленные подстроки. Нужно,
+     * когда отдельные подстроки могут встретиться в РАЗНЫХ вложениях/тестах, а доказать надо
+     * именно их совместное появление в одном файле (напр. {@code Offset:} + значение —
+     * признак consumer-вложения, а не producer'а с тем же payload).
+     */
+    public static boolean anyResultFileContainsAll(String... texts) {
+        Path dir = Paths.get(System.getProperty("allure.results.directory", "allure-results"));
+        try (Stream<Path> files = Files.list(dir)) {
+            return files.filter(Files::isRegularFile).anyMatch(p -> {
+                try {
+                    String content = Files.readString(p, StandardCharsets.UTF_8);
+                    for (String text : texts) {
+                        if (!content.contains(text)) {
+                            return false;
+                        }
+                    }
+                    return true;
+                } catch (IOException e) {
+                    return false;
+                }
+            });
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
     private static void flatten(List<StepResult> steps, List<StepResult> out) {
         if (steps == null) {
             return;
