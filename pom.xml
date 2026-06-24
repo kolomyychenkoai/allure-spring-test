@@ -316,6 +316,18 @@
                 <configuration>
                     <doclint>none</doclint>
                     <failOnError>false</failOnError>
+                    <!-- Внутренние пакеты (.internal) — не публичный API, в javadoc не нужны;
+                         заодно убирает ошибку «mockito.internal не виден» из MockitoInternals. -->
+                    <excludePackageNames>
+                        io.github.kolomyychenkoai.allure.spring.internal:io.github.kolomyychenkoai.allure.spring.web.internal:io.github.kolomyychenkoai.allure.spring.data.internal:io.github.kolomyychenkoai.allure.spring.kafka.internal:io.github.kolomyychenkoai.allure.spring.wiremock.internal:io.github.kolomyychenkoai.allure.spring.assertion.internal:io.github.kolomyychenkoai.allure.spring.mock.internal
+                    </excludePackageNames>
+                    <!-- AllureMockitoMockMaker — opt-in SPI-реализация: оборачивает приватный
+                         mockito InlineByteBuddyMockMaker (mockito-core — JPMS-модуль, internal не
+                         экспортит → javadoc его не видит). Из публичных доков исключаем; класс
+                         остаётся public, активируется через SPI-файл (см. README). -->
+                    <sourceFileExcludes>
+                        <sourceFileExclude>**/mock/AllureMockitoMockMaker.java</sourceFileExclude>
+                    </sourceFileExcludes>
                 </configuration>
                 <executions>
                     <execution>
