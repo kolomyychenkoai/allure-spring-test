@@ -128,6 +128,14 @@ class AllureMockitoTest {
         org.assertj.core.api.Assertions.assertThatCode(() ->
                 org.mockito.internal.verification.AtLeast.class.getDeclaredField(MockitoInternals.WANTED_COUNT_FIELD))
                 .doesNotThrowAnyException();
+        // обёртки режима verify (unwrapMode разворачивает их до wantedCount) — самые хрупкие хопы:
+        // Localized.object → MockAwareVerificationMode.mode. Если уедут — кратность «×N» тихо пропадёт.
+        org.assertj.core.api.Assertions.assertThatCode(() ->
+                org.mockito.internal.debugging.Localized.class.getDeclaredField(MockitoInternals.MODE_WRAPPER_FIELDS[0]))
+                .doesNotThrowAnyException();
+        org.assertj.core.api.Assertions.assertThatCode(() ->
+                org.mockito.internal.verification.MockAwareVerificationMode.class.getDeclaredField(MockitoInternals.MODE_WRAPPER_FIELDS[1]))
+                .doesNotThrowAnyException();
     }
 
 }

@@ -16,7 +16,7 @@ import java.util.Optional;
  * <p>
  * ВНИМАНИЕ (радиус): SPI-файл делает этот maker глобальным для ВСЕХ моков в JVM
  * потребителя. Поведение моков не меняется (делегируем всё дефолтному maker'у),
- * добавляется только логирование (выключается {@code allure.spring.mock.enabled=false}).
+ * добавляется только логирование. Выключается удалением SPI-файла (maker — opt-in).
  */
 public class AllureMockitoMockMaker implements MockMaker {
 

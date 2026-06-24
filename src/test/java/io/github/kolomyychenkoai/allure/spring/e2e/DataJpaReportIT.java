@@ -59,6 +59,15 @@ class DataJpaReportIT {
         // содержимое вложений (что ушло в БД / что вернулось) через реальную цепочку
         assertTrue(CurrentReport.attachmentContent("DB Result").orElse("").contains("gadget"),
                 () -> "DB Result без сущности: " + CurrentReport.attachmentContent("DB Result"));
+
+        // datasource-proxy (отдельный путь регистрации, оборачивает DataSource) — ловит РЕАЛЬНЫЙ SQL.
+        // Без этого ассерта поломка регистрации ProxyDataSource в реальном контексте прошла бы мимо B.
+        assertTrue(steps.stream().anyMatch(n -> n.startsWith("SQL INSERT") && n.contains("widget")),
+                () -> "нет шага SQL INSERT widget: " + steps);
+        assertTrue(steps.stream().anyMatch(n -> n.startsWith("SQL SELECT")),
+                () -> "нет шага SQL SELECT (findById/findAll): " + steps);
+        assertTrue(CurrentReport.attachmentContent("SQL Query").orElse("").toLowerCase().contains("widget"),
+                () -> "SQL Query без текста запроса: " + CurrentReport.attachmentContent("SQL Query"));
     }
 
     @Test
@@ -71,8 +80,13 @@ class DataJpaReportIT {
         widgets.deleteById(saved.getId());
         assertThat(widgets.findById(saved.getId())).isEmpty();
 
-        assertTrue(CurrentReport.stepNames().stream().anyMatch(n -> n.contains("WidgetRepository.deleteById")),
-                () -> "" + CurrentReport.stepNames());
+        List<String> steps = CurrentReport.stepNames();
+        assertTrue(steps.stream().anyMatch(n -> n.contains("WidgetRepository.deleteById")), () -> "" + steps);
+        // SQL UPDATE и DELETE должны различаться в дереве (а не оба выглядеть как INSERT)
+        assertTrue(steps.stream().anyMatch(n -> n.startsWith("SQL UPDATE") && n.contains("widget")),
+                () -> "нет шага SQL UPDATE widget: " + steps);
+        assertTrue(steps.stream().anyMatch(n -> n.startsWith("SQL DELETE") && n.contains("widget")),
+                () -> "нет шага SQL DELETE widget: " + steps);
     }
 
     @Test

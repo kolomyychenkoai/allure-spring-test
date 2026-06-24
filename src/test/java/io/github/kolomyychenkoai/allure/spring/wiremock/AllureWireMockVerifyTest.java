@@ -1,6 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.wiremock;
 
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
+import io.qameta.allure.model.Status;
 import io.qameta.allure.model.StepResult;
 import io.qameta.allure.model.TestResult;
 import org.junit.jupiter.api.AfterEach;
@@ -154,6 +155,13 @@ class AllureWireMockVerifyTest {
             assertThat(stepNames(result)).anyMatch(n -> n.startsWith("Near-miss:") && n.contains("/api/wrong"));
             assertThat(stepNames(result)).anyMatch(n -> n.contains("сценарий") && n.contains("retry"));
             assertThat(allure.hasStep(result, "WireMock: сброс заглушек")).isTrue();
+
+            // near-miss — это BROKEN-шаг (не PASSED) и несёт diff во вложении, а не только имя
+            StepResult nearMiss = result.getSteps().stream()
+                    .filter(s -> s.getName().startsWith("Near-miss:")).findFirst().orElseThrow();
+            assertThat(nearMiss.getStatus()).isEqualTo(Status.BROKEN);
+            assertThat(allure.attachment(result, "Near miss (почему не сматчилось)").orElseThrow())
+                    .isNotBlank();
         } finally {
             server.stop();
         }

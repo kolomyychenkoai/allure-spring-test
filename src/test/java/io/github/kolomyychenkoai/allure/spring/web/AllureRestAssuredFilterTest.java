@@ -124,7 +124,27 @@ class AllureRestAssuredFilterTest {
                 .filter(new AllureRestAssuredFilter())
                 .when().get(base + "/ping");
 
-        assertThat(response.statusCode()).isEqualTo(200); // HTTP-вызов не сломан, шаг не пишется
+        assertThat(response.statusCode()).isEqualTo(200); // HTTP-вызов не сломан…
+        assertThat(allure.wroteNothing()).isTrue();       // …и в отчёт ничего не ушло (убери гейт → запишет вложения → покраснеет)
+    }
+
+    @Test
+    @DisplayName("PUT и DELETE тоже дают шаги (перехват не зависит от метода)")
+    void includesPutAndDelete() {
+        TestResult put = allure.run("ra-put", () ->
+                given().filter(new AllureRestAssuredFilter())
+                        .contentType("application/json").body("{\"x\":1}")
+                        .when().put(base + "/echo")
+                        .then().statusCode(200));
+        assertThat(put.getSteps().stream().map(s -> s.getName()))
+                .anyMatch(n -> n.startsWith("HTTP PUT") && n.endsWith("/echo → 200"));
+
+        TestResult delete = allure.run("ra-del", () ->
+                given().filter(new AllureRestAssuredFilter())
+                        .when().delete(base + "/ping")
+                        .then().statusCode(200));
+        assertThat(delete.getSteps().stream().map(s -> s.getName()))
+                .anyMatch(n -> n.startsWith("HTTP DELETE") && n.endsWith("/ping → 200"));
     }
 
     @Test
