@@ -1,5 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.data;
 
+import io.github.kolomyychenkoai.allure.spring.data.internal.AllureDataSourceListener;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.qameta.allure.model.TestResult;
 import net.ttddyy.dsproxy.ExecutionInfo;

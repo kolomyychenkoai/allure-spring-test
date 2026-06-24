@@ -1,5 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.data;
 
+import io.github.kolomyychenkoai.allure.spring.data.internal.AllureRepositoryAspect;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.context.annotation.Bean;

@@ -1,4 +1,4 @@
-package io.github.kolomyychenkoai.allure.spring.data;
+package io.github.kolomyychenkoai.allure.spring.data.internal;
 
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import io.qameta.allure.Allure;
