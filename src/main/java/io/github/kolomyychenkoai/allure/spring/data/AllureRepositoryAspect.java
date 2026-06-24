@@ -1,6 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.data;
 
 import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
+import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import io.qameta.allure.Allure;
 import io.qameta.allure.model.Status;
 import io.qameta.allure.model.StepResult;
@@ -38,6 +39,10 @@ import java.util.stream.Collectors;
  * derived-методы). Ограничение: REACTIVE-репозитории (Spring Data R2DBC,
  * {@code ReactiveCrudRepository}) НЕ охвачены — нужен отдельный аспект; модуль рассчитан
  * на синхронный (JPA) стек.
+ * <p>
+ * Потокобезопасен: единственное общее состояние — {@code fieldCache}
+ * ({@link ConcurrentHashMap}); шаги идут на вызывающем потоке через {@code uuid}-локальный
+ * lifecycle, общего изменяемого состояния шага между потоками нет.
  */
 @Aspect
 public class AllureRepositoryAspect {
@@ -82,7 +87,8 @@ public class AllureRepositoryAspect {
             String methodName = pjp.getSignature().getName();
             return new Call("DB " + repoName + "." + methodName,
                     formatRequest(repoName, methodName, pjp.getArgs()));
-        } catch (Throwable ignored) {
+        } catch (Throwable t) {
+            AllureInstrumentationLogger.warn("DbSnapshot", t); // не роняем вызов, но сбой видно на WARNING
             return null;
         }
     }
@@ -91,7 +97,8 @@ public class AllureRepositoryAspect {
         try {
             Allure.getLifecycle().startStep(uuid, new StepResult().setName(name).setStatus(Status.PASSED));
             return true;
-        } catch (Throwable ignored) {
+        } catch (Throwable t) {
+            AllureInstrumentationLogger.warn("DbStartStep", t);
             return false;
         }
     }
@@ -107,8 +114,8 @@ public class AllureRepositoryAspect {
                 Allure.addAttachment("DB Result", "text/plain", resultText);
             }
             Allure.getLifecycle().updateStep(uuid, s -> s.setStatus(status));
-        } catch (Throwable ignored) {
-            // инструментирование не должно ронять тест
+        } catch (Throwable t) {
+            AllureInstrumentationLogger.warn("DbFinishStep", t); // не роняем тест, сбой видно на WARNING
         }
     }
 
@@ -118,7 +125,8 @@ public class AllureRepositoryAspect {
         }
         try {
             Allure.getLifecycle().stopStep(uuid);
-        } catch (Throwable ignored) {
+        } catch (Throwable t) {
+            AllureInstrumentationLogger.warn("DbStopStep", t);
         }
     }
 
@@ -170,7 +178,8 @@ public class AllureRepositoryAspect {
             return "null";
         }
         Class<?> clazz = obj.getClass();
-        if (clazz.isPrimitive() || obj instanceof Number || obj instanceof String
+        // obj — всегда объект (примитивы заболочены), поэтому проверяем по обёрткам/типам
+        if (obj instanceof Number || obj instanceof String
                 || obj instanceof Boolean || obj instanceof Enum) {
             return obj.toString();
         }

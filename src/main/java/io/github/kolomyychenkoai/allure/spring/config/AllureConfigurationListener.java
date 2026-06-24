@@ -20,6 +20,9 @@ import java.util.stream.Collectors;
  * там JVM-флаги и переменные ОС, а не настройки приложения. Маскирование значений
  * намеренно НЕ делается (данные в тестах фейковые).
  * Активируется автоматически через {@code META-INF/spring.factories}.
+ * <p>
+ * Потокобезопасен: без изменяемого состояния ({@code SYSTEM_SOURCES} — неизменяемый Set,
+ * локальные переменные — на стеке метода).
  */
 public class AllureConfigurationListener implements TestExecutionListener, Ordered {
 

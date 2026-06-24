@@ -1,5 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.data;
 
+import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import io.qameta.allure.Allure;
 import net.ttddyy.dsproxy.ExecutionInfo;
 import net.ttddyy.dsproxy.QueryInfo;
@@ -7,6 +8,8 @@ import net.ttddyy.dsproxy.listener.QueryExecutionListener;
 import net.ttddyy.dsproxy.listener.logging.DefaultQueryLogEntryCreator;
 
 import java.util.List;
+import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * Логирует РЕАЛЬНЫЙ SQL (через обёртку DataSource, datasource-proxy): каждый
@@ -19,8 +22,19 @@ import java.util.List;
  * <p>
  * Порядок: SQL-шаг идёт ПЕРЕД соседним «DB Repo.method» (SQL выполняется внутри
  * вызова, а аспект эмитит свой шаг уже после) — это by-design.
+ * <p>
+ * Потокобезопасен: {@code logCreator} — stateless-форматтер datasource-proxy, {@code TABLE_PATTERNS}
+ * неизменяема; собственного изменяемого состояния у листенера нет.
  */
 public class AllureDataSourceListener implements QueryExecutionListener {
+
+    /** Предкомпилированные шаблоны имени таблицы по операции (компиляция — один раз, не на запрос). */
+    private static final Map<String, Pattern> TABLE_PATTERNS = Map.of(
+            "INSERT", Pattern.compile("(?i)insert\\s+into\\s+([\\w.\"`]+)"),
+            "UPDATE", Pattern.compile("(?i)update\\s+([\\w.\"`]+)"),
+            "DELETE", Pattern.compile("(?i)delete\\s+from\\s+([\\w.\"`]+)"),
+            "MERGE", Pattern.compile("(?i)merge\\s+into\\s+([\\w.\"`]+)"),
+            "SELECT", Pattern.compile("(?i)\\bfrom\\s+([\\w.\"`]+)"));
 
     private final DefaultQueryLogEntryCreator logCreator = new DefaultQueryLogEntryCreator();
 
@@ -40,8 +54,8 @@ public class AllureDataSourceListener implements QueryExecutionListener {
             Allure.step(stepName(queryInfoList.get(0).getQuery()), step -> {
                 Allure.addAttachment("SQL Query", "text/plain", body);
             });
-        } catch (Throwable ignored) {
-            // инструментирование не должно ронять тест
+        } catch (Throwable t) {
+            AllureInstrumentationLogger.warn("DbSqlListener", t); // не роняем тест, сбой видно на WARNING
         }
     }
 
@@ -64,17 +78,11 @@ public class AllureDataSourceListener implements QueryExecutionListener {
         if (sql == null) {
             return "";
         }
-        String regex = switch (op) {
-            case "INSERT" -> "(?i)insert\\s+into\\s+([\\w.\"`]+)";
-            case "UPDATE" -> "(?i)update\\s+([\\w.\"`]+)";
-            case "DELETE" -> "(?i)delete\\s+from\\s+([\\w.\"`]+)";
-            case "SELECT" -> "(?i)\\bfrom\\s+([\\w.\"`]+)";
-            default -> null;
-        };
-        if (regex == null) {
-            return "";
+        Pattern pattern = TABLE_PATTERNS.get(op);
+        if (pattern == null) {
+            return ""; // CALL/WITH/DDL и пр. — без таблицы, имя шага останется «SQL <OP>»
         }
-        var matcher = java.util.regex.Pattern.compile(regex).matcher(sql);
+        var matcher = pattern.matcher(sql);
         return matcher.find() ? matcher.group(1).replace("\"", "").replace("`", "") : "";
     }
 }
