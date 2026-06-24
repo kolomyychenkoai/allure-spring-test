@@ -1,5 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.kafka;
 
+import io.github.kolomyychenkoai.allure.spring.kafka.internal.AllureKafkaConsumerInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.qameta.allure.model.TestResult;
 import org.apache.kafka.clients.consumer.ConsumerRecord;

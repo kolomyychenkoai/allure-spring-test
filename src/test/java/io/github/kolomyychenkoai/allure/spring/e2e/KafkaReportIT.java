@@ -54,7 +54,7 @@ class KafkaReportIT {
 
         // повторный install() — CAS-гард обязан сделать no-op; если CAS убрать, advice навесится
         // второй раз и одна отправка даст ДВА шага (см. assert «ровно один» ниже)
-        io.github.kolomyychenkoai.allure.spring.kafka.AllureKafkaProducerInstrumentation.install();
+        io.github.kolomyychenkoai.allure.spring.kafka.internal.AllureKafkaProducerInstrumentation.install();
 
         try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props)) {
             consumer.subscribe(List.of("order-events"));

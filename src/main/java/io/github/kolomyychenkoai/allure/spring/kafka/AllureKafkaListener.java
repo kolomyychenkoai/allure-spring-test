@@ -1,6 +1,8 @@
 package io.github.kolomyychenkoai.allure.spring.kafka;
 
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
+import io.github.kolomyychenkoai.allure.spring.kafka.internal.AllureKafkaConsumerInstrumentation;
+import io.github.kolomyychenkoai.allure.spring.kafka.internal.AllureKafkaProducerInstrumentation;
 import org.springframework.core.Ordered;
 import org.springframework.test.context.TestContext;
 import org.springframework.test.context.TestExecutionListener;
