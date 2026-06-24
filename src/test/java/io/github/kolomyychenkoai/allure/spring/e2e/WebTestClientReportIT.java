@@ -5,7 +5,10 @@ import io.github.kolomyychenkoai.allure.spring.support.WebTestApp;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -17,18 +20,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Уровень B: обмен через {@code WebTestClient} попадает в отчёт через
- * {@code WebTestClientBuilderCustomizer} + консьюмер результата. Раньше клиент был невидим.
+ * {@code WebTestClientBuilderCustomizer}. Обмены с чтением тела — consumer результата (сразу);
+ * чисто статусные ({@code expectStatus()} без тела) — фильтр + проигрывание в afterTestMethod.
  */
 @SpringBootTest(classes = WebTestApp.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureWebTestClient
 @Epic("allure-spring-test")
 @Feature("HTTP-вызовы (WebTestClient)")
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class WebTestClientReportIT {
 
     @Autowired
     WebTestClient client;
 
     @Test
+    @Order(1)
     @DisplayName("GET через WebTestClient (с чтением тела) даёт HTTP-шаг с телом ответа")
     void webTestClientCallAppearsInReport() {
         client.get().uri("/api/hello/world").exchange()
@@ -44,6 +50,7 @@ class WebTestClientReportIT {
     }
 
     @Test
+    @Order(2)
     @DisplayName("POST с телом: и тело запроса, и тело ответа в отчёте")
     void webTestClientPostBodyAppearsInReport() {
         client.post().uri("/api/echo")
@@ -58,5 +65,22 @@ class WebTestClientReportIT {
 
         String req = CurrentReport.attachmentContent("HTTP Request").orElse("");
         assertTrue(req.contains("laptop"), () -> "тело POST-запроса не попало: " + req);
+    }
+
+    @Test
+    @Order(3)
+    @DisplayName("чисто статусный вызов (expectStatus без чтения тела) — обмен делается")
+    void statusOnlyCall() {
+        // НЕТ expectBody() → consumer результата не создаётся; ловит только фильтр.
+        // Шаг проигрывается в afterTestMethod (тело теста его ещё не видит) — проверяем в @Order(4).
+        client.get().uri("/api/hello/statusonly").exchange().expectStatus().isOk();
+    }
+
+    @Test
+    @Order(4)
+    @DisplayName("статус-онли вызов всё равно попал в отчёт (фильтр + replay)")
+    void statusOnlyStepWrittenToReport() {
+        assertTrue(CurrentReport.anyResultFileContains("HTTP GET /api/hello/statusonly → 200"),
+                "статус-онли вызов WebTestClient не попал в отчёт (фильтр/replay не сработал)");
     }
 }
