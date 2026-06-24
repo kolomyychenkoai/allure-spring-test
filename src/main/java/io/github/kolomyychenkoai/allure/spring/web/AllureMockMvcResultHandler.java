@@ -7,8 +7,6 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultHandler;
 
-import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.util.Collections;
 import java.util.Set;
 import java.util.WeakHashMap;
@@ -52,8 +50,10 @@ public class AllureMockMvcResultHandler implements ResultHandler {
                 Allure.addAttachment("HTTP Response", "text/plain", formatResponse(resp));
                 Exception resolved = result.getResolvedException();
                 if (resolved != null) {
-                    // при ошибке контроллера — причина в отчёт (иначе виден «→ 500» без объяснения)
-                    Allure.addAttachment("HTTP Exception", "text/plain", stackTrace(resolved));
+                    // при ошибке контроллера — причина в отчёт (иначе виден «→ 500» без объяснения).
+                    // ОДНА строка «класс: сообщение», а не стек: шаг успешный (статус ожидаем),
+                    // а простыня фреймворочного стека под зелёным шагом — шум (§ стандарта отчёта).
+                    Allure.addAttachment("HTTP Exception", "text/plain", summary(resolved));
                 }
             });
         } catch (Throwable t) {
@@ -61,10 +61,10 @@ public class AllureMockMvcResultHandler implements ResultHandler {
         }
     }
 
-    private static String stackTrace(Throwable ex) {
-        StringWriter sw = new StringWriter();
-        ex.printStackTrace(new PrintWriter(sw));
-        return sw.toString();
+    /** Краткая причина статуса: «класс: сообщение» (без стека — он шумит под успешным шагом). */
+    private static String summary(Throwable ex) {
+        String message = ex.getMessage();
+        return message != null ? ex.getClass().getName() + ": " + message : ex.getClass().getName();
     }
 
     private static String formatRequest(MockHttpServletRequest req) {

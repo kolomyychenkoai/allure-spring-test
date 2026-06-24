@@ -3,6 +3,7 @@ package io.github.kolomyychenkoai.allure.spring.wiremock;
 import com.github.tomakehurst.wiremock.http.HttpHeaders;
 import com.github.tomakehurst.wiremock.http.Request;
 import com.github.tomakehurst.wiremock.http.Response;
+import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import io.qameta.allure.Allure;
 
 import java.util.Queue;
@@ -34,8 +35,9 @@ public final class AllureWireMockListener {
                     response.getStatus(),
                     formatRequest(request),
                     formatResponse(response)));
-        } catch (Throwable ignored) {
-            // инструментирование не должно ронять тест
+        } catch (Throwable t) {
+            // инструментирование не должно ронять тест, но сбой не глотаем молча — видно на WARNING
+            AllureInstrumentationLogger.warn("WireMockCapture", t);
         }
     }
 
@@ -56,8 +58,8 @@ public final class AllureWireMockListener {
                     Allure.addAttachment("WireMock Request", "text/plain", req);
                     Allure.addAttachment("WireMock Response", "text/plain", resp);
                 });
-            } catch (Throwable ignored) {
-                // не роняем тест
+            } catch (Throwable t) {
+                AllureInstrumentationLogger.warn("WireMockFlush", t); // не роняем тест, но видно на WARNING
             }
         }
     }
