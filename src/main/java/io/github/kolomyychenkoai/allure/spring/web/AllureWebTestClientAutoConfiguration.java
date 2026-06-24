@@ -7,6 +7,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.test.web.reactive.server.WebTestClientBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.test.web.reactive.server.WebTestClient;
+import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
 
 /**
  * Авто-активация логирования {@code WebTestClient}: регистрирует
@@ -16,7 +17,10 @@ import org.springframework.test.web.reactive.server.WebTestClient;
  * Регистрируется через {@code META-INF/spring/...AutoConfiguration.imports}.
  */
 @AutoConfiguration
-@ConditionalOnClass({WebTestClient.class, WebTestClientBuilderCustomizer.class})
+// ExchangeFilterFunction (webflux) ОБЯЗАТЕЛЕН: WebTestClient есть в spring-test и в чисто
+// сервлетном приложении, но наш фильтр реализует webflux-тип. Без него @AutoConfigureMockMvc
+// у сервлет-потребителя падал бы NoClassDefFoundError при создании кастомайзера.
+@ConditionalOnClass({WebTestClient.class, WebTestClientBuilderCustomizer.class, ExchangeFilterFunction.class})
 public class AllureWebTestClientAutoConfiguration {
 
     @Bean
