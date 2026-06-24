@@ -1,4 +1,4 @@
-package io.github.kolomyychenkoai.allure.spring.web;
+package io.github.kolomyychenkoai.allure.spring.web.internal;
 
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import io.qameta.allure.Allure;
@@ -17,7 +17,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 /**
  * Логирует обмен {@code WebTestClient} в Allure-отчёт шагом «HTTP METHOD path → status» с
  * вложениями «HTTP Request»/«HTTP Response» — единообразно с MockMvc/RestAssured/RestTemplate.
- * Подключается через {@link AllureWebTestClientAutoConfiguration} (builder-кастомайзер
+ * Подключается через {@code AllureWebTestClientAutoConfiguration} (builder-кастомайзер
  * Spring Boot), код в тестах не нужен.
  * <p>
  * ДВА пути захвата (у WebTestClient нет единой точки, ловящей и тело, и статус-онли):
@@ -29,7 +29,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  *       КАЖДЫЙ обмен, в т.ч. чисто статусные ({@code expectStatus()} без чтения тела), но БЕЗ
  *       чтения тела (чтобы не «съесть» его у теста) — только метод/url/статус/заголовки. Идёт
  *       на реактивном потоке без активного кейса → буферизуется и проигрывается на тест-потоке
- *       в {@code afterTestMethod} ({@link AllureWebTestClientListener}).</li>
+ *       в {@code afterTestMethod} ({@code AllureWebTestClientListener}).</li>
  * </ul>
  * Дедуп: обмены, уже показанные consumer'ом (с телом), фильтр НЕ задваивает — при проигрывании
  * вычитаются по ключу {@code METHOD url}. Окно привязки = тест-метод (буфер чистится в

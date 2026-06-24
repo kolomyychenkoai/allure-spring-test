@@ -1,4 +1,4 @@
-package io.github.kolomyychenkoai.allure.spring.web;
+package io.github.kolomyychenkoai.allure.spring.web.internal;
 
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import io.qameta.allure.Allure;
@@ -12,7 +12,7 @@ import io.restassured.specification.FilterableResponseSpecification;
  * RestAssured-фильтр: каждый запрос даёт в Allure-отчёте шаг
  * «HTTP METHOD path → status» с вложениями «HTTP Request» и «HTTP Response»
  * (имена едины с MockMvc-модулем). Ставится глобально автоматически —
- * см. {@link AllureRestAssuredListener}, код в тестах не нужен.
+ * см. {@code AllureRestAssuredListener}, код в тестах не нужен.
  * <p>
  * В имени шага — путь без {@code host:port} (детерминированно, без эфемерного RANDOM_PORT);
  * полный URL остаётся в теле вложения «HTTP Request». Фильтр глобальный и переживает

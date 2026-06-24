@@ -1,4 +1,4 @@
-package io.github.kolomyychenkoai.allure.spring.web;
+package io.github.kolomyychenkoai.allure.spring.web.internal;
 
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
@@ -13,12 +13,12 @@ import static net.bytebuddy.matcher.ElementMatchers.named;
 /**
  * Байткод-перехват {@code MockMvc.perform(...)} — ловит ЛЮБОЙ MockMvc, включая собранный
  * руками ({@code MockMvcBuilders.standaloneSetup(...)}), которого кастомайзер Spring Boot
- * ({@link AllureMockMvcAutoConfiguration}) не достаёт. Логику отчёта переиспользует у
+ * ({@code AllureMockMvcAutoConfiguration}) не достаёт. Логику отчёта переиспользует у
  * {@link AllureMockMvcResultHandler}; дубль с кастомайзером отсекается дедупом по identity
  * {@code MvcResult} внутри хендлера — один вызов даёт один шаг.
  * <p>
  * Установка идемпотентна (CAS-гард, один раз на JVM), ставится из
- * {@link AllureMockMvcListener#beforeTestClass}. Сбой инструментирования логируется на
+ * {@code AllureMockMvcListener#beforeTestClass}. Сбой инструментирования логируется на
  * WARNING и не роняет тест (контракт {@link AllureInstrumentation}).
  */
 public final class AllureMockMvcInstrumentation {
