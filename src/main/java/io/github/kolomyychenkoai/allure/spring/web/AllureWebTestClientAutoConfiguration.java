@@ -19,6 +19,10 @@ public class AllureWebTestClientAutoConfiguration {
 
     @Bean
     public WebTestClientBuilderCustomizer allureWebTestClientBuilderCustomizer() {
-        return builder -> builder.entityExchangeResultConsumer(AllureWebTestClientLogger::log);
+        // filter ловит КАЖДЫЙ обмен (вкл. статус-онли, без чтения тела) → буфер→replay;
+        // consumer полностью логирует обмены с чтением тела (на тест-потоке, вкл. тела).
+        return builder -> builder
+                .filter(new AllureWebTestClientFilter())
+                .entityExchangeResultConsumer(AllureWebTestClientLogger::log);
     }
 }
