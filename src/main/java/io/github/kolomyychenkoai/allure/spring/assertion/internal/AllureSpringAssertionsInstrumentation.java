@@ -1,4 +1,4 @@
-package io.github.kolomyychenkoai.allure.spring.assertion;
+package io.github.kolomyychenkoai.allure.spring.assertion.internal;
 
 import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
