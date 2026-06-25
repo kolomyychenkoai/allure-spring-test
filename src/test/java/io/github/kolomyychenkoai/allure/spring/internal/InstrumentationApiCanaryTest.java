@@ -81,7 +81,9 @@ class InstrumentationApiCanaryTest {
     @DisplayName("JDBC: ключевые методы JdbcTemplate/NamedParameterJdbcTemplate (матчеры JDBC-модуля)")
     void jdbcMatchers() {
         String jt = "org.springframework.jdbc.core.JdbcTemplate";
-        for (String method : new String[]{"query", "queryForObject", "queryForList", "update", "batchUpdate", "execute"}) {
+        // полный инвентарь METHODS из AllureJdbcInstrumentation (не подмножество)
+        for (String method : new String[]{"query", "queryForObject", "queryForList", "queryForMap",
+                "queryForRowSet", "queryForStream", "update", "batchUpdate", "execute"}) {
             assertTrue(hasMethod(jt, method, -1, null),
                     "JdbcTemplate." + method + " уехал → обнови METHODS в AllureJdbcInstrumentation");
         }

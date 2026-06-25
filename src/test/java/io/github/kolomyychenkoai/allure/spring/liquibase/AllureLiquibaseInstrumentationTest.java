@@ -5,6 +5,7 @@ import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.qameta.allure.model.TestResult;
 import liquibase.changelog.ChangeSet;
 import liquibase.changelog.DatabaseChangeLog;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -38,6 +39,15 @@ class AllureLiquibaseInstrumentationTest {
         resetState();
     }
 
+    /**
+     * Гарантированный сброс статики после ВСЕГО класса — чтобы порядок тест-классов в JVM не влиял
+     * на {@code LiquibaseReportIT} (он полагается на реальный снимок старта с SNAPSHOT_EMITTED==false).
+     */
+    @AfterAll
+    static void tearDownClass() {
+        resetState();
+    }
+
     private static ChangeSet changeSet(String id, String author) {
         return new ChangeSet(id, author, false, false,
                 "db/changelog/test.xml", null, null, new DatabaseChangeLog());
@@ -52,6 +62,19 @@ class AllureLiquibaseInstrumentationTest {
         assertThat(allure.hasStep(result, "Liquibase: changeset create-thing (alice)")).isTrue();
         assertThat(allure.attachment(result, "Changeset").orElseThrow())
                 .contains("Id: create-thing").contains("Author: alice");
+    }
+
+    @Test
+    @DisplayName("вложение Changeset содержит changelog и comments (детали под ассертом)")
+    void changesetAttachmentHasDetails() {
+        ChangeSet cs = changeSet("create-thing", "alice");
+        cs.setComments("создаём таблицу thing");
+
+        TestResult result = allure.run("lb-details", () -> AllureLiquibaseInstrumentation.onExecute(cs, null));
+
+        assertThat(allure.attachment(result, "Changeset").orElseThrow())
+                .contains("Changelog: db/changelog/test.xml")
+                .contains("Comments: создаём таблицу thing");
     }
 
     @Test

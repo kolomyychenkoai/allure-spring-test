@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 /**
  * Уровень A: проверяем установку перехвата RestClient без байткода — зовём {@code onBuild(...)}
@@ -99,6 +100,32 @@ class AllureRestClientInstrumentationTest {
         builder.requestInterceptors(seen::addAll);
         long ours = seen.stream().filter(i -> i instanceof AllureRestTemplateInterceptor).count();
         assertThat(ours).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("ошибочный статус (404) тоже даёт шаг (RestClient бросает после записи шага)")
+    void errorStatusProducesStep() {
+        RestClient client = instrumented(404, "{\"error\":\"nope\"}");
+
+        TestResult result = allure.run("rc-404", () -> {
+            try {
+                client.get().uri("http://localhost/api/missing").retrieve().body(String.class);
+            } catch (RuntimeException expected) {
+                // RestClient по умолчанию бросает на 4xx — но интерсептор записал шаг ДО этого
+            }
+        });
+
+        assertThat(result.getSteps().stream().map(s -> s.getName()))
+                .anyMatch(n -> n.startsWith("HTTP GET") && n.endsWith("/api/missing → 404"));
+    }
+
+    @Test
+    @DisplayName("onBuild на null/чужом типе не бросает (instanceof-гард)")
+    void onBuildIsNullSafe() {
+        assertThatCode(() -> {
+            AllureRestClientInstrumentation.onBuild(null);
+            AllureRestClientInstrumentation.onBuild("не билдер");
+        }).doesNotThrowAnyException();
     }
 
     @Test

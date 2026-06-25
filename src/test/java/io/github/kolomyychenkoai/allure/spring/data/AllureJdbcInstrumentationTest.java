@@ -85,6 +85,78 @@ class AllureJdbcInstrumentationTest {
     }
 
     @Test
+    @DisplayName("исключение во ВЛОЖЕННОМ делегате не утекает счётчиком глубины (следующий вызов снова внешний)")
+    void nestedDelegateThrowDoesNotLeakDepth() {
+        TestResult result = allure.run("jdbc-nested-throw", () -> {
+            String outer = AllureJdbcInstrumentation.enter(JDBC, "queryForObject", new Object[]{"select 1"});
+            String inner = AllureJdbcInstrumentation.enter(JDBC, "query", new Object[]{"select 1"});
+            assertThat(inner).isNull();
+            AllureJdbcInstrumentation.exit(inner, null, new RuntimeException("inner boom")); // делегат бросил
+            AllureJdbcInstrumentation.exit(outer, null, new RuntimeException("inner boom")); // проброс наружу
+            // если бы exit не декрементил на ветке uuid==null — DEPTH застрял бы ≥1 и шаг не открылся
+            String fresh = AllureJdbcInstrumentation.enter(JDBC, "update", new Object[]{"update widget set name=?"});
+            assertThat(fresh).isNotNull();
+            AllureJdbcInstrumentation.exit(fresh, 1, null);
+        });
+
+        // два ВНЕШНИХ шага: упавший queryForObject (BROKEN) и успешный update — значит счётчик не утёк
+        long dbSteps = result.getSteps().stream().filter(s -> s.getName().startsWith("DB ")).count();
+        assertThat(dbSteps).isEqualTo(2);
+        assertThat(allure.hasStep(result, "DB JdbcTemplate.update")).isTrue();
+    }
+
+    @Test
+    @DisplayName("делегат-СИБЛИНГ внутри одного вызова не воскрешает шаг (счётчик глубины, а не флаг)")
+    void siblingDelegatesStayUnderOneStep() {
+        // queryForObject → query (вышел) → execute (новый сиблинг на той же глубине): с булевым флагом
+        // выход query сбросил бы флаг и execute стал бы «внешним» (лишний шаг). Счётчик держит depth=2.
+        TestResult result = allure.run("jdbc-sibling", () -> {
+            String outer = AllureJdbcInstrumentation.enter(JDBC, "queryForObject", new Object[]{"select 1"});
+            String in1 = AllureJdbcInstrumentation.enter(JDBC, "query", new Object[]{"select 1"});
+            assertThat(in1).isNull();
+            AllureJdbcInstrumentation.exit(in1, java.util.List.of(), null);
+            String in2 = AllureJdbcInstrumentation.enter(JDBC, "execute", new Object[]{"select 1"});
+            assertThat(in2).isNull(); // с флагом тут вернулось бы не-null → лишний шаг
+            AllureJdbcInstrumentation.exit(in2, null, null);
+            AllureJdbcInstrumentation.exit(outer, "x", null);
+        });
+
+        long dbSteps = result.getSteps().stream().filter(s -> s.getName().startsWith("DB ")).count();
+        assertThat(dbSteps).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("formatResult: int[] (batchUpdate) → «batch rows», null (void) → «void»")
+    void formatResultBranches() {
+        TestResult batch = allure.run("jdbc-batch", () -> {
+            String uuid = AllureJdbcInstrumentation.enter(JDBC, "batchUpdate",
+                    new Object[]{new String[]{"insert into widget(name) values('a')", "insert into widget(name) values('b')"}});
+            AllureJdbcInstrumentation.exit(uuid, new int[]{1, 1}, null);
+        });
+        assertThat(allure.attachment(batch, "DB Result").orElseThrow()).contains("batch rows: 2");
+        // firstSql для String[] склеивает запросы через ;\n
+        assertThat(allure.attachment(batch, "SQL").orElseThrow()).contains("insert into widget(name) values('a')")
+                .contains("insert into widget(name) values('b')");
+
+        TestResult voidCall = allure.run("jdbc-exec-void", () -> {
+            String uuid = AllureJdbcInstrumentation.enter(JDBC, "execute", new Object[]{"create table t(id int)"});
+            AllureJdbcInstrumentation.exit(uuid, null, null); // execute(String) возвращает void
+        });
+        assertThat(allure.attachment(voidCall, "DB Result").orElseThrow()).isEqualTo("void");
+    }
+
+    @Test
+    @DisplayName("firstSql: нет строкового аргумента (execute(callback)) → SQL-вложение «—»")
+    void firstSqlNoStringArgument() {
+        TestResult result = allure.run("jdbc-callback", () -> {
+            // у execute(ConnectionCallback) среди аргументов нет SQL-строки
+            String uuid = AllureJdbcInstrumentation.enter(JDBC, "execute", new Object[]{new Object()});
+            AllureJdbcInstrumentation.exit(uuid, "ok", null);
+        });
+        assertThat(allure.attachment(result, "SQL").orElseThrow()).isEqualTo("—");
+    }
+
+    @Test
     @DisplayName("без активного тест-кейса в отчёт ничего не пишется")
     void noStepWithoutActiveCase() {
         // setUp установил InMemoryAllure, но allure.run не вызывали → активного кейса нет
