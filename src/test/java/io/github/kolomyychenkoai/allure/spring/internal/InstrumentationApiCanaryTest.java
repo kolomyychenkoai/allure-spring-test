@@ -67,6 +67,46 @@ class InstrumentationApiCanaryTest {
     }
 
     @Test
+    @DisplayName("RestClient: внутренний DefaultRestClientBuilder.build() (матчер RestClient-модуля)")
+    void restClientMatchers() {
+        // ВНИМАНИЕ: DefaultRestClientBuilder — package-private ВНУТРЕННИЙ класс Spring (не публичный
+        // API). Самое хрупкое допущение ветки: при апгрейде Spring его могут переименовать/убрать молча.
+        assertTrue(classPresent("org.springframework.web.client.DefaultRestClientBuilder"),
+                "DefaultRestClientBuilder уехал (внутренний класс Spring!) → обнови матчер в AllureRestClientInstrumentation");
+        assertTrue(hasMethod("org.springframework.web.client.DefaultRestClientBuilder", "build", 0, null),
+                "DefaultRestClientBuilder.build() уехал → AllureRestClientInstrumentation вешает интерсептор в build()");
+    }
+
+    @Test
+    @DisplayName("JDBC: ключевые методы JdbcTemplate/NamedParameterJdbcTemplate (матчеры JDBC-модуля)")
+    void jdbcMatchers() {
+        String jt = "org.springframework.jdbc.core.JdbcTemplate";
+        for (String method : new String[]{"query", "queryForObject", "queryForList", "update", "batchUpdate", "execute"}) {
+            assertTrue(hasMethod(jt, method, -1, null),
+                    "JdbcTemplate." + method + " уехал → обнови METHODS в AllureJdbcInstrumentation");
+        }
+        String njt = "org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate";
+        assertTrue(hasMethod(njt, "update", -1, null),
+                "NamedParameterJdbcTemplate.update уехал → обнови матчер в AllureJdbcInstrumentation");
+        assertTrue(hasMethod(njt, "queryForObject", -1, null),
+                "NamedParameterJdbcTemplate.queryForObject уехал → обнови матчер в AllureJdbcInstrumentation");
+    }
+
+    @Test
+    @DisplayName("Liquibase: ChangeSet.execute(3-арг) + геттеры id/author/filePath/comments")
+    void liquibaseMatchers() {
+        String cs = "liquibase.changelog.ChangeSet";
+        // Матчим ТОЛЬКО 3-арг execute(DatabaseChangeLog, ChangeExecListener, Database): 2-арг overload
+        // делегирует в него (проверено на Liquibase 4.x) — одна точка покрывает старт и ручной update без дублей.
+        assertTrue(hasMethod(cs, "execute", 3, null),
+                "ChangeSet.execute(3-арг) уехал → обнови матчер в AllureLiquibaseInstrumentation");
+        assertTrue(hasMethod(cs, "getId", 0, null), "ChangeSet.getId уехал → AllureLiquibaseInstrumentation.details");
+        assertTrue(hasMethod(cs, "getAuthor", 0, null), "ChangeSet.getAuthor уехал → AllureLiquibaseInstrumentation.details");
+        assertTrue(hasMethod(cs, "getFilePath", 0, null), "ChangeSet.getFilePath уехал → AllureLiquibaseInstrumentation.details");
+        assertTrue(hasMethod(cs, "getComments", 0, null), "ChangeSet.getComments уехал → AllureLiquibaseInstrumentation.details");
+    }
+
+    @Test
     @DisplayName("WireMock сбросы: static resetAllRequests/resetScenario/resetAllScenarios + WireMockServer resetMappings/resetRequests/resetScenarios")
     void wireMockResetMatchers() {
         String stat = "com.github.tomakehurst.wiremock.client.WireMock";
