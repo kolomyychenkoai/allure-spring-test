@@ -4,6 +4,11 @@ spring:
   # маскирования нет — это значение будет видно в снимке конфигурации (данные фейковые)
   datasource:
     password: demo-password-value
+  # liquibase-core на тестовом classpath (provided) — без этого Spring Boot пытался бы
+  # прогнать миграции на старте ВО ВСЕХ Boot-контекстах (по дефолтному changelog'у, которого
+  # нет) и падал. Глобально выключаем; включаем точечно только в тесте Liquibase.
+  liquibase:
+    enabled: false
 
 logging:
   level:
