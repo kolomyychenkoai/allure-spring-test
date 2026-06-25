@@ -7,4 +7,4 @@
  * кода потребителя: обратная совместимость не гарантируется. Публичные точки входа модуля —
  * {@code Allure*AutoConfiguration} / {@code Allure*Listener} в пакете {@code web}.
  */
-package io.github.kolomyychenkoai.allure.spring.web.internal;
+package io.github.kolomyychenkoai.allure.spring.rest.internal;

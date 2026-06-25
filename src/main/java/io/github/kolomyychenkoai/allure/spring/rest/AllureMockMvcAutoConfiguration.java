@@ -1,6 +1,6 @@
-package io.github.kolomyychenkoai.allure.spring.web;
+package io.github.kolomyychenkoai.allure.spring.rest;
 
-import io.github.kolomyychenkoai.allure.spring.web.internal.AllureMockMvcResultHandler;
+import io.github.kolomyychenkoai.allure.spring.rest.internal.AllureMockMvcResultHandler;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.test.autoconfigure.web.servlet.MockMvcBuilderCustomizer;

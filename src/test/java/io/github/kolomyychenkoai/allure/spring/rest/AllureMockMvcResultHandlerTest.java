@@ -1,6 +1,6 @@
-package io.github.kolomyychenkoai.allure.spring.web;
+package io.github.kolomyychenkoai.allure.spring.rest;
 
-import io.github.kolomyychenkoai.allure.spring.web.internal.AllureMockMvcResultHandler;
+import io.github.kolomyychenkoai.allure.spring.rest.internal.AllureMockMvcResultHandler;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.github.kolomyychenkoai.allure.spring.support.WebTestApp;
 import io.qameta.allure.model.TestResult;

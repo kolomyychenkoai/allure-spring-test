@@ -335,7 +335,7 @@
                     <!-- Внутренние пакеты (.internal) — не публичный API, в javadoc не нужны;
                          заодно убирает ошибку «mockito.internal не виден» из MockitoInternals. -->
                     <excludePackageNames>
-                        io.github.kolomyychenkoai.allure.spring.internal:io.github.kolomyychenkoai.allure.spring.web.internal:io.github.kolomyychenkoai.allure.spring.data.internal:io.github.kolomyychenkoai.allure.spring.kafka.internal:io.github.kolomyychenkoai.allure.spring.wiremock.internal:io.github.kolomyychenkoai.allure.spring.assertion.internal:io.github.kolomyychenkoai.allure.spring.mock.internal:io.github.kolomyychenkoai.allure.spring.liquibase.internal
+                        io.github.kolomyychenkoai.allure.spring.internal:io.github.kolomyychenkoai.allure.spring.rest.internal:io.github.kolomyychenkoai.allure.spring.data.internal:io.github.kolomyychenkoai.allure.spring.kafka.internal:io.github.kolomyychenkoai.allure.spring.wiremock.internal:io.github.kolomyychenkoai.allure.spring.assertion.internal:io.github.kolomyychenkoai.allure.spring.mock.internal:io.github.kolomyychenkoai.allure.spring.liquibase.internal
                     </excludePackageNames>
                     <!-- AllureMockitoMockMaker — opt-in SPI-реализация: оборачивает приватный
                          mockito InlineByteBuddyMockMaker (mockito-core — JPMS-модуль, internal не

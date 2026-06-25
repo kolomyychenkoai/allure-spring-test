@@ -1,4 +1,4 @@
-package io.github.kolomyychenkoai.allure.spring.web.internal;
+package io.github.kolomyychenkoai.allure.spring.rest.internal;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

@@ -1,4 +1,4 @@
-package io.github.kolomyychenkoai.allure.spring.web.internal;
+package io.github.kolomyychenkoai.allure.spring.rest.internal;
 
 import org.springframework.web.reactive.function.client.ClientRequest;
 import org.springframework.web.reactive.function.client.ClientResponse;

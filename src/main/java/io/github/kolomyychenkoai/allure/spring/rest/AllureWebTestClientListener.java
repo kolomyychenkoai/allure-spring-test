@@ -1,6 +1,6 @@
-package io.github.kolomyychenkoai.allure.spring.web;
+package io.github.kolomyychenkoai.allure.spring.rest;
 
-import io.github.kolomyychenkoai.allure.spring.web.internal.AllureWebTestClientLogger;
+import io.github.kolomyychenkoai.allure.spring.rest.internal.AllureWebTestClientLogger;
 import org.springframework.core.Ordered;
 import org.springframework.test.context.TestContext;
 import org.springframework.test.context.TestExecutionListener;

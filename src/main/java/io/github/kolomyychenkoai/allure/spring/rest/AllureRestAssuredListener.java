@@ -1,7 +1,7 @@
-package io.github.kolomyychenkoai.allure.spring.web;
+package io.github.kolomyychenkoai.allure.spring.rest;
 
 import io.github.kolomyychenkoai.allure.spring.internal.ClassPresence;
-import io.github.kolomyychenkoai.allure.spring.web.internal.AllureRestAssuredFilter;
+import io.github.kolomyychenkoai.allure.spring.rest.internal.AllureRestAssuredFilter;
 import io.restassured.RestAssured;
 import io.restassured.filter.Filter;
 import org.springframework.core.Ordered;

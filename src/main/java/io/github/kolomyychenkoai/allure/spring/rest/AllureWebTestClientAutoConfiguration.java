@@ -1,7 +1,7 @@
-package io.github.kolomyychenkoai.allure.spring.web;
+package io.github.kolomyychenkoai.allure.spring.rest;
 
-import io.github.kolomyychenkoai.allure.spring.web.internal.AllureWebTestClientFilter;
-import io.github.kolomyychenkoai.allure.spring.web.internal.AllureWebTestClientLogger;
+import io.github.kolomyychenkoai.allure.spring.rest.internal.AllureWebTestClientFilter;
+import io.github.kolomyychenkoai.allure.spring.rest.internal.AllureWebTestClientLogger;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.test.web.reactive.server.WebTestClientBuilderCustomizer;

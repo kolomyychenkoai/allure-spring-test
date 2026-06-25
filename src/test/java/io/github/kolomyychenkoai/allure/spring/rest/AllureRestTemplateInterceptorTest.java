@@ -1,6 +1,6 @@
-package io.github.kolomyychenkoai.allure.spring.web;
+package io.github.kolomyychenkoai.allure.spring.rest;
 
-import io.github.kolomyychenkoai.allure.spring.web.internal.AllureRestTemplateInterceptor;
+import io.github.kolomyychenkoai.allure.spring.rest.internal.AllureRestTemplateInterceptor;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.qameta.allure.model.TestResult;
 import org.junit.jupiter.api.AfterEach;
