@@ -281,6 +281,10 @@
                         <include>**/*Tests.java</include>
                         <include>**/*IT.java</include>
                     </includes>
+                    <!-- СЛУЧАЙНЫЙ порядок тест-классов: тесты НЕ должны зависеть от порядка
+                         (порядок методов рандомизит junit-platform.properties). Любая будущая
+                         завязка на порядок упадёт сразу, а не «иногда». -->
+                    <runOrder>random</runOrder>
                     <systemPropertyVariables>
                         <allure.results.directory>${project.build.directory}/allure-results</allure.results.directory>
                     </systemPropertyVariables>
