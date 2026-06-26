@@ -58,8 +58,8 @@ class InstrumentationApiCanaryTest {
     }
 
     @Test
-    @DisplayName("Web: MockMvc.perform и RestTemplate.getInterceptors (матчеры web-модуля)")
-    void webMatchers() {
+    @DisplayName("REST: MockMvc.perform и RestTemplate.getInterceptors (матчеры rest-модуля)")
+    void restMatchers() {
         assertTrue(hasMethod("org.springframework.test.web.servlet.MockMvc", "perform", -1, null),
                 "MockMvc.perform уехал → обнови матчер в AllureMockMvcInstrumentation");
         assertTrue(hasMethod("org.springframework.web.client.RestTemplate", "getInterceptors", 0, null),
