@@ -136,7 +136,10 @@ public final class AllureWireMockSteps {
     }
 
     private static String writeAttachment(String content) {
-        String source = UUID.randomUUID().toString();
+        // имя по конвенции Allure (<uuid>-attachment.<ext>) — как у штатного addAttachment;
+        // иначе near-miss-файл был бы единственным вложением без суффикса и расширения,
+        // что путает внешних потребителей results (TestOps/ReportPortal), сниффящих тип по имени.
+        String source = UUID.randomUUID() + "-attachment.txt";
         Allure.getLifecycle().writeAttachment(source,
                 new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8)));
         return source;
