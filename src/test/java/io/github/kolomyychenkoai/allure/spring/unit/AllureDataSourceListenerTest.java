@@ -6,11 +6,13 @@ import io.qameta.allure.model.TestResult;
 import net.ttddyy.dsproxy.ExecutionInfo;
 import net.ttddyy.dsproxy.QueryInfo;
 import net.ttddyy.dsproxy.StatementType;
+import net.ttddyy.dsproxy.proxy.ParameterSetOperation;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.sql.PreparedStatement;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -45,6 +47,16 @@ class AllureDataSourceListenerTest {
         return info;
     }
 
+    /** PreparedStatement.setXxx(index, value) — как datasource-proxy записывает связанный параметр. */
+    private static ParameterSetOperation param(String setter, Class<?> valueType, int index, Object value) {
+        try {
+            var method = PreparedStatement.class.getMethod(setter, int.class, valueType);
+            return new ParameterSetOperation(method, new Object[]{index, value});
+        } catch (NoSuchMethodException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     @Test
     @DisplayName("INSERT: шаг «SQL INSERT», текст запроса во вложении")
     void logsInsert() {
@@ -65,6 +77,24 @@ class AllureDataSourceListenerTest {
         assertThat(allure.hasStep(result, "SQL SELECT widget")).isTrue();
         assertThat(allure.attachment(result, "SQL Query").orElseThrow())
                 .contains("from widget");
+    }
+
+    @Test
+    @DisplayName("связанные параметры PreparedStatement: их ЗНАЧЕНИЯ видны во вложении SQL Query")
+    void rendersBoundParameterValues() {
+        QueryInfo query = query("insert into widget (name, id) values (?, ?)");
+        // связываем ?1='laptop', ?2=42 — ровно как datasource-proxy после setString/setInt
+        query.setParametersList(List.of(List.of(
+                param("setString", String.class, 1, "laptop"),
+                param("setInt", int.class, 2, 42))));
+
+        TestResult result = allure.run("sql-params", () ->
+                listener.afterQuery(exec(), List.of(query)));
+
+        // мутация: если main перестанет рендерить параметры (напр. logCreator без Params) — значения исчезнут → RED
+        assertThat(allure.attachment(result, "SQL Query").orElseThrow())
+                .contains("laptop")   // значение строкового параметра
+                .contains("42");      // значение числового параметра
     }
 
     @Test

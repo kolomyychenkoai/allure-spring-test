@@ -75,6 +75,12 @@ public final class CurrentReport {
      * пошаговые WireMock-запросы): из тела теста его не прочитать, но к следующему
      * упорядоченному тесту Allure уже положил файл в {@code allure.results.directory}. Так
      * level-B проверяет такой контент через реальную цепочку, а не только на уровне A.
+     * <p>
+     * ⚠️ Сканирует ВЕСЬ каталог результатов (файлы всех тестов прогона), поэтому {@code text}
+     * ОБЯЗАН быть уникальным по всему прогону — иначе ассерт пройдёт за счёт файла другого
+     * теста (ложно-зелёный). Если маркер может встретиться у соседа (напр. шаг «Kafka: получено»
+     * пишут два разных теста), привязывай проверку к уникальной подстроке через
+     * {@link #anyResultFileContainsAll(String...)} (напр. + topic/значение этого теста).
      */
     public static boolean anyResultFileContains(String text) {
         Path dir = Paths.get(System.getProperty("allure.results.directory", "allure-results"));

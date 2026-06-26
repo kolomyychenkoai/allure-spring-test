@@ -58,11 +58,19 @@ class KafkaListenerReportIT {
     @AfterAll
     @DisplayName("принятое @KafkaListener сообщение попало в отчёт")
     static void consumerStepWrittenToReport() {
-        assertTrue(CurrentReport.anyResultFileContains("Kafka: получено"),
-                "шаг приёма @KafkaListener не попал в отчёт");
-        // «Offset:» есть ТОЛЬКО в consumer-вложении «Принятые сообщения» (у producer его нет),
-        // вместе со значением — доказывает, что приём, а не отправка, записал id:42
-        assertTrue(CurrentReport.anyResultFileContainsAll("Offset:", "\"id\":42"),
-                "вложение приёма @KafkaListener (Offset + значение) не попало в отчёт");
+        // Маркер ОБЯЗАН быть уникальным по всему прогону: шаг «Kafka: получено» и фрагменты
+        // вложения пишет и KafkaReportIT (прямой poll по topic order-events) в ОБЩИЙ
+        // allure-results. Привязываемся к consumer-вложению «Принятые сообщения» ИМЕННО этого
+        // теста: его содержимое co-located в ОДНОМ файле-вложении и уникально — topic
+        // listener-events + payload id:42 (producer-тест шлёт id:7 в order-events). Так ассерт
+        // краснеет, если replay-путь @KafkaListener (буфер на потоке контейнера → flush в
+        // afterTestMethod) сломан. (Имя шага «Kafka: получено» лежит в result.json, а topic/
+        // payload — в отдельном файле-вложении, поэтому co-located маркеры берём из вложения.)
+        assertTrue(CurrentReport.anyResultFileContainsAll("Topic: listener-events", "\"id\":42"),
+                "вложение приёма @KafkaListener (topic listener-events + payload id:42) не попало в отчёт");
+        // «Offset:» есть ТОЛЬКО в consumer-вложении (у producer его нет) — вместе с нашим topic
+        // доказывает, что это ПРИЁМ, а не отправка, и привязан к listener-events
+        assertTrue(CurrentReport.anyResultFileContainsAll("Offset:", "Topic: listener-events"),
+                "consumer-вложение (Offset для topic listener-events) не попало в отчёт");
     }
 }

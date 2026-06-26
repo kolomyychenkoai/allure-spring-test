@@ -116,14 +116,28 @@ class AllureWireMockTestListenerTest {
     }
 
     @Test
-    @DisplayName("без активного тест-кейса before/afterTestMethod не пишут и не падают")
-    void lifecycleHooksWithoutActiveCaseDoNotThrow() {
-        WithStatic.SERVER = running();
+    @DisplayName("без активного тест-кейса before/afterTestMethod не пишут в отчёт и не падают")
+    void lifecycleHooksWithoutActiveCaseDoNotThrow() throws Exception {
+        WireMockServer server = running();
+        WithStatic.SERVER = server;
+        // реальный near-miss: незаматченный запрос → afterTestMethod ПОПЫТАЛСЯ бы выложить его шагом+вложением,
+        // если бы не гейт активного кейса. Без него (run() не звали) запись в отчёт идти НЕ должна.
+        server.stubFor(com.github.tomakehurst.wiremock.client.WireMock.get(
+                com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo("/api/prices"))
+                .willReturn(com.github.tomakehurst.wiremock.client.WireMock.okJson("{}")));
+        java.net.http.HttpClient.newHttpClient().send(
+                java.net.http.HttpRequest.newBuilder(java.net.URI.create(server.baseUrl() + "/api/wrong")).build(),
+                java.net.http.HttpResponse.BodyHandlers.ofString());
+
         TestContext ctx = context(WithStatic.class, null);
         assertThatCode(() -> {
             listener.beforeTestMethod(ctx);
             listener.afterTestMethod(ctx);
         }).doesNotThrowAnyException();
+
+        // не просто «не падает»: без активного кейса в отчёт не должно уйти НИЧЕГО (ни шага, ни байтов вложения).
+        // Мутация: убери гейт active() в AllureWireMockSteps.nearMisses → near-miss-вложение запишется → RED.
+        assertThat(allure.wroteNothing()).isTrue();
     }
 
     // --- фикстуры с полями WireMockServer ---

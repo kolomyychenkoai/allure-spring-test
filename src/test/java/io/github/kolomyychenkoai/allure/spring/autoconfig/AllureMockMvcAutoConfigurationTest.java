@@ -5,7 +5,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.autoconfigure.web.servlet.MockMvcBuilderCustomizer;
+import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.test.web.servlet.ResultHandler;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -22,5 +24,14 @@ class AllureMockMvcAutoConfigurationTest {
     @DisplayName("кастомайзер MockMvc регистрируется по умолчанию")
     void customizerPresentByDefault() {
         runner.run(ctx -> assertThat(ctx).hasSingleBean(MockMvcBuilderCustomizer.class));
+    }
+
+    @Test
+    @DisplayName("без MockMvc (ResultHandler) на classpath: кастомайзер НЕ регистрируется")
+    void customizerAbsentWithoutResultHandler() {
+        // потребитель без spring-test MockMvc не должен получить бин (иначе NoClassDefFoundError).
+        // Мутация: убери @ConditionalOnClass(ResultHandler) → бин появится без класса → RED.
+        runner.withClassLoader(new FilteredClassLoader(ResultHandler.class))
+                .run(ctx -> assertThat(ctx).doesNotHaveBean(MockMvcBuilderCustomizer.class));
     }
 }
