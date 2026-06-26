@@ -1,4 +1,4 @@
-io.github.kolomyychenkoai.allure.spring.web.AllureMockMvcAutoConfiguration
-io.github.kolomyychenkoai.allure.spring.web.AllureWebTestClientAutoConfiguration
+io.github.kolomyychenkoai.allure.spring.rest.AllureMockMvcAutoConfiguration
+io.github.kolomyychenkoai.allure.spring.rest.AllureWebTestClientAutoConfiguration
 io.github.kolomyychenkoai.allure.spring.data.AllureDataJpaAutoConfiguration
 io.github.kolomyychenkoai.allure.spring.data.AllureDataSourceAutoConfiguration

@@ -142,6 +142,13 @@
             <artifactId>jakarta.persistence-api</artifactId>
             <scope>provided</scope>
         </dependency>
+        <!-- Модуль прямого JDBC: JdbcTemplate/NamedParameterJdbcTemplate (байткод-перехват).
+             provided — у потребителя spring-jdbc есть в test-scope; без него модуль не активируется. -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-jdbc</artifactId>
+            <scope>provided</scope>
+        </dependency>
         <!-- Модуль WireMock: provided — активируется, только если WireMock на classpath
              потребителя; не в Spring Boot BOM — версия явно. -->
         <dependency>
@@ -182,6 +189,15 @@
         <dependency>
             <groupId>org.apache.kafka</groupId>
             <artifactId>kafka-clients</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- Модуль Liquibase: перехват применения changeset'ов (байткод). provided —
+             liquibase-core есть у потребителя в test-scope, если он пользуется миграциями;
+             без него модуль не активируется. Версия — из Spring Boot BOM. -->
+        <dependency>
+            <groupId>org.liquibase</groupId>
+            <artifactId>liquibase-core</artifactId>
             <scope>provided</scope>
         </dependency>
 
@@ -265,6 +281,10 @@
                         <include>**/*Tests.java</include>
                         <include>**/*IT.java</include>
                     </includes>
+                    <!-- СЛУЧАЙНЫЙ порядок тест-классов: тесты НЕ должны зависеть от порядка
+                         (порядок методов рандомизит junit-platform.properties). Любая будущая
+                         завязка на порядок упадёт сразу, а не «иногда». -->
+                    <runOrder>random</runOrder>
                     <systemPropertyVariables>
                         <allure.results.directory>${project.build.directory}/allure-results</allure.results.directory>
                     </systemPropertyVariables>
@@ -319,7 +339,7 @@
                     <!-- Внутренние пакеты (.internal) — не публичный API, в javadoc не нужны;
                          заодно убирает ошибку «mockito.internal не виден» из MockitoInternals. -->
                     <excludePackageNames>
-                        io.github.kolomyychenkoai.allure.spring.internal:io.github.kolomyychenkoai.allure.spring.web.internal:io.github.kolomyychenkoai.allure.spring.data.internal:io.github.kolomyychenkoai.allure.spring.kafka.internal:io.github.kolomyychenkoai.allure.spring.wiremock.internal:io.github.kolomyychenkoai.allure.spring.assertion.internal:io.github.kolomyychenkoai.allure.spring.mock.internal
+                        io.github.kolomyychenkoai.allure.spring.internal:io.github.kolomyychenkoai.allure.spring.rest.internal:io.github.kolomyychenkoai.allure.spring.data.internal:io.github.kolomyychenkoai.allure.spring.kafka.internal:io.github.kolomyychenkoai.allure.spring.wiremock.internal:io.github.kolomyychenkoai.allure.spring.assertion.internal:io.github.kolomyychenkoai.allure.spring.mock.internal:io.github.kolomyychenkoai.allure.spring.liquibase.internal
                     </excludePackageNames>
                     <!-- AllureMockitoMockMaker — opt-in SPI-реализация: оборачивает приватный
                          mockito InlineByteBuddyMockMaker (mockito-core — JPMS-модуль, internal не
