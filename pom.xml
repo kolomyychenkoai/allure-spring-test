@@ -201,6 +201,15 @@
             <scope>provided</scope>
         </dependency>
 
+        <!-- Модуль Awaitility: ловим await()...until() через официальный SPI
+             (ConditionEvaluationListener). provided — awaitility есть у потребителя в test-scope,
+             если он им пользуется; без него модуль не активируется. Версия — из Spring Boot BOM. -->
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
         <!-- datasource-proxy: наш механизм логирования реального SQL. optional —
              как и прочие feature-зависимости, не навязываем транзитивно; модуль
              активируется, только если datasource-proxy есть на classpath потребителя
@@ -339,7 +348,7 @@
                     <!-- Внутренние пакеты (.internal) — не публичный API, в javadoc не нужны;
                          заодно убирает ошибку «mockito.internal не виден» из MockitoInternals. -->
                     <excludePackageNames>
-                        io.github.kolomyychenkoai.allure.spring.internal:io.github.kolomyychenkoai.allure.spring.rest.internal:io.github.kolomyychenkoai.allure.spring.data.internal:io.github.kolomyychenkoai.allure.spring.kafka.internal:io.github.kolomyychenkoai.allure.spring.wiremock.internal:io.github.kolomyychenkoai.allure.spring.assertion.internal:io.github.kolomyychenkoai.allure.spring.mock.internal:io.github.kolomyychenkoai.allure.spring.liquibase.internal
+                        io.github.kolomyychenkoai.allure.spring.internal:io.github.kolomyychenkoai.allure.spring.rest.internal:io.github.kolomyychenkoai.allure.spring.data.internal:io.github.kolomyychenkoai.allure.spring.kafka.internal:io.github.kolomyychenkoai.allure.spring.wiremock.internal:io.github.kolomyychenkoai.allure.spring.assertion.internal:io.github.kolomyychenkoai.allure.spring.mock.internal:io.github.kolomyychenkoai.allure.spring.liquibase.internal:io.github.kolomyychenkoai.allure.spring.awaitility.internal
                     </excludePackageNames>
                     <!-- AllureMockitoMockMaker — opt-in SPI-реализация: оборачивает приватный
                          mockito InlineByteBuddyMockMaker (mockito-core — JPMS-модуль, internal не

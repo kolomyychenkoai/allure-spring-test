@@ -10,4 +10,5 @@ io.github.kolomyychenkoai.allure.spring.wiremock.AllureWireMockTestListener,\
 io.github.kolomyychenkoai.allure.spring.assertion.AllureAssertionsListener,\
 io.github.kolomyychenkoai.allure.spring.kafka.AllureKafkaListener,\
 io.github.kolomyychenkoai.allure.spring.data.AllureJdbcListener,\
-io.github.kolomyychenkoai.allure.spring.liquibase.AllureLiquibaseListener
+io.github.kolomyychenkoai.allure.spring.liquibase.AllureLiquibaseListener,\
+io.github.kolomyychenkoai.allure.spring.awaitility.AllureAwaitilityListener
