@@ -34,6 +34,14 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  * Дедуп: обмены, уже показанные consumer'ом (с телом), фильтр НЕ задваивает — при проигрывании
  * вычитаются по ключу {@code METHOD url}. Окно привязки = тест-метод (буфер чистится в
  * {@code beforeTestMethod}). Всё под проверкой активного кейса и в try/catch.
+ * <p>
+ * Границы (см. README, раздел «WebTestClient»): (1) при {@code expectStatus()...expectBody()}
+ * шаг проверки статуса от ассерт-модуля рендерится ВЫШЕ HTTP-шага — статус проверяется раньше
+ * чтения тела (структурный артефакт fluent-API, не регресс); (2) дедуп по ключу {@code METHOD url}
+ * подавит статус-онли обмен, если в одном тесте есть второй РАЗНЫЙ обмен с тем же METHOD+url;
+ * (3) статус-онли буфер ({@code BUFFER}/{@code HANDLED}) — общий статический, ловится на
+ * реактивном потоке → под {@code @Execution(CONCURRENT)} в одной JVM может уехать в чужой кейс
+ * (consumer-путь с телом безопасен — он синхронный, на тест-потоке).
  */
 public final class AllureWebTestClientLogger {
 
