@@ -64,8 +64,12 @@ public final class MockitoInternals {
                 Field field = wrapper.getClass().getDeclaredField(fieldName);
                 field.setAccessible(true);
                 return field.get(wrapper);
-            } catch (Throwable ignored) {
-                // пробуем следующее имя поля
+            } catch (NoSuchFieldException notHere) {
+                // ожидаемо: этой обёртки нет — пробуем следующее имя поля
+            } catch (Throwable t) {
+                // неожиданный сбой (напр. InaccessibleObjectException) — видим на WARNING, не молча
+                AllureInstrumentationLogger.warn("MockitoUnwrapMode", t);
+                return null;
             }
         }
         return null;
