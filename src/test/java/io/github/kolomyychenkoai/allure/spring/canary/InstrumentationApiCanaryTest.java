@@ -109,6 +109,19 @@ class InstrumentationApiCanaryTest {
     }
 
     @Test
+    @DisplayName("Awaitility: SPI ConditionEvaluationListener + EvaluatedCondition-геттеры")
+    void awaitilityMatchers() {
+        assertTrue(hasMethod("org.awaitility.Awaitility", "setDefaultConditionEvaluationListener", 1, null),
+                "Awaitility.setDefaultConditionEvaluationListener уехал → AllureAwaitilityListener регистрирует слушатель через него");
+        assertTrue(classPresent("org.awaitility.core.ConditionEvaluationListener"),
+                "ConditionEvaluationListener уехал → AllureAwaitilityConditionListener реализует этот SPI");
+        String ec = "org.awaitility.core.EvaluatedCondition";
+        assertTrue(hasMethod(ec, "isSatisfied", 0, null), "EvaluatedCondition.isSatisfied уехал → AllureAwaitilityConditionListener");
+        assertTrue(hasMethod(ec, "getDescription", 0, null), "EvaluatedCondition.getDescription уехал → AllureAwaitilityConditionListener");
+        assertTrue(hasMethod(ec, "getElapsedTimeInMS", 0, null), "EvaluatedCondition.getElapsedTimeInMS уехал → AllureAwaitilityConditionListener");
+    }
+
+    @Test
     @DisplayName("WireMock сбросы: static resetAllRequests/resetScenario/resetAllScenarios + WireMockServer resetMappings/resetRequests/resetScenarios")
     void wireMockResetMatchers() {
         String stat = "com.github.tomakehurst.wiremock.client.WireMock";
