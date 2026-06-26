@@ -26,8 +26,7 @@ public class AllureAssertionsListener implements TestExecutionListener, Ordered 
 
     @Override
     public void beforeTestClass(TestContext testContext) {
-        if (!AllureInstrumentation.available()
-) {
+        if (!AllureInstrumentation.available()) {
             return;
         }
         AllureSpringAssertionsInstrumentation.install();

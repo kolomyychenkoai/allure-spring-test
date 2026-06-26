@@ -17,8 +17,16 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  * нет — поэтому буферизуем и проигрываем на правильном потоке.
  * Шаг «WireMock request METHOD url → status» + вложения «WireMock Request/Response».
  * <p>
- * Буфер — общий статический; модуль рассчитан на ПОСЛЕДОВАТЕЛЬНЫЙ прогон тест-классов.
- * При параллельном запуске обмены разных тестов могут перемешаться.
+ * Буфер — общий статический; модуль рассчитан на ПОСЛЕДОВАТЕЛЬНЫЙ прогон тест-классов
+ * (или forked-JVM). При потоковой параллели в одной JVM ({@code @Execution(CONCURRENT)})
+ * обмены разных тестов могут перемешаться.
+ * <p>
+ * Подписка на сервер ({@code addMockServiceRequestListener}, см. {@code AllureWireMockTestListener})
+ * НЕ снимается: {@code WireMockServer} обычно {@code static} и живёт весь прогон, поэтому наш
+ * request-listener остаётся на нём навсегда и пишет в этот общий буфер между тестами. Привязка
+ * к конкретному тесту держится за счёт {@code clear()} в {@code beforeTestMethod} и гейта
+ * активного тест-кейса при выкладке — что и делает буфер ещё одной точкой cross-test под
+ * потоковой параллелью (но корректно при последовательном/forked прогоне).
  */
 public final class AllureWireMockListener {
 

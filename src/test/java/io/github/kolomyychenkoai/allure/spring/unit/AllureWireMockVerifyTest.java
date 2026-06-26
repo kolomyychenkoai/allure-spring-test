@@ -2,6 +2,7 @@ package io.github.kolomyychenkoai.allure.spring.unit;
 
 import io.github.kolomyychenkoai.allure.spring.wiremock.internal.AllureWireMockVerifyInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
+import io.qameta.allure.model.Attachment;
 import io.qameta.allure.model.Status;
 import io.qameta.allure.model.StepResult;
 import io.qameta.allure.model.TestResult;
@@ -163,6 +164,13 @@ class AllureWireMockVerifyTest {
             assertThat(nearMiss.getStatus()).isEqualTo(Status.PASSED);
             assertThat(allure.attachment(result, "Near miss (почему не сматчилось)").orElseThrow())
                     .isNotBlank();
+            // SOURCE вложения (имя файла на диске), а не только контент: по конвенции Allure
+            // <uuid>-attachment.<ext>. Мутация: верни в writeAttachment голый UUID без суффикса →
+            // внешние потребители results (TestOps/ReportPortal) не определят тип → RED.
+            String source = nearMiss.getAttachments().stream()
+                    .filter(a -> "Near miss (почему не сматчилось)".equals(a.getName()))
+                    .map(Attachment::getSource).findFirst().orElseThrow();
+            assertThat(source).endsWith("-attachment.txt");
         } finally {
             server.stop();
         }

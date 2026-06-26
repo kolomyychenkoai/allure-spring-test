@@ -9,6 +9,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
+import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 import javax.sql.DataSource;
@@ -36,6 +37,28 @@ class AllureDataAutoConfigurationTest {
         new ApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(AllureDataSourceAutoConfiguration.class))
                 .run(ctx -> assertThat(ctx).hasBean("allureDataSourceProxyPostProcessor"));
+    }
+
+    @Test
+    @DisplayName("без datasource-proxy на classpath: BeanPostProcessor НЕ регистрируется")
+    void dataSourceProcessorAbsentWithoutProxyDataSourceBuilder() {
+        // потребитель без datasource-proxy не должен получить бин (иначе NoClassDefFoundError).
+        // Мутация: убери @ConditionalOnClass(ProxyDataSourceBuilder) → бин появится даже без класса → RED.
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(AllureDataSourceAutoConfiguration.class))
+                .withClassLoader(new FilteredClassLoader(ProxyDataSourceBuilder.class))
+                .run(ctx -> assertThat(ctx).doesNotHaveBean("allureDataSourceProxyPostProcessor"));
+    }
+
+    @Test
+    @DisplayName("без Spring Data Repository на classpath: JPA-аспект НЕ регистрируется")
+    void repositoryAspectAbsentWithoutRepositoryClass() {
+        // @ConditionalOnClass(name = {ProceedingJoinPoint, Repository}) — гасим один из имён.
+        // Мутация: убери условие → AllureRepositoryAspect появится без Repository на classpath → RED.
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(AllureDataJpaAutoConfiguration.class))
+                .withClassLoader(new FilteredClassLoader(org.springframework.data.repository.Repository.class))
+                .run(ctx -> assertThat(ctx).doesNotHaveBean(AllureRepositoryAspect.class));
     }
 
     @Test

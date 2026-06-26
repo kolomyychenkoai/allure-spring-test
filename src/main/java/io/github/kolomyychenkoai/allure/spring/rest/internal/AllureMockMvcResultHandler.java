@@ -118,6 +118,9 @@ public class AllureMockMvcResultHandler implements ResultHandler {
             if (content == null || content.length == 0) {
                 return "";
             }
+            // берём РЕАЛЬНУЮ кодировку запроса; если она не задана — фоллбэк UTF-8
+            // (для нестандартной кодировки без заголовка вложение может отрендериться неточно —
+            // приемлемо для тест-отчёта)
             String enc = req.getCharacterEncoding();
             return new String(content, enc != null ? enc : "UTF-8");
         } catch (Exception e) {

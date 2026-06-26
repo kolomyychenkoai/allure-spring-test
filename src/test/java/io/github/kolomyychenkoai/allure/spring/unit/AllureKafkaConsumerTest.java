@@ -96,4 +96,34 @@ class AllureKafkaConsumerTest {
         // убери гейт активного кейса → Allure.step/addAttachment запишут байты вложения → покраснеет
         assertThat(allure.wroteNothing()).isTrue();
     }
+
+    @Test
+    @DisplayName("flush БЕЗ активного кейса чистит буфер — запись @KafkaListener не утекает в следующий тест")
+    void bufferedRecordDoesNotLeakWhenFlushedWithoutActiveCase() {
+        // общий статический буфер изолируем от чужих записей прогона
+        AllureKafkaConsumerInstrumentation.clear();
+        try {
+            TopicPartition tp = new TopicPartition("listener-events", 0);
+            ConsumerRecord<String, String> record =
+                    new ConsumerRecord<>("listener-events", 0, 9L, "k", "LEAK-MARKER");
+            ConsumerRecords<String, String> records = new ConsumerRecords<>(Map.of(tp, List.of(record)));
+
+            // приём на «чужом» потоке (активного кейса нет) — запись уходит в буфер, в отчёт пока ничего
+            AllureKafkaConsumerInstrumentation.onPoll(records);
+            assertThat(allure.wroteNothing()).isTrue();
+
+            // flush БЕЗ активного кейса ОБЯЗАН очистить буфер (привязать запись не к чему).
+            // Мутация: убери BUFFER.clear() в ветке «нет кейса» — запись доживёт до след. теста.
+            AllureKafkaConsumerInstrumentation.flush();
+
+            // следующий тест-кейс: буфер уже пуст → ни шага приёма, ни маркера во вложении
+            TestResult next = allure.run("next-test", AllureKafkaConsumerInstrumentation::flush);
+            assertThat(allure.hasStep(next, "Kafka: получено 1 сообщ."))
+                    .as("запись из буфера не должна утечь в следующий тест")
+                    .isFalse();
+            assertThat(allure.attachment(next, "Принятые сообщения")).isEmpty();
+        } finally {
+            AllureKafkaConsumerInstrumentation.clear();
+        }
+    }
 }

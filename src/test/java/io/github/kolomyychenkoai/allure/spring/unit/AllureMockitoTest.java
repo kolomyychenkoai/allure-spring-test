@@ -4,6 +4,7 @@ import io.github.kolomyychenkoai.allure.spring.mock.internal.MockitoInternals;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.github.kolomyychenkoai.allure.spring.support.mock.Pricing;
 import io.github.kolomyychenkoai.allure.spring.support.mock.PricingCaller;
+import io.github.kolomyychenkoai.allure.spring.support.mock.PricingService;
 import io.qameta.allure.model.StepResult;
 import io.qameta.allure.model.TestResult;
 import org.junit.jupiter.api.AfterEach;
@@ -95,6 +96,36 @@ class AllureMockitoTest {
         // реальный инвариант: упавший verify НЕ создаёт шаг «Мок-проверка…»
         // (сломай — верни emit при падении — тест покраснеет; вызов price при этом залогирован)
         assertThat(stepNames(result)).noneMatch(n -> n.startsWith("Мок-проверка"));
+        assertThat(stepNames(result)).anyMatch(n -> n.startsWith("Мок-вызов:") && n.contains("price"));
+    }
+
+    @Test
+    @DisplayName("spy: вызов реального метода через прод-код даёт «Мок-вызов» с результатом")
+    void spyLogsRealCall() {
+        // createSpy: оборачиваем РЕАЛЬНЫЙ объект (не интерфейс) — наш MockMaker должен подменить handler
+        Pricing spy = Mockito.spy(new PricingService());
+
+        TestResult result = allure.run("spy", () ->
+                new PricingCaller().callPrice(spy, "laptop")); // реальный метод вернёт 100.0
+
+        // мутация: если createSpy перестанет оборачивать handler в AllureMockitoHandler — шага не будет → RED
+        assertThat(stepNames(result)).anyMatch(n -> n.startsWith("Мок-вызов:")
+                && n.contains("price") && n.contains("100.0"));
+        assertThat(allure.attachment(result, "Mock Result").orElseThrow()).contains("100.0");
+    }
+
+    @Test
+    @DisplayName("reset: после Mockito.reset мок ПО-ПРЕЖНЕМУ логирует вызов (handler пере-обёрнут)")
+    void resetRewrapsHandler() {
+        Pricing mock = Mockito.mock(Pricing.class);
+
+        TestResult result = allure.run("reset", () -> {
+            Mockito.reset(mock); // resetMock: новый handler ОБЯЗАН снова обернуться в AllureMockitoHandler
+            new PricingCaller().callPrice(mock, "laptop"); // нестабленный → дефолт 0.0, но вызов виден
+        });
+
+        // мутация: если resetMock не пере-обернёт handler (delegate.resetMock без AllureMockitoHandler) —
+        // вызов после reset не залогируется → шага «Мок-вызов» не будет → RED
         assertThat(stepNames(result)).anyMatch(n -> n.startsWith("Мок-вызов:") && n.contains("price"));
     }
 
