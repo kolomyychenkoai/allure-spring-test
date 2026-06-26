@@ -95,4 +95,45 @@ class AllureApplicationLogsListenerTest {
         }
         return count;
     }
+
+    @Test
+    @DisplayName("afterTestMethod без предшествующего beforeTestMethod — тихий no-op, не бросает")
+    void afterWithoutBeforeIsNoop() {
+        TestContext ctx = TestContexts.withEnvironment(new StandardEnvironment());
+        // нет beforeTestMethod → атрибут не выставлен; afterTestMethod должен просто выйти
+        listener.afterTestMethod(ctx); // не должно бросить
+    }
+
+    /**
+     * Инвариант zero-coding: листенер НЕ должен напрямую линковать {@code ch.qos.logback.*}
+     * в своих полях/сигнатурах и не иметь вложенных классов — иначе на потребителе без
+     * Logback (Log4j2/JUL) он бросит {@link NoClassDefFoundError} в beforeTestMethod и положит
+     * каждый тест. Вся работа с Logback обязана жить в gated-классе {@code LogbackLogCapture}.
+     * Мутация: вернуть аппендер/LoggerContext обратно в листенер → тест краснеет.
+     */
+    @Test
+    @DisplayName("листенер не линкует типы ch.qos.logback.* напрямую (гейт для Log4j2/JUL)")
+    void listenerDoesNotLinkLogbackTypes() {
+        Class<?> c = AllureApplicationLogsListener.class;
+
+        assertThat(c.getDeclaredClasses())
+                .as("у листенера не должно быть вложенных классов (аппендер вынесен в LogbackLogCapture)")
+                .isEmpty();
+
+        for (var f : c.getDeclaredFields()) {
+            assertThat(f.getType().getName())
+                    .as("поле %s не должно быть типом из ch.qos.logback.*", f.getName())
+                    .doesNotStartWith("ch.qos.logback.");
+        }
+        for (var m : c.getDeclaredMethods()) {
+            assertThat(m.getReturnType().getName())
+                    .as("возврат метода %s не должен быть из ch.qos.logback.*", m.getName())
+                    .doesNotStartWith("ch.qos.logback.");
+            for (var p : m.getParameterTypes()) {
+                assertThat(p.getName())
+                        .as("параметр метода %s не должен быть из ch.qos.logback.*", m.getName())
+                        .doesNotStartWith("ch.qos.logback.");
+            }
+        }
+    }
 }
