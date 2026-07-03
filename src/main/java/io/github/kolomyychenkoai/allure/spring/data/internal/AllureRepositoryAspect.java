@@ -9,6 +9,7 @@ import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 
+import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
@@ -46,6 +47,22 @@ import java.util.stream.Collectors;
  */
 @Aspect
 public class AllureRepositoryAspect {
+
+    // Резолвим jakarta.persistence.Entity рефлексивно: у потребителя Spring Data может быть
+    // без JPA (spring-data-jdbc/mongo/redis) — тогда JPA-аннотации на classpath нет, и жёсткая
+    // ссылка на .class бросила бы NoClassDefFoundError при первом же вызове репозитория.
+    // Null означает «JPA не подключён» — просто идём по generic-рендеру.
+    @SuppressWarnings("unchecked")
+    private static final Class<? extends Annotation> ENTITY_ANNOTATION = resolveEntityAnnotation();
+
+    @SuppressWarnings("unchecked")
+    private static Class<? extends Annotation> resolveEntityAnnotation() {
+        try {
+            return (Class<? extends Annotation>) Class.forName("jakarta.persistence.Entity");
+        } catch (ClassNotFoundException notOnClasspath) {
+            return null;
+        }
+    }
 
     private final Map<Class<?>, Field[]> fieldCache = new ConcurrentHashMap<>();
 
@@ -183,7 +200,7 @@ public class AllureRepositoryAspect {
                 || obj instanceof Boolean || obj instanceof Enum) {
             return obj.toString();
         }
-        if (clazz.isAnnotationPresent(jakarta.persistence.Entity.class)) {
+        if (ENTITY_ANNOTATION != null && clazz.isAnnotationPresent(ENTITY_ANNOTATION)) {
             return describeEntity(obj, clazz);
         }
         return AllureAdviceSupport.safe(obj); // безопасный рендер: toString может бросить + лимит длины
