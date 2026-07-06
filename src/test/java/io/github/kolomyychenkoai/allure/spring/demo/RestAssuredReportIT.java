@@ -6,6 +6,8 @@ import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
 import io.restassured.RestAssured;
 import io.restassured.http.ContentType;
+import io.restassured.matcher.ResponseAwareMatcher;
+import io.restassured.response.Response;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -40,12 +42,17 @@ class RestAssuredReportIT {
     @Test
     @DisplayName("RestAssured-вызовы (GET, POST, 404) попадают в отчёт шагами")
     void restAssuredCallsAppearInReport() {
-        given().when().get("/api/hello/{name}", "world").then().statusCode(200);
+        // + contentType: не-statusCode/body проверочный метод — доказать, что матчер ловит и его
+        // через РЕАЛЬНУЮ .then()-цепочку (а не только на уровне A)
+        given().when().get("/api/hello/{name}", "world").then().statusCode(200).contentType(ContentType.JSON);
         given().contentType(ContentType.JSON).body("{\"productName\":\"laptop\"}")
                 .when().post("/api/echo").then().statusCode(200).body("productName", equalTo("laptop"));
         given().when().get("/api/does-not-exist").then().statusCode(404);
-        // log-варианты того же имени (body()/headers() без аргументов) — это ЛОГ, не проверка:
-        // не должны попасть шагом «Проверка …»
+        // перегрузка body(String, ResponseAwareMatcher) САМО-делегирует в body(String,Matcher,Object[])
+        // ТОГО ЖЕ класса (DEPTH=2) — дедуп глубиной должен оставить РОВНО 1 шаг (снять гард → 2 → RED)
+        given().queryParam("q", "dq42").when().get("/api/search").then()
+                .body("query", (ResponseAwareMatcher<Response>) r -> equalTo("dq42"));
+        // log-вариант того же имени (body() без аргументов) — это ЛОГ, не проверка: шага «Проверка …» не даёт
         given().when().get("/api/hello/{name}", "world").then().log().body();
 
         List<String> steps = CurrentReport.stepNames();
@@ -56,11 +63,14 @@ class RestAssuredReportIT {
         // проверки .then() тоже попали в отчёт шагами (bytecode-перехват RestAssured-валидации)
         assertTrue(steps.contains("Проверка ответа: статус 200"), () -> "" + steps);
         assertTrue(steps.contains("Проверка ответа: статус 404"), () -> "" + steps);
-        // ровно ОДИН шаг на одну проверку тела — eager-ревалидация RestAssured и делегация
-        // перегрузок НЕ должны его задваивать (body("productName",...) вызван один раз)
-        long bodyChecks = steps.stream().filter(n -> n.startsWith("Проверка ответа: тело productName")
-                && n.contains("laptop")).count();
-        assertTrue(bodyChecks == 1, () -> "ожидался 1 шаг проверки тела, а их " + bodyChecks + ": " + steps);
+        // не-statusCode/body метод (contentType) ловится через реальную .then()-цепочку
+        assertTrue(steps.stream().anyMatch(n -> n.startsWith("Проверка ответа: тип содержимого")), () -> "" + steps);
+        // ТОЧНОЕ имя (не startsWith): ловит и задвоение, и мусор в значениях (напр. хвостовой [])
+        long bodyChecks = steps.stream().filter(n -> n.equals("Проверка ответа: тело productName \"laptop\"")).count();
+        assertTrue(bodyChecks == 1, () -> "ожидался 1 чистый шаг проверки тела, а их " + bodyChecks + ": " + steps);
+        // само-делегирующая перегрузка (ResponseAwareMatcher) → РОВНО 1 шаг (иначе гард глубины не работает)
+        long rawBodyChecks = steps.stream().filter(n -> n.startsWith("Проверка ответа: тело query")).count();
+        assertTrue(rawBodyChecks == 1, () -> "ResponseAwareMatcher: ожидался 1 шаг, а их " + rawBodyChecks + ": " + steps);
         // .log().body() (лог, не проверка) не должен породить пустой шаг «Проверка ответа: тело»
         assertTrue(steps.stream().noneMatch(n -> n.equals("Проверка ответа: тело")),
                 () -> "log().body() протёк шагом проверки: " + steps);

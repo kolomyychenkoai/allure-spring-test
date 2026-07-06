@@ -25,16 +25,31 @@ import static net.bytebuddy.matcher.ElementMatchers.takesArguments;
  * (носитель всех перегрузок {@code statusCode/statusLine/body/content/header(s)/cookie(s)/
  * contentType/time}). ИСКЛЮЧЕНЫ log-варианты того же имени ({@code body()}, {@code body(boolean)},
  * {@code headers()}, {@code cookies()} — они логируют, а не проверяют): фильтр по
- * {@code not(takesArguments(0))} + {@code not(takesArguments(boolean.class))}.
+ * {@code not(takesArguments(0))} + {@code not(takesArguments(boolean.class))}. 0-арг вариант
+ * покрыт живым тестом ({@code .then().log().body()}); boolean-вариант — защитно (не так частотен).
  * <p>
  * <b>Только УСПЕШНАЯ проверка.</b> RestAssured проверяет eager — упавшая проверка бросает
  * прямо из метода, {@code @Thrown != null} → шаг НЕ пишем (падение Allure покажет на уровне
- * теста). Дедуп делегации перегрузок — счётчиком глубины (как в AssertJ/Spring-ассертах): шаг
- * пишет только ВНЕШНИЙ (пользовательский) вызов.
+ * теста).
+ * <p>
+ * <b>Дедуп делегации перегрузок (счётчик глубины НУЖЕН здесь).</b> Обычно перегрузки форвардят
+ * НАРУЖУ в {@code ResponseSpecificationImpl} (не инструментируем) — там дублировать нечего. НО
+ * перегрузки с {@code ResponseAwareMatcher} само-делегируют ВНУТРИ класса: {@code body(String,
+ * ResponseAwareMatcher)} по байткоду зовёт {@code body(String, Matcher, Object[])} того же класса —
+ * оба инструментированы, без гарда вышло бы 2 шага на один пользовательский {@code .body(...)}.
+ * Поэтому считаем глубину (как в AssertJ/Spring-ассертах): шаг пишет только ВНЕШНИЙ вызов
+ * (проверено тестом {@code RestAssuredReportIT} через {@code ResponseAwareMatcher} → ровно 1 шаг).
  * <p>
  * <b>Границы by-design:</b> ловится только API {@code .then()...} с проверками ПРЯМО на нём;
  * проверки, спрятанные в общий {@code ResponseSpecification} ({@code .then().spec(spec)}),
  * отдельными шагами не выходят — их гоняет внутренний {@code validate()}, а не публичные методы.
+ * {@code content(...)} — deprecated-алиас {@code body(...)}, отражается меткой «тело».
+ * <p>
+ * ⚠️ <b>Завязано на внутренности RestAssured 5.5.x</b> ({@code io.restassured.internal.
+ * ValidatableResponseOptionsImpl} — носитель всех перегрузок {@code .then()}). При апгрейде
+ * RestAssured проверить (см. канарейку в {@code InstrumentationApiCanaryTest}): (1) класс всё ещё
+ * impl проверок {@code .then()} и несёт {@code statusCode}/{@code body}; (2) log-варианты по-прежнему
+ * 0-арг/{@code boolean}; (3) перечень имён-проверок не расширился новым методом.
  * Установка идемпотентна (CAS-гард {@code INSTALLED}) — один раз на JVM.
  */
 public final class AllureRestAssuredValidationInstrumentation {
@@ -108,15 +123,18 @@ public final class AllureRestAssuredValidationInstrumentation {
         return values.isEmpty() ? label : label + " " + values;
     }
 
-    /** Аргументы через пробел, безопасно (без throw/с лимитом длины); null-аргументы пропускаем. */
+    /** Аргументы через пробел, безопасно (без throw/с лимитом длины). */
     private static String argsString(Object[] args) {
         if (args == null || args.length == 0) {
             return "";
         }
         StringBuilder sb = new StringBuilder();
         for (Object a : args) {
-            if (a == null || (a instanceof Object[] arr && arr.length == 0)) {
-                continue; // null и пустой varargs (напр. body(path, matcher) без доп. пар) в имя не тащим
+            // пустой varargs (напр. body(path, matcher) без доп. пар) в имя не тащим;
+            // а вот null-аргумент рендерим явно ("null") — для header(name, null)/equalTo(null)
+            // это и есть проверяемое значение, терять его нельзя
+            if (a instanceof Object[] arr && arr.length == 0) {
+                continue;
             }
             if (sb.length() > 0) {
                 sb.append(' ');

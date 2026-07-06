@@ -78,6 +78,26 @@ class InstrumentationApiCanaryTest {
     }
 
     @Test
+    @DisplayName("RestAssured: внутренний ValidatableResponseOptionsImpl и его проверки (матчер RA-валидации)")
+    void restAssuredValidationMatchers() {
+        // ВНИМАНИЕ: ValidatableResponseOptionsImpl — ВНУТРЕННИЙ класс RestAssured (io.restassured.internal,
+        // без гарантий совместимости) и носитель всех перегрузок проверок .then(). Самое хрупкое допущение
+        // ветки: апгрейд RestAssured может переименовать класс/метод молча → шаги «Проверка ответа» исчезнут.
+        String vroi = "io.restassured.internal.ValidatableResponseOptionsImpl";
+        assertTrue(classPresent(vroi),
+                "ValidatableResponseOptionsImpl уехал (внутренний класс RestAssured!) → обнови матчер в AllureRestAssuredValidationInstrumentation");
+        for (String method : new String[]{"statusCode", "statusLine", "body", "header", "headers",
+                "cookie", "cookies", "contentType", "time"}) {
+            assertTrue(hasMethod(vroi, method, -1, null),
+                    "ValidatableResponseOptionsImpl." + method + " уехал → обнови список имён в AllureRestAssuredValidationInstrumentation");
+        }
+        // допущение исключения log-вариантов: body()/headers()/cookies() 0-арг ДОЛЖНЫ существовать
+        // (иначе not(takesArguments(0)) отсекает несуществующее — а значит меняется семантика перегрузок)
+        assertTrue(hasMethod(vroi, "body", 0, null),
+                "body() 0-арг (log-вариант) уехал → пересмотри исключение not(takesArguments(0)) в AllureRestAssuredValidationInstrumentation");
+    }
+
+    @Test
     @DisplayName("JDBC: ключевые методы JdbcTemplate/NamedParameterJdbcTemplate (матчеры JDBC-модуля)")
     void jdbcMatchers() {
         String jt = "org.springframework.jdbc.core.JdbcTemplate";
