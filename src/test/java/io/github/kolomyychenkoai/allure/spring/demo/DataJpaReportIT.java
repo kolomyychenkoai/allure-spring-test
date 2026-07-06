@@ -17,14 +17,13 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Уровень B: «живой» прогон на H2 через РЕАЛЬНУЮ авто-конфигурацию (аспект репозиториев +
  * datasource-proxy). «DB …» шаги пишутся в настоящий отчёт (showcase); тест читает их через
  * {@link CurrentReport}. Краснеет, если аспект/прокси не подключились или имена шагов съехали.
- * Бизнес-ассерты теста — на AssertJ (они тоже попадают в отчёт, это ок); проверки ОТЧЁТА — на
- * JUnit assertTrue (не инструментируется).
+ * Бизнес-ассерты теста — на AssertJ (они тоже попадают в отчёт, это ок); проверки ОТЧЁТА — через
+ * немой канал {@link CurrentReport#check}/{@link CurrentReport#assertStep} (не инструментируется).
  */
 @SpringBootTest(classes = JpaTestApp.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @Epic("allure-spring-test")
@@ -47,23 +46,23 @@ class DataJpaReportIT {
         assertThat(widgets.findById(999_999L)).isEmpty();
 
         List<String> steps = CurrentReport.stepNames();
-        assertTrue(steps.stream().anyMatch(n -> n.startsWith("DB ") && n.contains("WidgetRepository.save")),
+        CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("DB ") && n.contains("WidgetRepository.save")),
                 () -> "" + steps);
-        assertTrue(steps.stream().anyMatch(n -> n.startsWith("DB ") && n.contains("WidgetRepository.findById")),
+        CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("DB ") && n.contains("WidgetRepository.findById")),
                 () -> "" + steps);
-        assertTrue(steps.stream().anyMatch(n -> n.startsWith("DB ") && n.contains("WidgetRepository.findAll")),
+        CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("DB ") && n.contains("WidgetRepository.findAll")),
                 () -> "" + steps);
         // содержимое вложений (что ушло в БД / что вернулось) через реальную цепочку
-        assertTrue(CurrentReport.attachmentContent("DB Result").orElse("").contains("gadget"),
+        CurrentReport.check(CurrentReport.attachmentContent("DB Result").orElse("").contains("gadget"),
                 () -> "DB Result без сущности: " + CurrentReport.attachmentContent("DB Result"));
 
         // datasource-proxy (отдельный путь регистрации, оборачивает DataSource) — ловит РЕАЛЬНЫЙ SQL.
         // Без этого ассерта поломка регистрации ProxyDataSource в реальном контексте прошла бы мимо B.
-        assertTrue(steps.stream().anyMatch(n -> n.startsWith("SQL INSERT") && n.contains("widget")),
+        CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("SQL INSERT") && n.contains("widget")),
                 () -> "нет шага SQL INSERT widget: " + steps);
-        assertTrue(steps.stream().anyMatch(n -> n.startsWith("SQL SELECT")),
+        CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("SQL SELECT")),
                 () -> "нет шага SQL SELECT (findById/findAll): " + steps);
-        assertTrue(CurrentReport.attachmentContent("SQL Query").orElse("").toLowerCase().contains("widget"),
+        CurrentReport.check(CurrentReport.attachmentContent("SQL Query").orElse("").toLowerCase().contains("widget"),
                 () -> "SQL Query без текста запроса: " + CurrentReport.attachmentContent("SQL Query"));
     }
 
@@ -77,11 +76,11 @@ class DataJpaReportIT {
         assertThat(widgets.findById(saved.getId())).isEmpty();
 
         List<String> steps = CurrentReport.stepNames();
-        assertTrue(steps.stream().anyMatch(n -> n.contains("WidgetRepository.deleteById")), () -> "" + steps);
+        CurrentReport.check(steps.stream().anyMatch(n -> n.contains("WidgetRepository.deleteById")), () -> "" + steps);
         // SQL UPDATE и DELETE должны различаться в дереве (а не оба выглядеть как INSERT)
-        assertTrue(steps.stream().anyMatch(n -> n.startsWith("SQL UPDATE") && n.contains("widget")),
+        CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("SQL UPDATE") && n.contains("widget")),
                 () -> "нет шага SQL UPDATE widget: " + steps);
-        assertTrue(steps.stream().anyMatch(n -> n.startsWith("SQL DELETE") && n.contains("widget")),
+        CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("SQL DELETE") && n.contains("widget")),
                 () -> "нет шага SQL DELETE widget: " + steps);
     }
 
@@ -90,11 +89,11 @@ class DataJpaReportIT {
     void repositoryErrorIsVisibleAsBrokenStep() {
         assertThatThrownBy(() -> widgets.findById(null)).isInstanceOf(RuntimeException.class);
 
-        assertTrue(CurrentReport.steps().stream().anyMatch(s ->
+        CurrentReport.check(CurrentReport.steps().stream().anyMatch(s ->
                         s.getName().contains("WidgetRepository.findById") && s.getStatus() == Status.BROKEN),
                 () -> "нет BROKEN-шага findById: " + CurrentReport.stepNames());
         // «DB Call» (что ушло в БД) есть, «DB Result» при ошибке НЕ пишем
-        assertTrue(CurrentReport.attachmentNames().contains("DB Call"), "нет DB Call");
-        assertTrue(!CurrentReport.attachmentNames().contains("DB Result"), "DB Result не должен писаться при ошибке");
+        CurrentReport.check(CurrentReport.attachmentNames().contains("DB Call"), () -> "нет DB Call");
+        CurrentReport.check(!CurrentReport.attachmentNames().contains("DB Result"), () -> "DB Result не должен писаться при ошибке");
     }
 }

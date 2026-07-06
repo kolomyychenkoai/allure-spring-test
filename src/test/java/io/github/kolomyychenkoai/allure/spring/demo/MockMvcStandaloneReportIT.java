@@ -12,8 +12,6 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -37,9 +35,9 @@ class MockMvcStandaloneReportIT {
 
         List<String> steps = CurrentReport.stepNames();
         long count = steps.stream().filter("HTTP GET /api/hello/world → 200"::equals).count();
-        assertEquals(1, count, () -> "ожидали ровно один HTTP-шаг standalone MockMvc: " + steps);
+        CurrentReport.check(count == 1, () -> "ожидали ровно один HTTP-шаг standalone MockMvc: " + steps);
 
         String resp = CurrentReport.attachmentContent("HTTP Response").orElse("");
-        assertTrue(resp.contains("hello world"), () -> "HTTP Response без тела: " + resp);
+        CurrentReport.check(resp.contains("hello world"), () -> "HTTP Response без тела: " + resp);
     }
 }

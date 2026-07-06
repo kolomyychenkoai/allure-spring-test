@@ -12,8 +12,6 @@ import org.springframework.web.client.RestClient;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 /**
  * Уровень B: вызовы {@code RestClient} (новый текучий клиент Spring) попадают в отчёт через
  * интерсептор, навешенный байткодом на {@code DefaultRestClientBuilder.build()}. Раньше этого
@@ -38,11 +36,11 @@ class RestClientReportIT {
         client().get().uri("/api/hello/{name}", "world").retrieve().body(String.class);
 
         List<String> steps = CurrentReport.stepNames();
-        assertTrue(steps.stream().anyMatch("HTTP GET /api/hello/world → 200"::equals),
+        CurrentReport.check(steps.stream().anyMatch("HTTP GET /api/hello/world → 200"::equals),
                 () -> "нет HTTP-шага RestClient: " + steps);
 
         String resp = CurrentReport.attachmentContent("HTTP Response").orElse("");
-        assertTrue(resp.contains("hello world"), () -> "HTTP Response без тела: " + resp);
+        CurrentReport.check(resp.contains("hello world"), () -> "HTTP Response без тела: " + resp);
     }
 
     @Test
@@ -56,7 +54,7 @@ class RestClientReportIT {
         client.get().uri("/api/hello/{name}", "dup").retrieve().body(String.class);
 
         long steps = CurrentReport.stepNames().stream().filter("HTTP GET /api/hello/dup → 200"::equals).count();
-        assertTrue(steps == 1, () -> "ожидался ровно один HTTP-шаг (без дубля): " + CurrentReport.stepNames());
+        CurrentReport.check(steps == 1, () -> "ожидался ровно один HTTP-шаг (без дубля): " + CurrentReport.stepNames());
     }
 
     @Test
@@ -66,10 +64,10 @@ class RestClientReportIT {
                 .body(java.util.Map.of("productName", "laptop")).retrieve().body(String.class);
 
         List<String> steps = CurrentReport.stepNames();
-        assertTrue(steps.stream().anyMatch("HTTP POST /api/echo → 200"::equals),
+        CurrentReport.check(steps.stream().anyMatch("HTTP POST /api/echo → 200"::equals),
                 () -> "нет POST-шага RestClient: " + steps);
 
         String req = CurrentReport.attachmentContent("HTTP Request").orElse("");
-        assertTrue(req.contains("laptop"), () -> "тело POST-запроса не попало: " + req);
+        CurrentReport.check(req.contains("laptop"), () -> "тело POST-запроса не попало: " + req);
     }
 }

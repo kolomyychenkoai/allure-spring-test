@@ -12,8 +12,6 @@ import org.springframework.boot.test.web.client.TestRestTemplate;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 /**
  * Уровень B: вызовы {@code TestRestTemplate} попадают в отчёт через интерсептор,
  * навешенный байткодом на конструктор RestTemplate. Раньше этого клиента не было видно.
@@ -32,11 +30,11 @@ class RestTemplateReportIT {
         rest.getForObject("/api/hello/{name}", String.class, "world");
 
         List<String> steps = CurrentReport.stepNames();
-        assertTrue(steps.stream().anyMatch("HTTP GET /api/hello/world → 200"::equals),
+        CurrentReport.check(steps.stream().anyMatch("HTTP GET /api/hello/world → 200"::equals),
                 () -> "нет HTTP-шага TestRestTemplate: " + steps);
 
         String resp = CurrentReport.attachmentContent("HTTP Response").orElse("");
-        assertTrue(resp.contains("hello world"), () -> "HTTP Response без тела: " + resp);
+        CurrentReport.check(resp.contains("hello world"), () -> "HTTP Response без тела: " + resp);
     }
 
     @Test
@@ -45,11 +43,11 @@ class RestTemplateReportIT {
         rest.postForEntity("/api/echo", java.util.Map.of("productName", "laptop"), String.class);
 
         List<String> steps = CurrentReport.stepNames();
-        assertTrue(steps.stream().anyMatch("HTTP POST /api/echo → 200"::equals),
+        CurrentReport.check(steps.stream().anyMatch("HTTP POST /api/echo → 200"::equals),
                 () -> "нет POST-шага TestRestTemplate: " + steps);
 
         String req = CurrentReport.attachmentContent("HTTP Request").orElse("");
-        assertTrue(req.contains("laptop"), () -> "тело POST-запроса не попало: " + req);
+        CurrentReport.check(req.contains("laptop"), () -> "тело POST-запроса не попало: " + req);
     }
 
     @Test
@@ -58,7 +56,7 @@ class RestTemplateReportIT {
         rest.getForEntity("/api/does-not-exist", String.class);
 
         List<String> steps = CurrentReport.stepNames();
-        assertTrue(steps.stream().anyMatch("HTTP GET /api/does-not-exist → 404"::equals),
+        CurrentReport.check(steps.stream().anyMatch("HTTP GET /api/does-not-exist → 404"::equals),
                 () -> "нет шага для 404: " + steps);
     }
 }

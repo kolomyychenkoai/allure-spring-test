@@ -11,8 +11,6 @@ import org.springframework.test.util.AssertionErrors;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 /**
  * Уровень B: «живой» прогон через РЕАЛЬНУЮ регистрацию (spring.factories →
  * AllureAssertionsListener → байткод AssertionErrors). Spring-ассерты пишут шаги в
@@ -32,8 +30,8 @@ class SpringAssertionsReportIT {
         AssertionErrors.assertNotNull("у заказа есть id", "id-1");
 
         List<String> steps = CurrentReport.stepNames();
-        assertTrue(steps.contains("Проверка: имя продукта — ожидалось laptop = laptop"), () -> "" + steps);
-        assertTrue(steps.contains("Проверка: количество положительно — верно"), () -> "" + steps);
-        assertTrue(steps.contains("Проверка: у заказа есть id — значение id-1 не null"), () -> "" + steps);
+        CurrentReport.assertStep("Проверка: имя продукта — ожидалось laptop = laptop");
+        CurrentReport.assertStep("Проверка: количество положительно — верно");
+        CurrentReport.assertStep("Проверка: у заказа есть id — значение id-1 не null");
     }
 }

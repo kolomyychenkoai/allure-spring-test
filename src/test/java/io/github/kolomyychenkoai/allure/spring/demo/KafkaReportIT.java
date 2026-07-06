@@ -22,8 +22,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 /**
  * Уровень B: «живой» прогон со встроенным Kafka-брокером через РЕАЛЬНЫЙ байткод-перехват
  * (spring.factories → инструментирование KafkaProducer/KafkaConsumer). send/poll пишут шаги
@@ -60,22 +58,22 @@ class KafkaReportIT {
             consumer.subscribe(List.of("order-events"));
             template.send("order-events", "k1", "{\"id\":7}").get(10, TimeUnit.SECONDS);
             ConsumerRecords<String, String> records = pollUntilReceived(consumer);
-            assertTrue(records.count() > 0, "сообщение не получено из брокера");
+            CurrentReport.check(records.count() > 0, () -> "сообщение не получено из брокера");
         }
 
         List<String> steps = CurrentReport.stepNames();
-        assertTrue(steps.stream().anyMatch(n -> n.startsWith("Kafka: отправлено → order-events") && n.contains("k1")),
+        CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("Kafka: отправлено → order-events") && n.contains("k1")),
                 () -> "" + steps);
-        assertTrue(steps.stream().anyMatch(n -> n.startsWith("Kafka: получено")), () -> "" + steps);
+        CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("Kafka: получено")), () -> "" + steps);
         // одна отправка = РОВНО один шаг (CAS-дедуп install не задвоил advice)
         long sentCount = steps.stream().filter(n -> n.startsWith("Kafka: отправлено → order-events")).count();
-        assertTrue(sentCount == 1, () -> "ожидался ровно один шаг отправки (CAS), а есть " + sentCount + ": " + steps);
+        CurrentReport.check(sentCount == 1, () -> "ожидался ровно один шаг отправки (CAS), а есть " + sentCount + ": " + steps);
 
         // содержимое вложений (topic/key/value) через реальную цепочку
         String sent = CurrentReport.attachmentContent("Отправленное сообщение").orElse("");
-        assertTrue(sent.contains("Topic: order-events") && sent.contains("\"id\":7"), () -> "sent: " + sent);
+        CurrentReport.check(sent.contains("Topic: order-events") && sent.contains("\"id\":7"), () -> "sent: " + sent);
         String got = CurrentReport.attachmentContent("Принятые сообщения").orElse("");
-        assertTrue(got.contains("\"id\":7"), () -> "received: " + got);
+        CurrentReport.check(got.contains("\"id\":7"), () -> "received: " + got);
     }
 
     private ConsumerRecords<String, String> pollUntilReceived(KafkaConsumer<String, String> consumer) {

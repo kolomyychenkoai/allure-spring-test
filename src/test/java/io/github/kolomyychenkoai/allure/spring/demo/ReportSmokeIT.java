@@ -11,8 +11,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.test.context.SpringBootTest;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 /**
  * Уровень B: «живой» прогон. Листенеры конфигурации/логов подключаются САМИ (только через
  * {@code META-INF/spring.factories}, в классе ноль настройки Allure).
@@ -39,16 +37,16 @@ class ReportSmokeIT {
         log.info("Привет из ReportSmokeIT [{}] — строка для Application Logs", LOG_MARKER);
         log.warn("Предупреждение со значением value={}", 42);
 
-        assertTrue(CurrentReport.stepNames().contains("Configuration"),
-                () -> "нет шага Configuration (config-листенер не зарегистрирован?): " + CurrentReport.stepNames());
+        // verify — через немой CurrentReport (JUnit assertTrue сам стал бы шагом «Проверка: …»)
+        CurrentReport.assertStep("Configuration");
     }
 
     @AfterAll
     @DisplayName("logs-листенер реально записал «Application Logs» (end-to-end, без пустого теста)")
     static void logsAttachmentWasWrittenToReport() {
         // вложение из afterTestMethod уже на диске → ищем маркер в записанных результатах
-        assertTrue(CurrentReport.anyResultFileContains(LOG_MARKER),
-                "лог-строка не попала во вложение Application Logs реального отчёта "
+        CurrentReport.check(CurrentReport.anyResultFileContains(LOG_MARKER),
+                () -> "лог-строка не попала во вложение Application Logs реального отчёта "
                         + "(logs-листенер не зарегистрирован или не пишет содержимое)");
     }
 }

@@ -14,8 +14,6 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -23,8 +21,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * Уровень B: «живой» прогон через РЕАЛЬНУЮ авто-конфигурацию (MockMvcBuilderCustomizer.alwaysDo
  * → AllureMockMvcResultHandler). Шаги пишутся в НАСТОЯЩИЙ отчёт (showcase сохраняется), а тест
- * читает их через {@link CurrentReport} и проверяет наличие. Проверки — на JUnit assertTrue
- * (он НЕ инструментируется, поэтому не засоряет отчёт). Краснеет, если кастомайзер не
+ * читает их через {@link CurrentReport} и проверяет наличие. Проверки — через немой
+ * {@code CurrentReport.check}/{@code assertStep} (JUnit assertTrue теперь инструментируется —
+ * verify-ассерт сам стал бы шагом и засорил отчёт). Краснеет, если кастомайзер не
  * подключился (auto-config снят) или имя HTTP-шага съехало.
  */
 @SpringBootTest(classes = WebTestApp.class)
@@ -47,17 +46,17 @@ class MockMvcReportIT {
 
         List<String> steps = CurrentReport.stepNames();
         // дедуп: авто-MockMvc цепляют ОБА пути (кастомайзер + байткод), но шаг должен быть ОДИН
-        assertEquals(1, steps.stream().filter("HTTP GET /api/hello/world → 200"::equals).count(),
+        CurrentReport.check(steps.stream().filter("HTTP GET /api/hello/world → 200"::equals).count() == 1,
                 () -> "ожидали ровно один GET-шаг (дедуп кастомайзер+байткод): " + steps);
-        assertTrue(steps.contains("HTTP GET /api/hello/world → 200"), () -> "нет GET-шага: " + steps);
-        assertTrue(steps.contains("HTTP POST /api/echo → 200"), () -> "нет POST-шага: " + steps);
-        assertTrue(steps.contains("HTTP GET /api/search?q=laptop → 200"), () -> "нет query-шага: " + steps);
-        assertTrue(steps.contains("HTTP GET /api/does-not-exist → 404"), () -> "нет 404-шага: " + steps);
+        CurrentReport.assertStep("HTTP GET /api/hello/world → 200");
+        CurrentReport.assertStep("HTTP POST /api/echo → 200");
+        CurrentReport.assertStep("HTTP GET /api/search?q=laptop → 200");
+        CurrentReport.assertStep("HTTP GET /api/does-not-exist → 404");
 
         // содержимое вложений пришло через реальную цепочку (не только имя шага)
         String req = CurrentReport.attachmentContent("HTTP Request").orElse("");
-        assertTrue(req.contains("GET /api/hello/world"), () -> "HTTP Request без метода/пути: " + req);
+        CurrentReport.check(req.contains("GET /api/hello/world"), () -> "HTTP Request без метода/пути: " + req);
         String resp = CurrentReport.attachmentContent("HTTP Response").orElse("");
-        assertTrue(resp.contains("hello world"), () -> "HTTP Response без тела: " + resp);
+        CurrentReport.check(resp.contains("hello world"), () -> "HTTP Response без тела: " + resp);
     }
 }

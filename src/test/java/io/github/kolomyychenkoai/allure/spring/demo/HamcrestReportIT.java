@@ -15,7 +15,6 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Уровень B: «живой» прогон через РЕАЛЬНУЮ регистрацию (spring.factories →
@@ -37,12 +36,12 @@ class HamcrestReportIT {
         MatcherAssert.assertThat("цена есть", 99, notNullValue());
 
         List<String> steps = CurrentReport.stepNames();
-        assertTrue(steps.stream().anyMatch(n -> n.startsWith("Проверка: значение laptop, ожидалось")),
+        CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("Проверка: значение laptop, ожидалось")),
                 () -> "" + steps);
-        assertTrue(steps.stream().anyMatch(n -> n.startsWith("Проверка: имя товара: значение laptop, ожидалось")),
+        CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("Проверка: имя товара: значение laptop, ожидалось")),
                 () -> "" + steps);
-        assertTrue(steps.stream().anyMatch(n -> n.contains("значение 2, ожидалось")), () -> "" + steps);
-        assertTrue(steps.stream().anyMatch(n -> n.startsWith("Проверка: цена есть: значение 99, ожидалось")),
+        CurrentReport.check(steps.stream().anyMatch(n -> n.contains("значение 2, ожидалось")), () -> "" + steps);
+        CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("Проверка: цена есть: значение 99, ожидалось")),
                 () -> "" + steps);
     }
 }

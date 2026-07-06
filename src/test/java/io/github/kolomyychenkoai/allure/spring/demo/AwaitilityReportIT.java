@@ -12,8 +12,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import java.time.Duration;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 /**
  * Уровень B: ожидание Awaitility попадает в отчёт через слушатель, навешенный
  * {@code AllureAwaitilityListener} (официальный SPI). Ожидание идёт на тест-потоке (активный
@@ -31,12 +29,12 @@ class AwaitilityReportIT {
 
         List<String> steps = CurrentReport.stepNames();
         // человекочитаемый алиас, без сырого описания Awaitility (лямбда/FQCN)
-        assertTrue(steps.stream().anyMatch(n -> n.matches("Ожидание: результат готов — выполнено за \\d+ мс")),
+        CurrentReport.check(steps.stream().anyMatch(n -> n.matches("Ожидание: результат готов — выполнено за \\d+ мс")),
                 () -> "нет читаемого шага ожидания Awaitility: " + steps);
-        assertTrue(steps.stream().noneMatch(n -> n.contains("Lambda") || n.contains("defined as")),
+        CurrentReport.check(steps.stream().noneMatch(n -> n.contains("Lambda") || n.contains("defined as")),
                 () -> "в шаге ожидания просочился техножаргон Awaitility: " + steps);
         // полное описание условия (что ждали) — во вложении, через реальную цепочку
-        assertTrue(CurrentReport.attachmentContent("Условие ожидания").orElse("").contains("результат готов"),
+        CurrentReport.check(CurrentReport.attachmentContent("Условие ожидания").orElse("").contains("результат готов"),
                 () -> "нет вложения «Условие ожидания»: " + CurrentReport.attachmentNames());
     }
 }

@@ -241,4 +241,27 @@ class InstrumentationApiCanaryTest {
         assertTrue(hasMethod("org.assertj.core.api.AbstractIterableAssert", "contains", 1, null),
                 "AbstractIterableAssert.contains уехал → коллекционные ассерты выпадут из отчёта");
     }
+
+    @Test
+    @DisplayName("JUnit Jupiter Assertions: все включённые имена + fail/assertAll (страхует исключение)")
+    void junitJupiterAssertionMatchers() {
+        String a = "org.junit.jupiter.api.Assertions";
+        // ВСЕ включённые в матчер имена (не подмножество) — если уедут, перехват выпадет молча
+        for (String m : new String[]{"assertEquals", "assertNotEquals", "assertTrue", "assertFalse",
+                "assertNull", "assertNotNull", "assertSame", "assertNotSame", "assertArrayEquals",
+                "assertIterableEquals", "assertLinesMatch", "assertInstanceOf", "assertThrows",
+                "assertThrowsExactly", "assertDoesNotThrow", "assertTimeout", "assertTimeoutPreemptively"}) {
+            assertTrue(hasMethod(a, m, -1, null),
+                    "Assertions." + m + " уехал → обнови матчер в AllureJUnitJupiterAssertionsInstrumentation");
+        }
+        // допущение «фасад Assertions не само-делегирует → депт-счётчик не нужен» стерегут РАНТАЙМ-тесты
+        // на реальной версии Jupiter: AllureJUnitJupiterAssertionsTest#singleAssertOneStep (level-A) +
+        // JUnitJupiterAssertionsReportIT (eq==1, level-B) — покраснеют, если появится удвоение (эффект
+        // сильнее статического байт-скана: проверяем результат, а не форму).
+        // fail/assertAll ДОЛЖНЫ существовать — их мы ОСОЗНАННО исключили; если исчезнут, исключение врёт
+        assertTrue(hasMethod(a, "fail", -1, null),
+                "Assertions.fail уехал → пересмотри исключение fail в AllureJUnitJupiterAssertionsInstrumentation");
+        assertTrue(hasMethod(a, "assertAll", -1, null),
+                "Assertions.assertAll уехал → пересмотри исключение assertAll в AllureJUnitJupiterAssertionsInstrumentation");
+    }
 }
