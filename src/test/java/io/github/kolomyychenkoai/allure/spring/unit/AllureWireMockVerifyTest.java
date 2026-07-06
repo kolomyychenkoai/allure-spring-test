@@ -138,6 +138,26 @@ class AllureWireMockVerifyTest {
     }
 
     @Test
+    @DisplayName("тот же сервер в СЛЕДУЮЩЕМ тест-кейсе снова даёт шаг сброса (набор чистится между кейсами)")
+    void resetAllStepReappearsInNextTestCase() {
+        WireMockServer server = new WireMockServer(options().dynamicPort());
+        server.start();
+        try {
+            // два РАЗНЫХ тест-кейса подряд на одном потоке сбрасывают ОДИН и тот же сервер
+            TestResult case1 = allure.run("case-1", () -> AllureWireMockVerifyInstrumentation.onResetAll(server));
+            TestResult case2 = allure.run("case-2", () -> AllureWireMockVerifyInstrumentation.onResetAll(server));
+            String expected = "WireMock: сброс заглушек (:" + server.port() + ")";
+            // каждый кейс обязан получить СВОЙ шаг сброса; мутация «убрать resetKeys.clear()» →
+            // у case2 шага нет (сервер «уже сброшен» из case1) → RED — это ловит инвертированный баг:
+            // молча пропавший шаг сброса в каждом следующем тесте на переиспользуемом сервере (@SpringBootTest)
+            assertThat(stepNames(case1)).contains(expected);
+            assertThat(stepNames(case2)).contains(expected);
+        } finally {
+            server.stop();
+        }
+    }
+
+    @Test
     @DisplayName("статический WireMock.reset() (старый DSL) тоже даёт шаг сброса")
     void logsStaticReset() {
         TestResult result = allure.run("static-reset", AllureWireMockVerifyInstrumentation::onStaticReset);
