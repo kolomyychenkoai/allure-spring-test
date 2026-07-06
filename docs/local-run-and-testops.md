@@ -1,7 +1,7 @@
 # Пробуем локально + грузим отчёт в TestOps
 
-Пошаговый копи-паст: как проверить библиотеку на своей машине, собрать её,
-подключить в репозиторий своего сервиса, посмотреть отчёт и загрузить zip в Allure TestOps.
+Пошаговый копи-паст: как собрать библиотеку, подключить её в репозиторий своего сервиса,
+прогнать тесты и загрузить отчёт в Allure TestOps.
 
 Всё офлайн, без Docker. Нужен **Java 21+** и **Maven**.
 
@@ -24,28 +24,17 @@ jenv global 21
 
 ---
 
-## Шаг 1. Проверить саму библиотеку
+## Шаг 1. Собрать библиотеку и положить в локальный `~/.m2`
 
-Внутри проекта `allure-spring-test`:
-
-```bash
-cd ~/projects/allure-spring-test
-mvn clean test          # полный прогон тестов (офлайн)
-mvn allure:serve        # соберёт отчёт и откроет в браузере
-```
-
-Витрину смотри во вкладке **Behaviors** (сценарии сгруппированы по Epic/Feature).
-
-Если всё зелёное — библиотека рабочая, идём дальше.
-
----
-
-## Шаг 2. Собрать библиотеку и положить в локальный `~/.m2`
+Внутри проекта `allure-spring-test` — одна команда:
 
 ```bash
 cd ~/projects/allure-spring-test
-mvn clean install       # соберёт jar и установит в ~/.m2/repository
+mvn clean install       # прогонит тесты, соберёт jar и установит в ~/.m2/repository
 ```
+
+`install` сам проходит фазу `test` — отдельно гонять тесты не нужно.
+Зелёная сборка = либа рабочая и уже лежит в локальном репозитории.
 
 После этого артефакт доступен любому проекту на этой машине как:
 
@@ -53,67 +42,30 @@ mvn clean install       # соберёт jar и установит в ~/.m2/repo
 io.github.kolomyychenkoai:allure-spring-test:0.1.0-SNAPSHOT
 ```
 
-> Хочешь быстрее — можно без прогона тестов: `mvn clean install -DskipTests`.
-> Но хотя бы раз прогони с тестами (Шаг 1), чтобы убедиться, что сборка честная.
-
 Проверить, что легло:
 
 ```bash
 ls ~/.m2/repository/io/github/kolomyychenkoai/allure-spring-test/0.1.0-SNAPSHOT/
 ```
 
+> Спешишь и тесты либы тебе сейчас не нужны — `mvn clean install -DskipTests`.
+
 ---
 
-## Шаг 3. Подключить в репозиторий своего сервиса
+## Шаг 2. Подключить в репозиторий своего сервиса
 
-Открой `pom.xml` своего сервиса.
-
-### 3.1. Добавь зависимость (scope `test`)
+Открой `pom.xml` своего сервиса и добавь две зависимости (обе `test`):
 
 ```xml
+<!-- сама библиотека — вшивается в тесты сама -->
 <dependency>
     <groupId>io.github.kolomyychenkoai</groupId>
     <artifactId>allure-spring-test</artifactId>
     <version>0.1.0-SNAPSHOT</version>
     <scope>test</scope>
 </dependency>
-```
 
-### 3.2. Убедись, что есть Allure JUnit-интеграция
-
-Без неё Allure вообще не пишет результаты. Обычно она уже есть; если нет — добавь:
-
-```xml
-<dependency>
-    <groupId>io.qameta.allure</groupId>
-    <artifactId>allure-junit5</artifactId>
-    <version>2.25.0</version>
-    <scope>test</scope>
-</dependency>
-```
-
-### 3.3. Скажи Surefire писать результаты в `target/allure-results`
-
-Иначе Allure пишет в `./allure-results` (корень проекта), и `mvn allure:serve` их не найдёт.
-Добавь **один раз** в `<build><plugins>`:
-
-```xml
-<plugin>
-    <groupId>org.apache.maven.plugins</groupId>
-    <artifactId>maven-surefire-plugin</artifactId>
-    <configuration>
-        <systemPropertyVariables>
-            <allure.results.directory>${project.build.directory}/allure-results</allure.results.directory>
-        </systemPropertyVariables>
-    </configuration>
-</plugin>
-```
-
-### 3.4. (Опционально) реальный SQL в отчёте
-
-Только если хочешь видеть SQL внутри вызовов репозиториев/`JdbcTemplate`:
-
-```xml
+<!-- чтобы в отчёт попал реальный SQL внутри вызовов БД -->
 <dependency>
     <groupId>net.ttddyy</groupId>
     <artifactId>datasource-proxy</artifactId>
@@ -122,45 +74,32 @@ ls ~/.m2/repository/io/github/kolomyychenkoai/allure-spring-test/0.1.0-SNAPSHOT/
 </dependency>
 ```
 
-Без него шаги вызовов БД остаются, пропадает только вложенный шаг с реальным SQL.
+`datasource-proxy` — это то, что вытаскивает реальный SQL (`SQL <OP> <table>`) внутрь шагов
+вызовов репозиториев/`JdbcTemplate`. Его версию Spring Boot BOM не менеджит — указывай явно.
 
-### 3.5. (Опционально) чтобы локально открывать отчёт из сервиса
-
-Если хочешь в самом сервисе делать `mvn allure:serve`, добавь плагин:
-
-```xml
-<plugin>
-    <groupId>io.qameta.allure</groupId>
-    <artifactId>allure-maven</artifactId>
-    <version>2.12.0</version>
-    <configuration>
-        <reportVersion>2.25.0</reportVersion>
-    </configuration>
-</plugin>
-```
-
-> **Правки тестов не нужны.** Ничего в тест-коде не меняешь — библиотека вшивается сама.
+Больше ничего добавлять не нужно: Allure JUnit-интеграция и настройка Surefire в нормально
+настроенном Spring-сервисе уже есть. **Правок в тест-коде не нужно нигде** — библиотека
+вшивается сама. Если отчёт вдруг окажется пустым — см. «Возможные проблемы» в конце.
 
 ---
 
-## Шаг 4. Прогнать тесты сервиса и посмотреть отчёт
+## Шаг 3. Прогнать тесты сервиса
 
 В корне сервиса:
 
 ```bash
 mvn clean test          # прогон тестов → пишет target/allure-results
-mvn allure:serve        # собрать и открыть отчёт в браузере (нужен Шаг 3.5)
 ```
 
-Открылся отчёт, в шагах видно HTTP/SQL/Kafka/ассерты и т.д. — интеграция работает.
+В `target/allure-results` легли сырые результаты — их и грузим в TestOps.
 
 ---
 
-## Шаг 5. Сделать zip и загрузить в Allure TestOps
+## Шаг 4. Загрузить отчёт в Allure TestOps
 
 TestOps принимает **архив с содержимым папки `allure-results`** (сырые результаты, не готовый HTML).
 
-### 5.1. Собрать zip
+### 4.1. Собрать zip
 
 ```bash
 cd target/allure-results
@@ -173,7 +112,7 @@ cd -
 > Важно: zip'уем **содержимое** папки (`.`), а не саму папку — внутри архива должны лежать
 > файлы `*-result.json` / `*-attachment.*` в корне, без вложенной папки `allure-results/`.
 
-### 5.2. Загрузить в TestOps через веб-интерфейс
+### 4.2. Загрузить через веб-интерфейс
 
 1. Открой свой проект в Allure TestOps.
 2. Раздел **Launches** → кнопка **Create launch** (или **+**).
@@ -181,7 +120,7 @@ cd -
 4. Дай запуску имя (напр. `local-run` + дата) и создай.
 5. TestOps распарсит архив — тесты, шаги и вложения появятся в запуске.
 
-### 5.3. (Опционально) загрузка через CLI `allurectl`
+### 4.3. (Опционально) загрузка через CLI `allurectl`
 
 Если настроен `allurectl` (эндпоинт + токен + `ALLURE_PROJECT_ID`) — можно без zip и без UI:
 
@@ -195,7 +134,7 @@ allurectl upload target/allure-results --launch-name "local-run"
 
 `allurectl` сам заархивирует и зальёт `target/allure-results`.
 Он **не установлен** на этой машине — поставь бинарь с GitHub Allure (`allure-framework/allurectl`),
-если пойдёшь этим путём. Для разовой проверки проще zip + UI (Шаг 5.1–5.2).
+если пойдёшь этим путём. Для разовой проверки проще zip + UI (Шаг 4.1–4.2).
 
 ---
 
@@ -206,15 +145,90 @@ allurectl upload target/allure-results --launch-name "local-run"
 cd ~/projects/allure-spring-test
 mvn clean install
 
-# 2. в pom своего сервиса: dependency + allure-junit5 + surefire allure.results.directory
-#    (см. Шаг 3), правок в тестах НЕ нужно
+# 2. в pom своего сервиса — зависимости allure-spring-test + datasource-proxy (test scope),
+#    см. Шаг 2. Правок в тестах НЕ нужно.
 
 # 3. прогон сервиса
 cd ~/path/to/your-service
 mvn clean test
-mvn allure:serve                       # посмотреть локально
 
 # 4. zip и в TestOps
 cd target/allure-results && zip -r ../allure-results.zip . && cd -
 #    → Launches → Create launch → Upload → target/allure-results.zip
 ```
+
+---
+
+## Хочется глянуть отчёт локально (необязательно)
+
+Можно и не смотреть — сразу заливать в TestOps (Шаг 4). Но если хочешь посмотреть у себя:
+
+```bash
+mvn allure:serve        # соберёт отчёт из target/allure-results и откроет в браузере
+```
+
+`allure-maven` плагин в сервисе обычно уже есть. Если вдруг нет — добавь в `<build><plugins>`:
+
+```xml
+<plugin>
+    <groupId>io.qameta.allure</groupId>
+    <artifactId>allure-maven</artifactId>
+    <version>2.12.0</version>
+    <configuration>
+        <reportVersion>2.25.0</reportVersion>
+    </configuration>
+</plugin>
+```
+
+Витрину смотри во вкладке **Behaviors** (сценарии сгруппированы по Epic/Feature).
+
+---
+
+## Возможные проблемы (и из-за чего)
+
+На всякий случай — если что-то пошло не так, вот частые причины.
+
+- **Отчёт пустой / шагов от библиотеки нет, хотя зависимость добавлена.**
+  Скорее всего на test-classpath нет **Allure JUnit-интеграции** (`allure-junit5`) — без неё
+  Allure вообще не записывает результаты, и вшивать нечего. В нормально настроенном сервисе
+  она уже есть; если нет — добавь:
+  ```xml
+  <dependency>
+      <groupId>io.qameta.allure</groupId>
+      <artifactId>allure-junit5</artifactId>
+      <version>2.25.0</version>
+      <scope>test</scope>
+  </dependency>
+  ```
+
+- **TestOps/`allure:serve` не находит результаты («No results found»).**
+  Allure по умолчанию пишет в `./allure-results` (корень проекта), а не в `target`.
+  В большинстве сборок это уже увязано; если нет — либо заливай тот каталог, куда результаты
+  реально легли (проверь `./allure-results`), либо скажи Surefire писать в `target/allure-results`
+  (**один раз** в `pom.xml`):
+  ```xml
+  <plugin>
+      <groupId>org.apache.maven.plugins</groupId>
+      <artifactId>maven-surefire-plugin</artifactId>
+      <configuration>
+          <systemPropertyVariables>
+              <allure.results.directory>${project.build.directory}/allure-results</allure.results.directory>
+          </systemPropertyVariables>
+      </configuration>
+  </plugin>
+  ```
+
+- **В отчёте есть шаги вызовов БД, но нет вложенного реального SQL.**
+  Не добавлена зависимость `datasource-proxy` из Шага 2 — именно она вытаскивает реальный SQL.
+  Добавь её (`test` scope).
+
+- **Сборка падает на компиляции / странные ошибки версии.**
+  Библиотека собрана под **Java 21** — на сервисе с Java 17 и ниже не заведётся. Проверь `java -version`.
+
+- **Не хватает какого-то раздела (Kafka / WireMock / RestAssured …).**
+  Модуль включается, только если его библиотека есть на test-classpath. Нет технологии в тестах —
+  нет и раздела; это не ошибка. Полный список границ — в `README.md` (раздел «Ограничения»).
+
+- **В TestOps архив загрузился, но тестов не видно.**
+  Скорее всего запаковали саму папку, а не её содержимое: внутри zip должны лежать
+  `*-result.json` в корне, без вложенной `allure-results/` (см. Шаг 4.1).
