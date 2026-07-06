@@ -56,6 +56,9 @@ test-classpath, который сам себя «вшивает». Точки в
 
 ## Установка
 
+> Нужен полный копи-паст «собрать → подключить в свой сервис → отчёт → залить в TestOps»?
+> См. [`docs/local-run-and-testops.md`](docs/local-run-and-testops.md).
+
 Maven:
 
 ```xml
