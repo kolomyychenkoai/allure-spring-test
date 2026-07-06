@@ -1,7 +1,9 @@
 package io.github.kolomyychenkoai.allure.spring.rest;
 
+import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.internal.ClassPresence;
 import io.github.kolomyychenkoai.allure.spring.rest.internal.AllureRestAssuredFilter;
+import io.github.kolomyychenkoai.allure.spring.rest.internal.AllureRestAssuredValidationInstrumentation;
 import io.restassured.RestAssured;
 import io.restassured.filter.Filter;
 import org.springframework.core.Ordered;
@@ -58,6 +60,11 @@ public class AllureRestAssuredListener implements TestExecutionListener, Ordered
             if (!present) {
                 RestAssured.filters(new AllureRestAssuredFilter());
             }
+        }
+        // байткод-перехват проверок .then() (statusCode/body/...) — их фильтром не поймать
+        // (RestAssured валидирует мимо MatcherAssert). Идемпотентно, один раз на JVM.
+        if (AllureInstrumentation.available()) {
+            AllureRestAssuredValidationInstrumentation.install();
         }
     }
 }
