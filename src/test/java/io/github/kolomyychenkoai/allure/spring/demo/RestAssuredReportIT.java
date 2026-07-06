@@ -18,6 +18,7 @@ import java.util.List;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.lessThan;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -53,6 +54,9 @@ class RestAssuredReportIT {
         // шаг «тело query "dq42"» (а не мусорный toString лямбды). Снять RAM-skip → 2 шага → RED
         given().queryParam("q", "dq42").when().get("/api/search").then()
                 .body("query", (ResponseAwareMatcher<Response>) r -> equalTo("dq42"));
+        // time(Matcher) само-делегирует в time(Matcher, TimeUnit) того же класса — счётчик глубины
+        // должен оставить РОВНО 1 шаг (внешний, без единицы); снять счётчик → 2 → RED
+        given().when().get("/api/hello/{name}", "world").then().time(lessThan(600000L));
         // log-вариант того же имени (body() без аргументов) — это ЛОГ, не проверка: шага «Проверка …» не даёт
         given().when().get("/api/hello/{name}", "world").then().log().body();
 
@@ -76,6 +80,9 @@ class RestAssuredReportIT {
         assertTrue(queryChecks == 1, () -> "ResponseAwareMatcher: ожидался 1 шаг, а их " + queryChecks + ": " + steps);
         assertTrue(steps.contains("Проверка ответа: тело query \"dq42\""),
                 () -> "ResponseAwareMatcher: имя шага не чистое (ожидался разрешённый матчер): " + steps);
+        // time(Matcher) → РОВНО 1 шаг (внутренний делегат time(Matcher,TimeUnit) погашен счётчиком глубины)
+        long timeChecks = steps.stream().filter(n -> n.startsWith("Проверка ответа: время ответа")).count();
+        assertTrue(timeChecks == 1, () -> "time: ожидался 1 шаг, а их " + timeChecks + ": " + steps);
         // .log().body() (лог, не проверка) не должен породить пустой шаг «Проверка ответа: тело»
         assertTrue(steps.stream().noneMatch(n -> n.equals("Проверка ответа: тело")),
                 () -> "log().body() протёк шагом проверки: " + steps);
