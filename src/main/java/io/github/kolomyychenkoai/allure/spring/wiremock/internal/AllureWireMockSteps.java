@@ -31,6 +31,11 @@ public final class AllureWireMockSteps {
         return Allure.getLifecycle().getCurrentTestCase().isPresent();
     }
 
+    /** UUID текущего активного тест-кейса, либо null. Нужен для дедупа шага сброса по тест-кейсу. */
+    static String currentTestCase() {
+        return Allure.getLifecycle().getCurrentTestCase().orElse(null);
+    }
+
     /**
      * Живой шаг «Создана заглушка …» в момент {@code stubFor} — верный хронологический
      * порядок, и шаг переживает последующий {@code resetAll()}.
