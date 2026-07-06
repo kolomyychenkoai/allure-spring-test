@@ -113,22 +113,6 @@ cd -
 4. Дай запуску имя (напр. `local-run` + дата) и создай.
 5. TestOps распарсит архив — тесты, шаги и вложения появятся в запуске.
 
-### 4.3. (Опционально) загрузка через CLI `allurectl`
-
-Если настроен `allurectl` (эндпоинт + токен + `ALLURE_PROJECT_ID`) — можно без zip и без UI:
-
-```bash
-export ALLURE_ENDPOINT="https://<твой-testops>"
-export ALLURE_TOKEN="<токен из профиля TestOps>"
-export ALLURE_PROJECT_ID="<id проекта>"
-
-allurectl upload target/allure-results --launch-name "local-run"
-```
-
-`allurectl` сам заархивирует и зальёт `target/allure-results`.
-Он **не установлен** на этой машине — поставь бинарь с GitHub Allure (`allure-framework/allurectl`),
-если пойдёшь этим путём. Для разовой проверки проще zip + UI (Шаг 4.1–4.2).
-
 ---
 
 ## Шпаргалка (весь путь одним куском)
