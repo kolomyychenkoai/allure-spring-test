@@ -90,7 +90,8 @@ class WireMockReportIT {
         assertTrue(steps.stream().anyMatch(n -> n.startsWith("Near-miss:") && n.contains("/api/does-not-exist")),
                 () -> "" + steps);
         assertTrue(steps.stream().anyMatch(n -> n.contains("сценарий") && n.contains("retry")), () -> "" + steps);
-        assertTrue(steps.contains("WireMock: сброс заглушек"), () -> "" + steps);
+        // имя шага сброса несёт РЕАЛЬНЫЙ порт сервера — пинним на живой цепочке, а не просто startsWith
+        assertTrue(steps.contains("WireMock: сброс заглушек (:" + wireMock.port() + ")"), () -> "" + steps);
 
         // содержимое вложения стаба через реальную цепочку
         String stub = CurrentReport.attachmentContent("WireMock Stub").orElse("");

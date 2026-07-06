@@ -94,6 +94,70 @@ class AllureWireMockVerifyTest {
     }
 
     @Test
+    @DisplayName("несколько серверов: сброс каждого — свой шаг с его портом (не схлопывается в один)")
+    void resetAllPerServerLabeledByPort() {
+        WireMockServer a = new WireMockServer(options().dynamicPort());
+        WireMockServer b = new WireMockServer(options().dynamicPort());
+        a.start();
+        b.start();
+        try {
+            // один тест-кейс, teardown сбрасывает оба сервера (как база-класс в реальном сервисе)
+            TestResult result = allure.run("multi-server", () -> {
+                AllureWireMockVerifyInstrumentation.onResetAll(a);
+                AllureWireMockVerifyInstrumentation.onResetAll(b);
+            });
+            // мутация: убери порт из имени / ключа → оба шага совпадут и дедуп схлопнет в один → RED
+            assertThat(stepNames(result)).contains(
+                    "WireMock: сброс заглушек (:" + a.port() + ")",
+                    "WireMock: сброс заглушек (:" + b.port() + ")");
+        } finally {
+            a.stop();
+            b.stop();
+        }
+    }
+
+    @Test
+    @DisplayName("один сервер, сброшенный несколько раз за тест → шаг сброса ОДИН (дедуп по серверу)")
+    void resetAllSameServerDedupedWithinTest() {
+        WireMockServer server = new WireMockServer(options().dynamicPort());
+        server.start();
+        try {
+            // teardown/Spring Cloud Contract зовёт resetAll не раз — в отчёте это должен быть ОДИН шаг
+            TestResult result = allure.run("repeat-reset", () -> {
+                AllureWireMockVerifyInstrumentation.onResetAll(server);
+                AllureWireMockVerifyInstrumentation.onResetAll(server);
+                AllureWireMockVerifyInstrumentation.onResetAll(server);
+            });
+            long resets = result.getSteps().stream()
+                    .filter(s -> s.getName().startsWith("WireMock: сброс заглушек")).count();
+            // мутация: убери дедуп (всегда логировать) → 3 шага → RED
+            assertThat(resets).isEqualTo(1);
+        } finally {
+            server.stop();
+        }
+    }
+
+    @Test
+    @DisplayName("тот же сервер в СЛЕДУЮЩЕМ тест-кейсе снова даёт шаг сброса (набор чистится между кейсами)")
+    void resetAllStepReappearsInNextTestCase() {
+        WireMockServer server = new WireMockServer(options().dynamicPort());
+        server.start();
+        try {
+            // два РАЗНЫХ тест-кейса подряд на одном потоке сбрасывают ОДИН и тот же сервер
+            TestResult case1 = allure.run("case-1", () -> AllureWireMockVerifyInstrumentation.onResetAll(server));
+            TestResult case2 = allure.run("case-2", () -> AllureWireMockVerifyInstrumentation.onResetAll(server));
+            String expected = "WireMock: сброс заглушек (:" + server.port() + ")";
+            // каждый кейс обязан получить СВОЙ шаг сброса; мутация «убрать resetKeys.clear()» →
+            // у case2 шага нет (сервер «уже сброшен» из case1) → RED — это ловит инвертированный баг:
+            // молча пропавший шаг сброса в каждом следующем тесте на переиспользуемом сервере (@SpringBootTest)
+            assertThat(stepNames(case1)).contains(expected);
+            assertThat(stepNames(case2)).contains(expected);
+        } finally {
+            server.stop();
+        }
+    }
+
+    @Test
     @DisplayName("статический WireMock.reset() (старый DSL) тоже даёт шаг сброса")
     void logsStaticReset() {
         TestResult result = allure.run("static-reset", AllureWireMockVerifyInstrumentation::onStaticReset);
@@ -156,7 +220,8 @@ class AllureWireMockVerifyTest {
 
             assertThat(stepNames(result)).anyMatch(n -> n.startsWith("Near-miss:") && n.contains("/api/wrong"));
             assertThat(stepNames(result)).anyMatch(n -> n.contains("сценарий") && n.contains("retry"));
-            assertThat(allure.hasStep(result, "WireMock: сброс заглушек")).isTrue();
+            // имя шага сброса теперь несёт порт сервера: «WireMock: сброс заглушек (:<port>)»
+            assertThat(stepNames(result)).contains("WireMock: сброс заглушек (:" + server.port() + ")");
 
             // near-miss — ИНФОРМАЦИОННЫЙ PASSED-шаг (тест им не роняем) и несёт diff во вложении
             StepResult nearMiss = result.getSteps().stream()

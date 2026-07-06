@@ -11,6 +11,9 @@ import io.qameta.allure.Allure;
 import io.qameta.allure.model.Status;
 import net.bytebuddy.asm.Advice;
 
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static net.bytebuddy.matcher.ElementMatchers.named;
@@ -24,9 +27,11 @@ import static net.bytebuddy.matcher.ElementMatchers.named;
  *       проверки; упавший verify шага не создаёт (падение покажет Allure на уровне теста);</li>
  *   <li>{@code WireMockServer.resetAll} → перед сбросом снимает near-miss и состояния
  *       сценариев со СЕРВЕРА (иначе reset их сотрёт до afterTestMethod), затем шаг
- *       «WireMock: сброс заглушек»;</li>
+ *       «WireMock: сброс заглушек (:порт)». НЕСКОЛЬКО серверов (сервис мокает несколько
+ *       зависимостей) → шаг на КАЖДЫЙ сервер с его портом; ПОВТОРНЫЙ сброс одного сервера
+ *       за тест — дубль, глушится (ключ дедупа {@code (тест-кейс, сервер)});</li>
  *   <li>статический {@code WireMock.reset()} (старый DSL через {@code configureFor}) →
- *       тот же шаг «WireMock: сброс заглушек» (без снимка near-miss/сценариев — у статики
+ *       шаг «WireMock: сброс заглушек» (без порта и без снимка near-miss/сценариев — у статики
  *       нет ссылки на сервер; снимок остаётся у инстансного {@code resetAll}).</li>
  * </ul>
  * Перехватываются и static {@code client.WireMock.*}, и {@code WireMockServer.*}.
@@ -34,16 +39,62 @@ import static net.bytebuddy.matcher.ElementMatchers.named;
  * {@code stubFor} — в {@code register}, статический {@code reset()} — в инстансный
  * {@code resetMappings()} (мы их не матчим). Проверено на WireMock 3.9/3.13.
  * <p>
- * ЧАСТИЧНЫЕ сбросы намеренно НЕ логируются (логируем только полный сброс): инстансные
- * {@code resetMappings/resetRequests/resetScenarios} и статические {@code resetAllRequests/
- * resetScenario/resetAllScenarios} — у них нет отдельного шага.
+ * ЧАСТИЧНЫЕ и дефолт-сбросы намеренно НЕ логируются (логируем только полный «сброс заглушек»):
+ * инстансные {@code resetMappings/resetRequests/resetScenarios/resetToDefaultMappings} и статические
+ * {@code resetAllRequests/resetScenario/resetAllScenarios/resetToDefault} — у них нет отдельного шага.
+ * <p>
+ * ⚠️ Инстансный {@code resetAll} и статический {@code WireMock.reset()} — РАЗНЫЕ точки входа с разными
+ * ключами дедупа, поэтому если один teardown зовёт ОБА на один сервер (так делает Spring Cloud Contract:
+ * {@code WireMockConfiguration.resetMappings()} каскадит {@code resetAll()}+{@code WireMock.reset()}+
+ * частичные), в отчёте будет ДВА шага «сброс заглушек» (инстансный с портом + статический без) — это не
+ * 10×-баг, а честное отражение двух вызовов; связать статику с конкретным сервером нечем (у неё нет ссылки).
  * Установка идемпотентна (CAS-гард {@code INSTALLED}, потокобезопасно) — один раз на JVM.
  */
 public final class AllureWireMockVerifyInstrumentation {
 
     private static final AtomicBoolean INSTALLED = new AtomicBoolean(false);
 
+    /**
+     * Что уже дало шаг сброса в текущем тест-кейсе. Сброс — теардаун-рутина: сервис мокает
+     * несколько зависимостей (свой {@code WireMockServer} на каждую), teardown сбрасывает каждый —
+     * плюс возможный ручной/повторный сброс. НЕСКОЛЬКО серверов — разные события, логируем КАЖДЫЙ
+     * (в имя шага порт-метка). А вот ПОВТОРНЫЙ сброс ОДНОГО сервера за тест — дубль, его глушим.
+     * <p>
+     * Ключ дедупа — САМ объект сервера (identity), НЕ порт: порт у сервера меняется по ходу жизни
+     * (до старта / после stop / только-HTTPS → {@code port()} бросает), а identity стабильна — иначе
+     * один и тот же сервер получил бы два ключа и дал бы дубль, который мы как раз лечим.
+     * {@link IdentityHashMap}-множество исключает и коллизии {@code hashCode}. Статический
+     * {@code WireMock.reset()} сервера не знает — у него отдельный ключ-синглтон {@link #STATIC_RESET_KEY}.
+     * ThreadLocal (а не общий флаг) — чтобы параллельные тесты не гасили сброс друг у друга.
+     */
+    private static final ThreadLocal<ResetLog> RESET_LOG = ThreadLocal.withInitial(ResetLog::new);
+
+    /** Ключ дедупа для статического {@code WireMock.reset()} — у него нет ссылки на сервер. */
+    private static final Object STATIC_RESET_KEY = new Object();
+
     private AllureWireMockVerifyInstrumentation() {
+    }
+
+    /** Что уже отметилось шагом сброса (серверы by-identity + STATIC_RESET_KEY) в одном тест-кейсе. */
+    private static final class ResetLog {
+        private String testCaseUuid;
+        private final Set<Object> resetKeys = Collections.newSetFromMap(new IdentityHashMap<>());
+    }
+
+    /**
+     * true — если для (текущий тест-кейс, этот ключ) шаг сброса ещё не писали (и помечаем, что
+     * теперь написали). Снимок near-miss/сценариев этим НЕ гейтится — он самодедуплицируется
+     * (reset стирает данные) и по разным серверам несёт разное; глушим только повтор шага сброса
+     * одного и того же сервера. При смене тест-кейса набор чистится — тот же сервер в следующем
+     * тесте снова даст свой шаг.
+     */
+    private static boolean firstResetForKeyInTestCase(String testCaseUuid, Object key) {
+        ResetLog log = RESET_LOG.get();
+        if (!testCaseUuid.equals(log.testCaseUuid)) {
+            log.testCaseUuid = testCaseUuid;
+            log.resetKeys.clear();
+        }
+        return log.resetKeys.add(key); // add() == true, если этот ключ в тесте ещё не сбрасывали
     }
 
     public static void install() {
@@ -110,23 +161,49 @@ public final class AllureWireMockVerifyInstrumentation {
      */
     public static void onResetAll(Object server) {
         try {
-            if (!AllureWireMockSteps.active()) {
+            String testCase = AllureWireMockSteps.currentTestCase();
+            if (testCase == null) {
                 return;
             }
+            // ключ дедупа — сам сервер (identity, стабильна); порт — только метка имени, и может быть недоступен
+            Object key = STATIC_RESET_KEY;
+            String portLabel = "";
             if (server instanceof WireMockServer wireMockServer) {
+                // снимок near-miss/сценариев — по КАЖДОМУ серверу (они разные), до фактического сброса
                 AllureWireMockSteps.nearMisses(wireMockServer);
                 AllureWireMockSteps.scenarios(wireMockServer);
+                key = wireMockServer;
+                Integer port = safePort(wireMockServer);
+                if (port != null) {
+                    portLabel = " (:" + port + ")";
+                }
             }
-            Allure.step("WireMock: сброс заглушек", Status.PASSED);
+            // несколько серверов → шаг на каждый (с портом); повтор одного сервера за тест → дубль, глушим
+            if (firstResetForKeyInTestCase(testCase, key)) {
+                Allure.step("WireMock: сброс заглушек" + portLabel, Status.PASSED);
+            }
         } catch (Throwable t) {
             AllureInstrumentationLogger.warn("WireMockReset", t);
         }
     }
 
-    /** Логика статического {@code WireMock.reset()} (старый DSL): шаг сброса без снимка сервера. */
+    /** Порт сервера, либо null, если его нельзя получить (не роняем инструментирование). */
+    private static Integer safePort(WireMockServer server) {
+        try {
+            return server.port();
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /**
+     * Логика статического {@code WireMock.reset()} (старый DSL): шаг сброса без снимка сервера.
+     * У статики нет ссылки на сервер — ключ дедупа {@code static}, порт в имени не показываем.
+     */
     public static void onStaticReset() {
         try {
-            if (AllureWireMockSteps.active()) {
+            String testCase = AllureWireMockSteps.currentTestCase();
+            if (testCase != null && firstResetForKeyInTestCase(testCase, STATIC_RESET_KEY)) {
                 Allure.step("WireMock: сброс заглушек", Status.PASSED);
             }
         } catch (Throwable t) {
