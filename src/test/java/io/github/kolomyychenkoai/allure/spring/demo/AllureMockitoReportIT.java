@@ -13,7 +13,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 
@@ -36,18 +35,18 @@ class AllureMockitoReportIT {
         Mockito.verify(pricing).price("laptop");
 
         List<String> steps = CurrentReport.stepNames();
-        assertTrue(steps.stream().anyMatch(n -> n.startsWith("Мок-заглушка:") && n.contains("Pricing.price")),
+        CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("Мок-заглушка:") && n.contains("Pricing.price")),
                 () -> "" + steps);
-        assertTrue(steps.stream().anyMatch(n -> n.startsWith("Мок-вызов:") && n.contains("Pricing.price")
+        CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("Мок-вызов:") && n.contains("Pricing.price")
                 && n.contains("999.99")), () -> "" + steps);
-        assertTrue(steps.stream().anyMatch(n -> n.startsWith("Мок-проверка:") && n.contains("ожидали ×1")),
+        CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("Мок-проверка:") && n.contains("ожидали ×1")),
                 () -> "" + steps);
 
         // содержимое вложений (метод+аргументы / результат) через реальную цепочку
         String call = CurrentReport.attachmentContent("Mock Call").orElse("");
-        assertTrue(call.contains("Pricing.price") && call.contains("laptop"), () -> "Mock Call: " + call);
+        CurrentReport.check(call.contains("Pricing.price") && call.contains("laptop"), () -> "Mock Call: " + call);
         String res = CurrentReport.attachmentContent("Mock Result").orElse("");
-        assertTrue(res.contains("999.99"), () -> "Mock Result: " + res);
+        CurrentReport.check(res.contains("999.99"), () -> "Mock Result: " + res);
     }
 
     @Test
@@ -61,10 +60,10 @@ class AllureMockitoReportIT {
         Mockito.verify(pricing, never()).price("phone");
 
         List<String> steps = CurrentReport.stepNames();
-        assertTrue(steps.stream().anyMatch(n -> n.contains("total") && n.contains("laptop") && n.contains("1999.98")),
+        CurrentReport.check(steps.stream().anyMatch(n -> n.contains("total") && n.contains("laptop") && n.contains("1999.98")),
                 () -> "" + steps);
-        assertTrue(steps.stream().anyMatch(n -> n.contains("mouse") && n.contains("0.0")), () -> "" + steps);
-        assertTrue(steps.stream().anyMatch(n -> n.startsWith("Мок-проверка:") && n.contains("ожидали ×0")),
+        CurrentReport.check(steps.stream().anyMatch(n -> n.contains("mouse") && n.contains("0.0")), () -> "" + steps);
+        CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("Мок-проверка:") && n.contains("ожидали ×0")),
                 () -> "" + steps);
     }
 
@@ -78,7 +77,7 @@ class AllureMockitoReportIT {
         Mockito.verify(pricing, times(2)).price("laptop");
 
         List<String> steps = CurrentReport.stepNames();
-        assertTrue(steps.stream().anyMatch(n -> n.startsWith("Мок-проверка:") && n.contains("ожидали ×2")),
+        CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("Мок-проверка:") && n.contains("ожидали ×2")),
                 () -> "" + steps);
     }
 }

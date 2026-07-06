@@ -124,6 +124,24 @@ public final class CurrentReport {
         }
     }
 
+    /**
+     * Проверка для level-B БЕЗ шага в отчёте: голый {@code throw}, НЕ через
+     * {@code org.junit.jupiter.api.Assertions} — иначе (после перехвата JUnit-ассертов) сам
+     * verify-ассерт стал бы шагом «Проверка: …» и засорил бы отчёт, который этот тест проверяет
+     * (плюс саморефлексивная рекурсия в contains-проверках по {@link #stepNames()}). Все живые
+     * {@code *ReportIT} верифицируют отчёт ТОЛЬКО через этот канал (и {@code assertThrows}-драйвер).
+     */
+    public static void check(boolean condition, java.util.function.Supplier<String> message) {
+        if (!condition) {
+            throw new AssertionError(message.get());
+        }
+    }
+
+    /** Шорткат: в отчёте есть шаг с точным именем (немой на успехе — через {@link #check}). */
+    public static void assertStep(String stepName) {
+        check(stepNames().contains(stepName), () -> "нет шага «" + stepName + "» среди: " + stepNames());
+    }
+
     private static void flatten(List<StepResult> steps, List<StepResult> out) {
         if (steps == null) {
             return;

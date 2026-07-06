@@ -24,7 +24,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static com.github.tomakehurst.wiremock.stubbing.Scenario.STARTED;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Уровень B: «живой» прогон с реальным WireMockServer через РЕАЛЬНУЮ авто-регистрацию
@@ -75,27 +74,27 @@ class WireMockReportIT {
         int missStatus = send(client, base + "/api/does-not-exist", null); // 404 → near-miss
 
         // санити: трафик реально дошёл до сервера (иначе near-miss/шаги не из ниоткуда)
-        assertTrue(pricesStatus == 200, "стаб /api/prices не ответил 200: " + pricesStatus);
-        assertTrue(missStatus == 404, "незаматченный запрос не дал 404: " + missStatus);
+        CurrentReport.check(pricesStatus == 200, () -> "стаб /api/prices не ответил 200: " + pricesStatus);
+        CurrentReport.check(missStatus == 404, () -> "незаматченный запрос не дал 404: " + missStatus);
 
         wireMock.verify(getRequestedFor(urlPathEqualTo("/api/prices")));
         wireMock.verify(2, getRequestedFor(urlPathEqualTo("/api/flaky")));
         wireMock.resetAll(); // снимает near-miss/сценарии ДО сброса + шаг сброса
 
         List<String> steps = CurrentReport.stepNames();
-        assertTrue(steps.stream().anyMatch(n -> n.startsWith("Создана заглушка:") && n.contains("/api/prices")),
+        CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("Создана заглушка:") && n.contains("/api/prices")),
                 () -> "" + steps);
-        assertTrue(steps.stream().anyMatch(n -> n.startsWith("Проверка обращений к заглушке")), () -> "" + steps);
-        assertTrue(steps.stream().anyMatch(n -> n.contains("(×2)")), () -> "" + steps);
-        assertTrue(steps.stream().anyMatch(n -> n.startsWith("Near-miss:") && n.contains("/api/does-not-exist")),
+        CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("Проверка обращений к заглушке")), () -> "" + steps);
+        CurrentReport.check(steps.stream().anyMatch(n -> n.contains("(×2)")), () -> "" + steps);
+        CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("Near-miss:") && n.contains("/api/does-not-exist")),
                 () -> "" + steps);
-        assertTrue(steps.stream().anyMatch(n -> n.contains("сценарий") && n.contains("retry")), () -> "" + steps);
+        CurrentReport.check(steps.stream().anyMatch(n -> n.contains("сценарий") && n.contains("retry")), () -> "" + steps);
         // имя шага сброса несёт РЕАЛЬНЫЙ порт сервера — пинним на живой цепочке, а не просто startsWith
-        assertTrue(steps.contains("WireMock: сброс заглушек (:" + wireMock.port() + ")"), () -> "" + steps);
+        CurrentReport.assertStep("WireMock: сброс заглушек (:" + wireMock.port() + ")");
 
         // содержимое вложения стаба через реальную цепочку
         String stub = CurrentReport.attachmentContent("WireMock Stub").orElse("");
-        assertTrue(stub.contains("/api/prices"), () -> "WireMock Stub: " + stub);
+        CurrentReport.check(stub.contains("/api/prices"), () -> "WireMock Stub: " + stub);
     }
 
     @AfterAll
@@ -104,10 +103,10 @@ class WireMockReportIT {
         // request-листенер буферизует запросы и пишет шаги «Запрос к заглушке …» в
         // afterTestMethod — из тела не прочитать, но к @AfterAll они уже на диске; проверяем
         // здесь, чтобы не плодить отдельный пустой тест-кейс в отчёте
-        assertTrue(CurrentReport.anyResultFileContains("Запрос к заглушке: GET /api/prices"),
-                "нет шага запроса GET /api/prices (request-листенер не сработал?)");
-        assertTrue(CurrentReport.anyResultFileContains("WireMock Request"),
-                "нет вложения WireMock Request");
+        CurrentReport.check(CurrentReport.anyResultFileContains("Запрос к заглушке: GET /api/prices"),
+                () -> "нет шага запроса GET /api/prices (request-листенер не сработал?)");
+        CurrentReport.check(CurrentReport.anyResultFileContains("WireMock Request"),
+                () -> "нет вложения WireMock Request");
     }
 
     private static int send(HttpClient client, String url, String body) throws Exception {

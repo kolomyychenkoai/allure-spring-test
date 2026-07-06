@@ -19,7 +19,6 @@ import java.util.List;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.lessThan;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Уровень B: «живой» прогон на реальном порту через РЕАЛЬНУЮ авто-регистрацию фильтра
@@ -61,36 +60,35 @@ class RestAssuredReportIT {
         given().when().get("/api/hello/{name}", "world").then().log().body();
 
         List<String> steps = CurrentReport.stepNames();
-        assertTrue(steps.contains("HTTP GET /api/hello/world → 200"), () -> "" + steps);
-        assertTrue(steps.contains("HTTP POST /api/echo → 200"), () -> "" + steps);
-        assertTrue(steps.contains("HTTP GET /api/does-not-exist → 404"), () -> "" + steps);
+        CurrentReport.assertStep("HTTP GET /api/hello/world → 200");
+        CurrentReport.assertStep("HTTP POST /api/echo → 200");
+        CurrentReport.assertStep("HTTP GET /api/does-not-exist → 404");
 
         // проверки .then() тоже попали в отчёт шагами (bytecode-перехват RestAssured-валидации)
-        assertTrue(steps.contains("Проверка ответа: статус 200"), () -> "" + steps);
-        assertTrue(steps.contains("Проверка ответа: статус 404"), () -> "" + steps);
+        CurrentReport.assertStep("Проверка ответа: статус 200");
+        CurrentReport.assertStep("Проверка ответа: статус 404");
         // не-statusCode/body метод (contentType) ловится через реальную .then()-цепочку
-        assertTrue(steps.stream().anyMatch(n -> n.startsWith("Проверка ответа: тип содержимого")), () -> "" + steps);
+        CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("Проверка ответа: тип содержимого")), () -> "" + steps);
         // ТОЧНОЕ имя (не startsWith): ловит и задвоение, и мусор в значениях (напр. хвостовой [])
         long bodyChecks = steps.stream().filter(n -> n.equals("Проверка ответа: тело productName \"laptop\"")).count();
-        assertTrue(bodyChecks == 1, () -> "ожидался 1 чистый шаг проверки тела, а их " + bodyChecks + ": " + steps);
+        CurrentReport.check(bodyChecks == 1, () -> "ожидался 1 чистый шаг проверки тела, а их " + bodyChecks + ": " + steps);
         // ResponseAwareMatcher: РОВНО 1 шаг (обёртка не логируется, пишет внутренний plain-вызов)
         // И имя ЧИСТОЕ — разрешённый матчер «"dq42"», а не toString лямбды (мутация «снять RAM-skip»
         // → 2 шага, второй с мусорной лямбдой → RED)
         long queryChecks = steps.stream().filter(n -> n.startsWith("Проверка ответа: тело query")).count();
-        assertTrue(queryChecks == 1, () -> "ResponseAwareMatcher: ожидался 1 шаг, а их " + queryChecks + ": " + steps);
-        assertTrue(steps.contains("Проверка ответа: тело query \"dq42\""),
-                () -> "ResponseAwareMatcher: имя шага не чистое (ожидался разрешённый матчер): " + steps);
+        CurrentReport.check(queryChecks == 1, () -> "ResponseAwareMatcher: ожидался 1 шаг, а их " + queryChecks + ": " + steps);
+        CurrentReport.assertStep("Проверка ответа: тело query \"dq42\"");
         // time(Matcher) → РОВНО 1 шаг (внутренний делегат time(Matcher,TimeUnit) погашен счётчиком глубины)
         long timeChecks = steps.stream().filter(n -> n.startsWith("Проверка ответа: время ответа")).count();
-        assertTrue(timeChecks == 1, () -> "time: ожидался 1 шаг, а их " + timeChecks + ": " + steps);
+        CurrentReport.check(timeChecks == 1, () -> "time: ожидался 1 шаг, а их " + timeChecks + ": " + steps);
         // .log().body() (лог, не проверка) не должен породить пустой шаг «Проверка ответа: тело»
-        assertTrue(steps.stream().noneMatch(n -> n.equals("Проверка ответа: тело")),
+        CurrentReport.check(steps.stream().noneMatch(n -> n.equals("Проверка ответа: тело")),
                 () -> "log().body() протёк шагом проверки: " + steps);
 
         // содержимое вложений пришло через реальную цепочку
         String req = CurrentReport.attachmentContent("HTTP Request").orElse("");
-        assertTrue(req.contains("/api/hello/world"), () -> "HTTP Request без пути: " + req);
+        CurrentReport.check(req.contains("/api/hello/world"), () -> "HTTP Request без пути: " + req);
         String resp = CurrentReport.attachmentContent("HTTP Response").orElse("");
-        assertTrue(resp.contains("world"), () -> "HTTP Response без тела: " + resp);
+        CurrentReport.check(resp.contains("world"), () -> "HTTP Response без тела: " + resp);
     }
 }

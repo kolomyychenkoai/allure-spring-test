@@ -16,8 +16,6 @@ import org.springframework.test.context.TestPropertySource;
 
 import java.util.concurrent.TimeUnit;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 /**
  * Уровень B: приём через {@code @KafkaListener}. Контейнер крутит {@code poll} на СВОЁМ
  * потоке (активного Allure-кейса там нет) — записи буферизуются и проигрываются на
@@ -49,8 +47,8 @@ class KafkaListenerReportIT {
     @DisplayName("@KafkaListener принимает сообщение на потоке контейнера")
     void listenerConsumesMessage() throws Exception {
         template.send("listener-events", "k1", "{\"id\":42}");
-        assertTrue(listener.latch.await(20, TimeUnit.SECONDS),
-                "@KafkaListener не получил сообщение из встроенного брокера");
+        CurrentReport.check(listener.latch.await(20, TimeUnit.SECONDS),
+                () -> "@KafkaListener не получил сообщение из встроенного брокера");
         // consumer-шаг буферизуется на потоке контейнера и проигрывается в afterTestMethod —
         // в теле этого теста его ещё нет; проверяем в @AfterAll по записанному результату
     }
@@ -66,11 +64,11 @@ class KafkaListenerReportIT {
         // краснеет, если replay-путь @KafkaListener (буфер на потоке контейнера → flush в
         // afterTestMethod) сломан. (Имя шага «Kafka: получено» лежит в result.json, а topic/
         // payload — в отдельном файле-вложении, поэтому co-located маркеры берём из вложения.)
-        assertTrue(CurrentReport.anyResultFileContainsAll("Topic: listener-events", "\"id\":42"),
-                "вложение приёма @KafkaListener (topic listener-events + payload id:42) не попало в отчёт");
+        CurrentReport.check(CurrentReport.anyResultFileContainsAll("Topic: listener-events", "\"id\":42"),
+                () -> "вложение приёма @KafkaListener (topic listener-events + payload id:42) не попало в отчёт");
         // «Offset:» есть ТОЛЬКО в consumer-вложении (у producer его нет) — вместе с нашим topic
         // доказывает, что это ПРИЁМ, а не отправка, и привязан к listener-events
-        assertTrue(CurrentReport.anyResultFileContainsAll("Offset:", "Topic: listener-events"),
-                "consumer-вложение (Offset для topic listener-events) не попало в отчёт");
+        CurrentReport.check(CurrentReport.anyResultFileContainsAll("Offset:", "Topic: listener-events"),
+                () -> "consumer-вложение (Offset для topic listener-events) не попало в отчёт");
     }
 }

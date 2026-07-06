@@ -22,8 +22,6 @@ import javax.sql.DataSource;
 import java.sql.Connection;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 /**
  * Уровень B: миграции Liquibase попадают в отчёт двумя путями (см. {@code AllureLiquibaseInstrumentation}):
  * <ul>
@@ -60,7 +58,7 @@ class LiquibaseReportIT {
         }
 
         List<String> steps = CurrentReport.stepNames();
-        assertTrue(steps.stream().anyMatch("Liquibase: changeset create-live-account (allure)"::equals),
+        CurrentReport.check(steps.stream().anyMatch("Liquibase: changeset create-live-account (allure)"::equals),
                 () -> "нет шага живой миграции Liquibase: " + steps);
     }
 
@@ -69,9 +67,9 @@ class LiquibaseReportIT {
     static void startupSnapshotIsWritten() {
         // снимок выложен в afterTestMethod (один раз на JVM); к @AfterAll он уже на диске.
         // Проверяем без @Order — не важно, в каком порядке шли тесты класса.
-        assertTrue(CurrentReport.anyResultFileContains("changeset на старте"),
-                "нет снимка стартовых миграций Liquibase в записанных результатах");
-        assertTrue(CurrentReport.anyResultFileContainsAll("create-account", "add-account-email"),
-                "снимок старта не содержит id применённых changeset'ов");
+        CurrentReport.check(CurrentReport.anyResultFileContains("changeset на старте"),
+                () -> "нет снимка стартовых миграций Liquibase в записанных результатах");
+        CurrentReport.check(CurrentReport.anyResultFileContainsAll("create-account", "add-account-email"),
+                () -> "снимок старта не содержит id применённых changeset'ов");
     }
 }

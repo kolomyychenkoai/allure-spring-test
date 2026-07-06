@@ -2,6 +2,7 @@ package io.github.kolomyychenkoai.allure.spring.assertion;
 
 import io.github.kolomyychenkoai.allure.spring.assertion.internal.AllureAssertJInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.assertion.internal.AllureHamcrestInstrumentation;
+import io.github.kolomyychenkoai.allure.spring.assertion.internal.AllureJUnitJupiterAssertionsInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.assertion.internal.AllureSpringAssertionsInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
 import org.springframework.core.Ordered;
@@ -10,7 +11,7 @@ import org.springframework.test.context.TestExecutionListener;
 
 /**
  * Ставит байткод-инструментирование ассертов один раз (идемпотентно) перед первым
- * тест-классом: Spring AssertionErrors, Hamcrest и AssertJ. Регистрируется через
+ * тест-классом: Spring AssertionErrors, Hamcrest, AssertJ и JUnit Jupiter Assertions. Регистрируется через
  * {@code META-INF/spring.factories}.
  * <p>
  * Перед установкой проверяется {@link AllureInstrumentation#available()} — если byte-buddy
@@ -32,5 +33,6 @@ public class AllureAssertionsListener implements TestExecutionListener, Ordered 
         AllureSpringAssertionsInstrumentation.install();
         AllureHamcrestInstrumentation.install();
         AllureAssertJInstrumentation.install();
+        AllureJUnitJupiterAssertionsInstrumentation.install();
     }
 }

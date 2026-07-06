@@ -22,7 +22,6 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Уровень B: прямые JDBC-вызовы (минуя репозитории) попадают в отчёт шагами «DB JdbcTemplate.*».
@@ -50,19 +49,19 @@ class JdbcReportIT {
         assertThat(name).isEqualTo("jdbc-gadget");
 
         List<String> steps = CurrentReport.stepNames();
-        assertTrue(steps.stream().anyMatch("DB JdbcTemplate.update"::equals),
+        CurrentReport.check(steps.stream().anyMatch("DB JdbcTemplate.update"::equals),
                 () -> "нет шага DB JdbcTemplate.update: " + steps);
-        assertTrue(steps.stream().anyMatch("DB JdbcTemplate.queryForObject"::equals),
+        CurrentReport.check(steps.stream().anyMatch("DB JdbcTemplate.queryForObject"::equals),
                 () -> "нет шага DB JdbcTemplate.queryForObject: " + steps);
-        assertTrue(CurrentReport.attachmentContent("SQL").orElse("").toLowerCase().contains("insert into widget"),
+        CurrentReport.check(CurrentReport.attachmentContent("SQL").orElse("").toLowerCase().contains("insert into widget"),
                 () -> "SQL без текста запроса: " + CurrentReport.attachmentContent("SQL"));
         // содержимое результата ИМЕННО шага queryForObject (что вернулось) — через реальную цепочку,
         // не только уровень A. Берём DB Result конкретного шага: первый общий DB Result — это update (=1).
-        assertTrue(dbResultOfStep("DB JdbcTemplate.queryForObject").orElse("").contains("jdbc-gadget"),
+        CurrentReport.check(dbResultOfStep("DB JdbcTemplate.queryForObject").orElse("").contains("jdbc-gadget"),
                 () -> "DB Result queryForObject без значения: " + dbResultOfStep("DB JdbcTemplate.queryForObject"));
 
         // реальный SQL от datasource-proxy вложен в шаг шаблона (без него виден только текст запроса)
-        assertTrue(steps.stream().anyMatch(n -> n.startsWith("SQL INSERT") && n.contains("widget")),
+        CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("SQL INSERT") && n.contains("widget")),
                 () -> "нет вложенного SQL INSERT widget: " + steps);
     }
 
@@ -73,11 +72,11 @@ class JdbcReportIT {
 
         List<String> steps = CurrentReport.stepNames();
         long namedSteps = steps.stream().filter("DB NamedParameterJdbcTemplate.update"::equals).count();
-        assertTrue(namedSteps == 1, () -> "ожидался ровно один NamedParameter-шаг: " + steps);
+        CurrentReport.check(namedSteps == 1, () -> "ожидался ровно один NamedParameter-шаг: " + steps);
         // внутренний делегат JdbcTemplate.update подавлён счётчиком глубины
-        assertTrue(steps.stream().noneMatch("DB JdbcTemplate.update"::equals),
+        CurrentReport.check(steps.stream().noneMatch("DB JdbcTemplate.update"::equals),
                 () -> "делегат JdbcTemplate.update не должен давать отдельный шаг: " + steps);
-        assertTrue(CurrentReport.attachmentContent("SQL").orElse("").contains(":n"),
+        CurrentReport.check(CurrentReport.attachmentContent("SQL").orElse("").contains(":n"),
                 () -> "в шаге NamedParameter должен быть именованный SQL (:n): " + CurrentReport.attachmentContent("SQL"));
     }
 

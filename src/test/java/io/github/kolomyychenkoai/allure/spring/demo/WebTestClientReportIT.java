@@ -14,8 +14,6 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 /**
  * Уровень B: обмен через {@code WebTestClient} попадает в отчёт через
  * {@code WebTestClientBuilderCustomizer}. Обмены с чтением тела — consumer результата (сразу);
@@ -38,11 +36,11 @@ class WebTestClientReportIT {
                 .expectBody().jsonPath("$.greeting").isEqualTo("hello world");
 
         List<String> steps = CurrentReport.stepNames();
-        assertTrue(steps.stream().anyMatch("HTTP GET /api/hello/world → 200"::equals),
+        CurrentReport.check(steps.stream().anyMatch("HTTP GET /api/hello/world → 200"::equals),
                 () -> "нет HTTP-шага WebTestClient: " + steps);
 
         String resp = CurrentReport.attachmentContent("HTTP Response").orElse("");
-        assertTrue(resp.contains("hello world"), () -> "HTTP Response без тела: " + resp);
+        CurrentReport.check(resp.contains("hello world"), () -> "HTTP Response без тела: " + resp);
     }
 
     @Test
@@ -55,11 +53,11 @@ class WebTestClientReportIT {
                 .expectBody().jsonPath("$.productName").isEqualTo("laptop");
 
         List<String> steps = CurrentReport.stepNames();
-        assertTrue(steps.stream().anyMatch("HTTP POST /api/echo → 200"::equals),
+        CurrentReport.check(steps.stream().anyMatch("HTTP POST /api/echo → 200"::equals),
                 () -> "нет POST-шага WebTestClient: " + steps);
 
         String req = CurrentReport.attachmentContent("HTTP Request").orElse("");
-        assertTrue(req.contains("laptop"), () -> "тело POST-запроса не попало: " + req);
+        CurrentReport.check(req.contains("laptop"), () -> "тело POST-запроса не попало: " + req);
     }
 
     @Test
@@ -75,7 +73,7 @@ class WebTestClientReportIT {
     static void statusOnlyStepWrittenToReport() {
         // обмен без чтения тела проигрывается в afterTestMethod; к @AfterAll он уже на диске —
         // проверяем без завязки на порядок тестов
-        assertTrue(CurrentReport.anyResultFileContains("HTTP GET /api/hello/statusonly → 200"),
-                "статус-онли вызов WebTestClient не попал в отчёт (фильтр/replay не сработал)");
+        CurrentReport.check(CurrentReport.anyResultFileContains("HTTP GET /api/hello/statusonly → 200"),
+                () -> "статус-онли вызов WebTestClient не попал в отчёт (фильтр/replay не сработал)");
     }
 }
