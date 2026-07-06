@@ -27,7 +27,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Уровень B: прямые JDBC-вызовы (минуя репозитории) попадают в отчёт шагами «DB JdbcTemplate.*».
  * Таблица {@code widget} поднимается Hibernate (JpaTestApp), DataSource обёрнут datasource-proxy —
  * значит проверяем заодно, что реальный SQL вкладывается ВНУТРЬ шага шаблона.
- * Бизнес-ассерты — на AssertJ (тоже попадают в отчёт, это ок); проверки ОТЧЁТА — на JUnit assertTrue.
+ * Бизнес-ассерты — на AssertJ (тоже попадают в отчёт, это ок); проверки ОТЧЁТА — через немой
+ * {@code CurrentReport.check}/{@code assertStep} (JUnit assertTrue сам стал бы шагом «Проверка: …»).
  */
 @SpringBootTest(classes = JpaTestApp.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @Epic("allure-spring-test")

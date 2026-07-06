@@ -21,8 +21,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * Уровень B: «живой» прогон через РЕАЛЬНУЮ авто-конфигурацию (MockMvcBuilderCustomizer.alwaysDo
  * → AllureMockMvcResultHandler). Шаги пишутся в НАСТОЯЩИЙ отчёт (showcase сохраняется), а тест
- * читает их через {@link CurrentReport} и проверяет наличие. Проверки — на JUnit assertTrue
- * (он НЕ инструментируется, поэтому не засоряет отчёт). Краснеет, если кастомайзер не
+ * читает их через {@link CurrentReport} и проверяет наличие. Проверки — через немой
+ * {@code CurrentReport.check}/{@code assertStep} (JUnit assertTrue теперь инструментируется —
+ * verify-ассерт сам стал бы шагом и засорил отчёт). Краснеет, если кастомайзер не
  * подключился (auto-config снят) или имя HTTP-шага съехало.
  */
 @SpringBootTest(classes = WebTestApp.class)

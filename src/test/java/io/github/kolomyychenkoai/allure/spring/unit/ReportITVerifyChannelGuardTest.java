@@ -38,7 +38,8 @@ class ReportITVerifyChannelGuardTest {
         List<String> offenders = new ArrayList<>();
         try (Stream<Path> files = Files.list(DEMO_DIR)) {
             List<Path> its = files
-                    .filter(p -> p.getFileName().toString().endsWith("ReportIT.java"))
+                    // ВСЕ живые level-B (не только *ReportIT — был *SmokeIT с дырой в фильтре)
+                    .filter(p -> p.getFileName().toString().endsWith("IT.java"))
                     // новый Jupiter-IT: JUnit-ассерты там — предмет показа, не verify
                     .filter(p -> !p.getFileName().toString().equals("JUnitJupiterAssertionsReportIT.java"))
                     // Spring-ассерты (AssertionErrors.assert*) там — предмет показа (драйверы шагов),

@@ -254,6 +254,10 @@ class InstrumentationApiCanaryTest {
             assertTrue(hasMethod(a, m, -1, null),
                     "Assertions." + m + " уехал → обнови матчер в AllureJUnitJupiterAssertionsInstrumentation");
         }
+        // допущение «фасад Assertions не само-делегирует → депт-счётчик не нужен» стерегут РАНТАЙМ-тесты
+        // на реальной версии Jupiter: AllureJUnitJupiterAssertionsTest#singleAssertOneStep (level-A) +
+        // JUnitJupiterAssertionsReportIT (eq==1, level-B) — покраснеют, если появится удвоение (эффект
+        // сильнее статического байт-скана: проверяем результат, а не форму).
         // fail/assertAll ДОЛЖНЫ существовать — их мы ОСОЗНАННО исключили; если исчезнут, исключение врёт
         assertTrue(hasMethod(a, "fail", -1, null),
                 "Assertions.fail уехал → пересмотри исключение fail в AllureJUnitJupiterAssertionsInstrumentation");

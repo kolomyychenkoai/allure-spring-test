@@ -4,6 +4,7 @@ import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import net.bytebuddy.asm.Advice;
+import net.bytebuddy.implementation.bytecode.assign.Assigner;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -103,7 +104,8 @@ public final class AllureJUnitJupiterAssertionsInstrumentation {
             case "assertInstanceOf" -> "значение " + v(vals, 1) + " — экземпляр " + typeName(vals.length > 0 ? vals[0] : null);
             case "assertThrows", "assertThrowsExactly" -> "брошено " + thrownType(returned, vals);
             case "assertDoesNotThrow" -> "без исключения";
-            case "assertTimeout", "assertTimeoutPreemptively" -> "уложились в таймаут" + (vals.length > 0 ? " " + v(vals, 0) : "");
+            // длительность (vals[0]) в имя НЕ тащим — Duration.toString() даёт ISO-жаргон «PT5S»
+            case "assertTimeout", "assertTimeoutPreemptively" -> "уложились в таймаут";
             default -> method;
         };
         return message != null ? "Проверка: " + message + " — " + core : "Проверка: " + core;
@@ -166,7 +168,7 @@ public final class AllureJUnitJupiterAssertionsInstrumentation {
         public static void onExit(@Advice.Origin("#m") String method,
                                   @Advice.Origin("#d") String descriptor,
                                   @Advice.AllArguments Object[] args,
-                                  @Advice.Return(typing = net.bytebuddy.implementation.bytecode.assign.Assigner.Typing.DYNAMIC) Object returned,
+                                  @Advice.Return(typing = Assigner.Typing.DYNAMIC) Object returned,
                                   @Advice.Thrown Throwable thrown) {
             onAssertion(method, descriptor, args, returned, thrown);
         }
