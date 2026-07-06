@@ -48,8 +48,9 @@ class RestAssuredReportIT {
         given().contentType(ContentType.JSON).body("{\"productName\":\"laptop\"}")
                 .when().post("/api/echo").then().statusCode(200).body("productName", equalTo("laptop"));
         given().when().get("/api/does-not-exist").then().statusCode(404);
-        // перегрузка body(String, ResponseAwareMatcher) САМО-делегирует в body(String,Matcher,Object[])
-        // ТОГО ЖЕ класса (DEPTH=2) — дедуп глубиной должен оставить РОВНО 1 шаг (снять гард → 2 → RED)
+        // body(String, ResponseAwareMatcher) само-делегирует в body(String,Matcher,Object[]) того же
+        // класса — обёртку сами НЕ логируем, её значение пишет внутренний plain-вызов: РОВНО 1 ЧИСТЫЙ
+        // шаг «тело query "dq42"» (а не мусорный toString лямбды). Снять RAM-skip → 2 шага → RED
         given().queryParam("q", "dq42").when().get("/api/search").then()
                 .body("query", (ResponseAwareMatcher<Response>) r -> equalTo("dq42"));
         // log-вариант того же имени (body() без аргументов) — это ЛОГ, не проверка: шага «Проверка …» не даёт
@@ -68,9 +69,13 @@ class RestAssuredReportIT {
         // ТОЧНОЕ имя (не startsWith): ловит и задвоение, и мусор в значениях (напр. хвостовой [])
         long bodyChecks = steps.stream().filter(n -> n.equals("Проверка ответа: тело productName \"laptop\"")).count();
         assertTrue(bodyChecks == 1, () -> "ожидался 1 чистый шаг проверки тела, а их " + bodyChecks + ": " + steps);
-        // само-делегирующая перегрузка (ResponseAwareMatcher) → РОВНО 1 шаг (иначе гард глубины не работает)
-        long rawBodyChecks = steps.stream().filter(n -> n.startsWith("Проверка ответа: тело query")).count();
-        assertTrue(rawBodyChecks == 1, () -> "ResponseAwareMatcher: ожидался 1 шаг, а их " + rawBodyChecks + ": " + steps);
+        // ResponseAwareMatcher: РОВНО 1 шаг (обёртка не логируется, пишет внутренний plain-вызов)
+        // И имя ЧИСТОЕ — разрешённый матчер «"dq42"», а не toString лямбды (мутация «снять RAM-skip»
+        // → 2 шага, второй с мусорной лямбдой → RED)
+        long queryChecks = steps.stream().filter(n -> n.startsWith("Проверка ответа: тело query")).count();
+        assertTrue(queryChecks == 1, () -> "ResponseAwareMatcher: ожидался 1 шаг, а их " + queryChecks + ": " + steps);
+        assertTrue(steps.contains("Проверка ответа: тело query \"dq42\""),
+                () -> "ResponseAwareMatcher: имя шага не чистое (ожидался разрешённый матчер): " + steps);
         // .log().body() (лог, не проверка) не должен породить пустой шаг «Проверка ответа: тело»
         assertTrue(steps.stream().noneMatch(n -> n.equals("Проверка ответа: тело")),
                 () -> "log().body() протёк шагом проверки: " + steps);

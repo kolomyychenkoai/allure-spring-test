@@ -3,6 +3,7 @@ package io.github.kolomyychenkoai.allure.spring.rest.internal;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
+import io.restassured.matcher.ResponseAwareMatcher;
 import net.bytebuddy.asm.Advice;
 
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -32,17 +33,19 @@ import static net.bytebuddy.matcher.ElementMatchers.takesArguments;
  * прямо из метода, {@code @Thrown != null} → шаг НЕ пишем (падение Allure покажет на уровне
  * теста).
  * <p>
- * <b>Дедуп делегации перегрузок (счётчик глубины НУЖЕН здесь).</b> Обычно перегрузки форвардят
- * НАРУЖУ в {@code ResponseSpecificationImpl} (не инструментируем) — там дублировать нечего. НО
- * перегрузки с {@code ResponseAwareMatcher} само-делегируют ВНУТРИ класса: {@code body(String,
- * ResponseAwareMatcher)} по байткоду зовёт {@code body(String, Matcher, Object[])} того же класса —
- * оба инструментированы, без гарда вышло бы 2 шага на один пользовательский {@code .body(...)}.
- * Поэтому считаем глубину (как в AssertJ/Spring-ассертах): шаг пишет только ВНЕШНИЙ вызов
- * (проверено тестом {@code RestAssuredReportIT} через {@code ResponseAwareMatcher} → ровно 1 шаг).
+ * <b>{@code ResponseAwareMatcher}-перегрузки НЕ логируем сами.</b> {@code body(path, ResponseAwareMatcher)}
+ * само-делегирует в {@code body(path, Matcher, Object[])} ТОГО ЖЕ класса — а её мы инструментируем, и
+ * она даёт ЧИТАЕМЫЙ шаг с УЖЕ РАЗРЕШЁННЫМ матчером (напр. «тело query "dq42"»). Если бы логировали и
+ * обёртку, вышло бы два шага, причём у обёртки в имени — мусорный {@code toString} лямбды. Поэтому в
+ * {@link #onValidation} проверку с аргументом-{@code ResponseAwareMatcher} пропускаем: её значение
+ * запишет внутренний plain-вызов. Так дедуп детерминирован БЕЗ счётчика глубины (единственный источник
+ * само-делегации — именно {@code ResponseAwareMatcher}, и мы его гасим у источника).
  * <p>
- * <b>Границы by-design:</b> ловится только API {@code .then()...} с проверками ПРЯМО на нём;
- * проверки, спрятанные в общий {@code ResponseSpecification} ({@code .then().spec(spec)}),
- * отдельными шагами не выходят — их гоняет внутренний {@code validate()}, а не публичные методы.
+ * <b>Границы by-design:</b> (1) проверки, спрятанные в общий {@code ResponseSpecification}
+ * ({@code .then().spec(spec)}), отдельными шагами не выходят — их гоняет внутренний {@code validate()},
+ * а не публичные методы; (2) РЕДКИЙ {@code header(name, ResponseAwareMatcher)} форвардит наружу в
+ * {@code ResponseSpecificationImpl} (не само-делегирует в plain-форму), поэтому, как и все
+ * {@code ResponseAwareMatcher}-обёртки, отдельным шагом не выходит; сам HTTP-шаг при этом на месте.
  * {@code content(...)} — deprecated-алиас {@code body(...)}, отражается меткой «тело».
  * <p>
  * ⚠️ <b>Завязано на внутренности RestAssured 5.5.x</b> ({@code io.restassured.internal.
@@ -56,27 +59,7 @@ public final class AllureRestAssuredValidationInstrumentation {
 
     private static final AtomicBoolean INSTALLED = new AtomicBoolean(false);
 
-    /** Глубина вложенности инструментированных вызовов в потоке: внешний (пользовательский) — 1. */
-    private static final ThreadLocal<Integer> DEPTH = ThreadLocal.withInitial(() -> 0);
-
     private AllureRestAssuredValidationInstrumentation() {
-    }
-
-    /** Вход в инструментированный метод; {@code true} — это ВНЕШНИЙ вызов. Только для inline-advice. */
-    public static boolean enter() {
-        int depth = DEPTH.get() + 1;
-        DEPTH.set(depth);
-        return depth == 1;
-    }
-
-    /** Выход (всегда парен {@link #enter()}). Только для inline-advice. */
-    public static void exit() {
-        int depth = DEPTH.get() - 1;
-        if (depth <= 0) {
-            DEPTH.remove(); // вернулись к нулю — не держим boxed 0 в пуле потоков surefire
-        } else {
-            DEPTH.set(depth);
-        }
     }
 
     public static void install() {
@@ -99,10 +82,27 @@ public final class AllureRestAssuredValidationInstrumentation {
     /** Логика шага проверки (вынесена из advice для level-A теста). Шаг — только для УСПЕШНОЙ проверки. */
     public static void onValidation(String method, Object[] args, Throwable thrown) {
         try {
+            // ResponseAwareMatcher-обёртку не логируем — её значение запишет внутренний plain-вызов
+            // (читаемо, разрешённый матчер, без задвоения). См. класс-javadoc.
+            if (containsResponseAwareMatcher(args)) {
+                return;
+            }
             AllureAdviceSupport.step("Проверка ответа: " + describe(method, args), thrown);
         } catch (Throwable t) {
             AllureInstrumentationLogger.warn("RestAssuredValidation", t);
         }
+    }
+
+    private static boolean containsResponseAwareMatcher(Object[] args) {
+        if (args == null) {
+            return false;
+        }
+        for (Object a : args) {
+            if (a instanceof ResponseAwareMatcher) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Человекочитаемое имя проверки: русская метка метода + значения аргументов. */
@@ -145,20 +145,10 @@ public final class AllureRestAssuredValidationInstrumentation {
     }
 
     public static class ValidationAdvice {
-        @Advice.OnMethodEnter
-        public static boolean onEnter() {
-            return enter();
-        }
-
         @Advice.OnMethodExit(suppress = Throwable.class, onThrowable = Throwable.class)
-        public static void onExit(@Advice.Enter boolean outermost,
-                                  @Advice.Origin("#m") String method,
+        public static void onExit(@Advice.Origin("#m") String method,
                                   @Advice.AllArguments Object[] args,
                                   @Advice.Thrown Throwable thrown) {
-            exit();
-            if (!outermost) {
-                return; // внутренний делегат перегрузки — не дублируем
-            }
             onValidation(method, args, thrown);
         }
     }
