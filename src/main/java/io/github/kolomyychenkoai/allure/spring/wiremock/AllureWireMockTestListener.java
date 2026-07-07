@@ -22,6 +22,8 @@ import java.util.WeakHashMap;
 /**
  * Находит {@code WireMockServer} в тест-классе рефлексией (в static И instance полях, по всей
  * цепочке наследования) и вешает {@link AllureWireMockListener} для логирования запросов/ответов.
+ * Для каждого найденного запущенного сервера в {@code beforeTestMethod} рисует шаг «WireMock: сервер
+ * поднят (:port)» ({@link AllureWireMockSteps#serverUp}) — в НАЧАЛЕ теста, per-test (без протечки).
  * Заглушки/verify/resetAll ловятся байткодом — см. {@link AllureWireMockVerifyInstrumentation}.
  * Код в тестах не нужен. Регистрируется через {@code META-INF/spring.factories}.
  * <p>
@@ -66,6 +68,7 @@ public class AllureWireMockTestListener implements TestExecutionListener, Ordere
         }
         AllureWireMockListener.clear();
         for (WireMockServer server : findServers(testContext)) {
+            AllureWireMockSteps.serverUp(server); // шаг «сервер поднят (:port)» — в начале теста
             if (REGISTERED.add(server)) {
                 server.addMockServiceRequestListener(AllureWireMockListener::onRequestReceived);
             }

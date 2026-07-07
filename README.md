@@ -39,8 +39,8 @@ test-classpath, который сам себя «вшивает». Точки в
 - **База данных** — вызовы Spring Data репозиториев и прямого `JdbcTemplate` + реальный SQL внутри них.
 - **Миграции** — Liquibase: снимок стартовой схемы в начале каждого теста и changeset'ы при миграции в тесте.
 - **Kafka** — отправка (`producer.send`) и приём (`consumer.poll`) сообщений.
-- **WireMock** — заглушки, `verify`, near-miss (почему не сматчилось), состояния
-  сценариев, сброс, и каждый обслуженный запрос.
+- **WireMock** — старт сервера (порт), заглушки, `verify`, near-miss (почему не сматчилось),
+  состояния сценариев, сброс, и каждый обслуженный запрос.
 - **Ассерты** — AssertJ, Hamcrest, JUnit Jupiter `Assertions`, Spring `AssertionErrors` и проверки RestAssured
   (`.then().statusCode(...)/.body(...)`): каждая успешная проверка отдельным шагом с понятным именем.
 - **Mockito** (по согласию) — заглушки/вызовы/проверки моков.
@@ -169,7 +169,7 @@ mvn allure:serve  # собирает отчёт и открывает в бра�
 | **Прямой JDBC** | каждый вызов `JdbcTemplate` / `NamedParameterJdbcTemplate` (минуя репозитории) + реальный SQL внутри | `DB <Тип>.<метод>` со вложенным `SQL <OP> <таблица>` + `SQL` / `DB Result` |
 | **Liquibase** | применённые changeset'ы: стартовая схема — снимком в НАЧАЛЕ каждого теста, во время теста — пошагово | `🛢️ Liquibase: схема БД (N changeset)` / `Liquibase: changeset <id> (<author>)` + список / `Changeset` |
 | **Kafka** | `producer.send(record, callback)`, `consumer.poll(Duration)` | `Kafka: отправлено → …` / `Kafka: получено N сообщ.` + вложение сообщения |
-| **WireMock** | `stubFor`, `verify(...)`, `resetAll()` / статический `reset()`, каждый обслуженный запрос, near-miss, состояние сценария | `Создана заглушка …` / `Проверка обращений …` / `Запрос к заглушке …` / `Near-miss …` / `WireMock сценарий …` / `WireMock: сброс …` + Request/Response/Stub |
+| **WireMock** | старт сервера (в начале теста), `stubFor`, `verify(...)`, `resetAll()` / статический `reset()`, каждый обслуженный запрос, near-miss, состояние сценария | `WireMock: сервер поднят (:port)` / `Создана заглушка …` / `Проверка обращений …` / `Запрос к заглушке …` / `Near-miss …` / `WireMock сценарий …` / `WireMock: сброс …` + Request/Response/Stub |
 | **AssertJ** | каждая **успешная** проверка на `AbstractAssert` и наследниках (вкл. кастомные ассерты) | `Проверка: значение X — <method> <args>` |
 | **Hamcrest** | `MatcherAssert.assertThat(...)` (2- и 3-арг) | `Проверка: [reason:] значение X, ожидалось <matcher>` |
 | **Spring-ассерты** | каждый успешный `AssertionErrors.assert*` | `Проверка: <message> — …` |

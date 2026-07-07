@@ -173,7 +173,7 @@ public final class AllureWireMockVerifyInstrumentation {
                 AllureWireMockSteps.nearMisses(wireMockServer);
                 AllureWireMockSteps.scenarios(wireMockServer);
                 key = wireMockServer;
-                Integer port = safePort(wireMockServer);
+                Integer port = AllureWireMockSteps.safePort(wireMockServer);
                 if (port != null) {
                     portLabel = " (:" + port + ")";
                 }
@@ -184,15 +184,6 @@ public final class AllureWireMockVerifyInstrumentation {
             }
         } catch (Throwable t) {
             AllureInstrumentationLogger.warn("WireMockReset", t);
-        }
-    }
-
-    /** Порт сервера, либо null, если его нельзя получить (не роняем инструментирование). */
-    private static Integer safePort(WireMockServer server) {
-        try {
-            return server.port();
-        } catch (Throwable t) {
-            return null;
         }
     }
 

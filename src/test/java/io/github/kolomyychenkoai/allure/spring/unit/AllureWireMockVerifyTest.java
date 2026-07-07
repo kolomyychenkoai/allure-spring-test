@@ -1,5 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
 
+import io.github.kolomyychenkoai.allure.spring.wiremock.internal.AllureWireMockSteps;
 import io.github.kolomyychenkoai.allure.spring.wiremock.internal.AllureWireMockVerifyInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.qameta.allure.model.Attachment;
@@ -82,6 +83,35 @@ class AllureWireMockVerifyTest {
                 new AssertionError("ожидалось обращение, которого не было")));
 
         assertThat(stepNames(result)).noneMatch(n -> n.startsWith("Проверка обращений"));
+    }
+
+    @Test
+    @DisplayName("serverUp: шаг «WireMock: сервер поднят (:port)» с реальным портом")
+    void logsServerUp() {
+        WireMockServer server = new WireMockServer(options().dynamicPort());
+        server.start();
+        try {
+            TestResult result = allure.run("up", () -> AllureWireMockSteps.serverUp(server));
+            // мутация: убери порт из имени → рассинхрон с ассертом; убери шаг из beforeTestMethod → RED в IT
+            assertThat(allure.hasStep(result, "WireMock: сервер поднят (:" + server.port() + ")")).isTrue();
+        } finally {
+            server.stop();
+        }
+    }
+
+    @Test
+    @DisplayName("serverUp на https-only сервере: шаг рисуется БЕЗ порта (safePort деградирует, не теряем шаг)")
+    void serverUpHttpsOnlyDegradesGracefully() {
+        // у https-only сервера нет HTTP-порта → server.port() кинет; safePort→null → имя без порта.
+        // мутация: верни в serverUp прямой server.port() → шаг пропадёт (Throwable) → RED
+        WireMockServer server = new WireMockServer(options().httpDisabled(true).dynamicHttpsPort());
+        server.start();
+        try {
+            TestResult result = allure.run("up-https", () -> AllureWireMockSteps.serverUp(server));
+            assertThat(allure.hasStep(result, "WireMock: сервер поднят")).isTrue();
+        } finally {
+            server.stop();
+        }
     }
 
     @Test
