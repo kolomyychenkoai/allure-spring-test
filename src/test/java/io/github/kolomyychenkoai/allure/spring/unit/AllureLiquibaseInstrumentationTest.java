@@ -12,16 +12,17 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
+import java.util.List;
 import java.util.Queue;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Уровень A: логика перехвата Liquibase без движка — зовём {@code onExecute/flushStartupSnapshot}
+ * Уровень A: логика перехвата Liquibase без движка — зовём {@code onExecute/emitStartupSnapshot}
  * напрямую. Дополняет уровень B ({@code LiquibaseReportIT}) детерминированной проверкой живого
- * шага, снимка старта и гейта. Статик-состояние (буфер старта + флаг снимка) сбрасываем
- * рефлексией вокруг каждого теста — чтобы тесты не влияли друг на друга и на уровень B.
+ * шага, снимка старта (реплей в каждом тесте + дедуп) и гейта. Статик-состояние (буфер старта +
+ * накопленный снимок) сбрасываем рефлексией вокруг каждого теста — чтобы тесты не влияли друг на
+ * друга и на уровень B.
  */
 class AllureLiquibaseInstrumentationTest {
 
@@ -41,7 +42,7 @@ class AllureLiquibaseInstrumentationTest {
 
     /**
      * Гарантированный сброс статики после ВСЕГО класса — чтобы порядок тест-классов в JVM не влиял
-     * на {@code LiquibaseReportIT} (он полагается на реальный снимок старта с SNAPSHOT_EMITTED==false).
+     * на {@code LiquibaseReportIT} (он полагается на пустой стартовый снимок до реальных миграций).
      */
     @AfterAll
     static void tearDownClass() {
@@ -88,40 +89,51 @@ class AllureLiquibaseInstrumentationTest {
     }
 
     @Test
-    @DisplayName("миграции на старте (вне теста) выкладываются одним снимком в первом тесте")
-    void startupSnapshotEmittedOnce() {
+    @DisplayName("снимок стартовой схемы повторяется в НАЧАЛЕ каждого теста (реплей)")
+    void startupSnapshotReplaysEveryCall() {
         // вне активного кейса — буферизуется как «старт»
         AllureLiquibaseInstrumentation.onExecute(changeSet("create-account", "allure"), null);
         AllureLiquibaseInstrumentation.onExecute(changeSet("add-email", "allure"), null);
 
-        TestResult first = allure.run("lb-first", AllureLiquibaseInstrumentation::flushStartupSnapshot);
-        assertThat(allure.hasStep(first, "Liquibase: применено 2 changeset на старте")).isTrue();
+        // первый тест: буфер сливается в снимок и рисуется шаг
+        TestResult first = allure.run("lb-first", AllureLiquibaseInstrumentation::emitStartupSnapshot);
+        assertThat(allure.hasStep(first, "🛢️ Liquibase: схема БД (2 changeset)")).isTrue();
         assertThat(allure.attachment(first, "Применённые миграции").orElseThrow())
                 .contains("create-account").contains("add-email");
 
-        // во втором тесте снимок НЕ повторяется
-        TestResult second = allure.run("lb-second", AllureLiquibaseInstrumentation::flushStartupSnapshot);
-        assertThat(second.getSteps().stream().map(s -> s.getName()))
-                .noneMatch(n -> n.contains("на старте"));
+        // второй тест: буфер уже пуст, но снимок ПОВТОРЯЕТСЯ (реплей из STARTUP_SNAPSHOT)
+        TestResult second = allure.run("lb-second", AllureLiquibaseInstrumentation::emitStartupSnapshot);
+        assertThat(allure.hasStep(second, "🛢️ Liquibase: схема БД (2 changeset)")).isTrue();
+    }
+
+    @Test
+    @DisplayName("повторно забуференный changeset в снимок попадает один раз (дедуп)")
+    void startupSnapshotDedupes() {
+        AllureLiquibaseInstrumentation.onExecute(changeSet("create-account", "allure"), null);
+        // тот же changeset забуферен снова (напр. перезагрузка контекста) — не должен задвоиться
+        AllureLiquibaseInstrumentation.onExecute(changeSet("create-account", "allure"), null);
+
+        TestResult result = allure.run("lb-dedup", AllureLiquibaseInstrumentation::emitStartupSnapshot);
+        assertThat(allure.hasStep(result, "🛢️ Liquibase: схема БД (1 changeset)")).isTrue();
     }
 
     @Test
     @DisplayName("без активного кейса и без буфера снимок ничего не пишет")
     void noSnapshotWithoutBuffer() {
         // setUp установил InMemoryAllure, но allure.run не вызывали и буфер пуст
-        AllureLiquibaseInstrumentation.flushStartupSnapshot();
+        AllureLiquibaseInstrumentation.emitStartupSnapshot();
         assertThat(allure.wroteNothing()).isTrue();
     }
 
-    /** Сброс статик-состояния модуля (буфер старта + флаг снимка) рефлексией — для изоляции тестов. */
+    /** Сброс статик-состояния модуля (буфер старта + накопленный снимок) рефлексией — для изоляции тестов. */
     private static void resetState() {
         try {
             Field buffer = AllureLiquibaseInstrumentation.class.getDeclaredField("STARTUP_BUFFER");
             buffer.setAccessible(true);
             ((Queue<?>) buffer.get(null)).clear();
-            Field emitted = AllureLiquibaseInstrumentation.class.getDeclaredField("SNAPSHOT_EMITTED");
-            emitted.setAccessible(true);
-            ((AtomicBoolean) emitted.get(null)).set(false);
+            Field snapshot = AllureLiquibaseInstrumentation.class.getDeclaredField("STARTUP_SNAPSHOT");
+            snapshot.setAccessible(true);
+            ((List<?>) snapshot.get(null)).clear();
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException("не удалось сбросить состояние Liquibase-модуля", e);
         }
