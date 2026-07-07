@@ -15,7 +15,7 @@ import java.util.stream.Collectors;
 
 /**
  * Перед каждым тестом снимает все свойства приложения из Spring {@link Environment}
- * и прикрепляет их к Allure-отчёту шагом «Configuration» с вложением «Properties».
+ * и прикрепляет их к Allure-отчёту шагом «Конфиги приложения» с вложением «Свойства».
  * Системные источники ({@code systemProperties}, {@code systemEnvironment}) исключаются —
  * там JVM-флаги и переменные ОС, а не настройки приложения. Маскирование значений
  * намеренно НЕ делается (данные в тестах фейковые).
@@ -53,8 +53,8 @@ public class AllureConfigurationListener implements TestExecutionListener, Order
                 .map(k -> k + "=" + safeProperty(env, k))
                 .collect(Collectors.joining("\n"));
 
-        Allure.step("Configuration", () -> {
-            Allure.addAttachment("Properties", "text/plain",
+        Allure.step("Конфиги приложения", () -> {
+            Allure.addAttachment("Свойства", "text/plain",
                     config.isEmpty() ? "No properties" : config);
         });
     }

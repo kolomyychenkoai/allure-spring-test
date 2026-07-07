@@ -60,16 +60,20 @@ public final class AllureKafkaProducerInstrumentation {
             }
             String stepName = "Kafka: отправлено → " + record.topic()
                     + (record.key() != null ? " [" + AllureAdviceSupport.safe(record.key()) + "]" : "");
+            // метаданные (topic/key/partition) — text/plain; safe() тут ок (ключ короткий)
             StringBuilder sb = new StringBuilder()
                     .append("Topic: ").append(record.topic())
-                    .append("\nKey: ").append(AllureAdviceSupport.safe(record.key()))
-                    .append("\nValue: ").append(AllureAdviceSupport.safe(record.value()));
+                    .append("\nKey: ").append(AllureAdviceSupport.safe(record.key()));
             if (record.partition() != null) {
                 sb.append("\nPartition: ").append(record.partition());
             }
-            final String body = sb.toString();
+            final String meta = sb.toString();
+            // значение — отдельным вложением (application/json, если похоже на JSON), БЕЗ 500-обрезки
+            // тело value БЕЗ обрезки (обрезка safe() остаётся только в имени шага), но НЕ-бросающий
+            // рендер (String.valueOf уронил бы весь шаг, если toString() кинет) — attach развернёт JSON
+            final String value = record.value() == null ? null : AllureAdviceSupport.render(record.value());
             Allure.step(stepName, step -> {
-                Allure.addAttachment("Отправленное сообщение", "text/plain", body);
+                AllureAdviceSupport.attach("Отправленное сообщение", meta, "Значение сообщения", value);
             });
         } catch (Throwable t) {
             AllureInstrumentationLogger.warn("KafkaSend", t);

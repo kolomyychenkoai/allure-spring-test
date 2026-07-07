@@ -72,7 +72,7 @@ class AllureRestAssuredFilterTest {
         assertThat(result.getSteps().stream().map(s -> s.getName()))
                 .anyMatch(n -> n.startsWith("HTTP GET") && n.endsWith("/ping → 200"));
         assertThat(allure.attachment(result, "HTTP Request").orElseThrow()).contains("GET ").contains("/ping");
-        assertThat(allure.attachment(result, "HTTP Response").orElseThrow()).contains("pong");
+        assertThat(allure.attachment(result, "HTTP Response Body").orElseThrow()).contains("pong");
     }
 
     @Test
@@ -87,8 +87,8 @@ class AllureRestAssuredFilterTest {
 
         assertThat(result.getSteps().stream().map(s -> s.getName()))
                 .anyMatch(n -> n.startsWith("HTTP POST") && n.endsWith("/echo → 200"));
-        assertThat(allure.attachment(result, "HTTP Request").orElseThrow()).contains("productName");
-        assertThat(allure.attachment(result, "HTTP Response").orElseThrow()).contains("productName");
+        assertThat(allure.attachment(result, "HTTP Request Body").orElseThrow()).contains("productName");
+        assertThat(allure.attachment(result, "HTTP Response Body").orElseThrow()).contains("productName");
     }
 
     @Test

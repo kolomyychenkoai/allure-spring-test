@@ -33,8 +33,8 @@ class RestTemplateReportIT {
         CurrentReport.check(steps.stream().anyMatch("HTTP GET /api/hello/world → 200"::equals),
                 () -> "нет HTTP-шага TestRestTemplate: " + steps);
 
-        String resp = CurrentReport.attachmentContent("HTTP Response").orElse("");
-        CurrentReport.check(resp.contains("hello world"), () -> "HTTP Response без тела: " + resp);
+        String resp = CurrentReport.attachmentContent("HTTP Response Body").orElse("");
+        CurrentReport.check(resp.contains("hello world"), () -> "HTTP Response Body без тела: " + resp);
     }
 
     @Test
@@ -46,7 +46,7 @@ class RestTemplateReportIT {
         CurrentReport.check(steps.stream().anyMatch("HTTP POST /api/echo → 200"::equals),
                 () -> "нет POST-шага TestRestTemplate: " + steps);
 
-        String req = CurrentReport.attachmentContent("HTTP Request").orElse("");
+        String req = CurrentReport.attachmentContent("HTTP Request Body").orElse("");
         CurrentReport.check(req.contains("laptop"), () -> "тело POST-запроса не попало: " + req);
     }
 

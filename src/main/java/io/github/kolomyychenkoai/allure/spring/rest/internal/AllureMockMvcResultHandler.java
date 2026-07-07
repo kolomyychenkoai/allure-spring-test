@@ -1,5 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.rest.internal;
 
+import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import io.qameta.allure.Allure;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -46,8 +47,8 @@ public class AllureMockMvcResultHandler implements ResultHandler {
             String stepName = AllureHttp.stepName(req.getMethod(), uri, resp.getStatus());
 
             Allure.step(stepName, step -> {
-                Allure.addAttachment("HTTP Request", "text/plain", formatRequest(req));
-                Allure.addAttachment("HTTP Response", "text/plain", formatResponse(resp));
+                AllureAdviceSupport.attach("HTTP Request", formatRequest(req), "HTTP Request Body", bodyOf(req));
+                AllureAdviceSupport.attach("HTTP Response", formatResponse(resp), "HTTP Response Body", bodyOf(resp));
                 Exception resolved = result.getResolvedException();
                 if (resolved != null) {
                     // при ошибке контроллера — причина в отчёт (иначе виден «→ 500» без объяснения).
@@ -67,6 +68,7 @@ public class AllureMockMvcResultHandler implements ResultHandler {
         return message != null ? ex.getClass().getName() + ": " + message : ex.getClass().getName();
     }
 
+    /** Метаданные запроса (метод/URI/заголовки) БЕЗ тела — тело кладём отдельным вложением. */
     private static String formatRequest(MockHttpServletRequest req) {
         StringBuilder sb = new StringBuilder();
         sb.append(req.getMethod()).append(' ').append(req.getRequestURI());
@@ -84,14 +86,10 @@ public class AllureMockMvcResultHandler implements ResultHandler {
                 sb.append(name).append(": ").append(values.nextElement()).append('\n');
             }
         }
-
-        String body = bodyOf(req);
-        if (!body.isEmpty()) {
-            sb.append('\n').append(body);
-        }
         return sb.toString();
     }
 
+    /** Метаданные ответа (статус/заголовки) БЕЗ тела — тело кладём отдельным вложением. */
     private static String formatResponse(MockHttpServletResponse resp) {
         StringBuilder sb = new StringBuilder();
         sb.append(resp.getStatus()).append('\n');
@@ -101,11 +99,6 @@ public class AllureMockMvcResultHandler implements ResultHandler {
             for (String value : resp.getHeaders(name)) {
                 sb.append(name).append(": ").append(value).append('\n');
             }
-        }
-
-        String body = bodyOf(resp);
-        if (!body.isEmpty()) {
-            sb.append('\n').append(body);
         }
         return sb.toString();
     }

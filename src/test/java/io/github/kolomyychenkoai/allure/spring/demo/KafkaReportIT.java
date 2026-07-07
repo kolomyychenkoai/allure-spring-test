@@ -70,8 +70,15 @@ class KafkaReportIT {
         CurrentReport.check(sentCount == 1, () -> "ожидался ровно один шаг отправки (CAS), а есть " + sentCount + ": " + steps);
 
         // содержимое вложений (topic/key/value) через реальную цепочку
+        // метаданные (topic/key) — в «Отправленное сообщение», а само значение переехало
+        // в отдельное вложение «Значение сообщения» (application/json — Allure форматирует)
         String sent = CurrentReport.attachmentContent("Отправленное сообщение").orElse("");
-        CurrentReport.check(sent.contains("Topic: order-events") && sent.contains("\"id\":7"), () -> "sent: " + sent);
+        CurrentReport.check(sent.contains("Topic: order-events"), () -> "sent meta: " + sent);
+        String sentValue = CurrentReport.attachmentContent("Значение сообщения").orElse("");
+        CurrentReport.check(sentValue.contains("\"id\": 7"), () -> "sent value: " + sentValue); // развёрнуто
+        String sentValueType = CurrentReport.attachmentType("Значение сообщения").orElse("");
+        CurrentReport.check(sentValueType.equals("application/json"),
+                () -> "«Значение сообщения» должно быть application/json, а было: " + sentValueType);
         String got = CurrentReport.attachmentContent("Принятые сообщения").orElse("");
         CurrentReport.check(got.contains("\"id\":7"), () -> "received: " + got);
     }

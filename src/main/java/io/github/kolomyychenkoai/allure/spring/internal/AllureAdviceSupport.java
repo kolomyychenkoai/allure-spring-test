@@ -6,11 +6,11 @@ import io.qameta.allure.model.Status;
 import java.util.Arrays;
 
 /**
- * Общие хелперы, вызываемые из inline-advice (ByteBuddy копирует тело advice в чужой
- * байткод, поэтому хелперы обязаны быть {@code public static}). Это НЕ публичный API
- * (см. {@code package-info}). Переиспользуется всеми инструментирующими модулями
- * (ассерты, Kafka, WireMock, Mockito…), чтобы рендер значений и выбор статуса были
- * единообразны и безопасны.
+ * Общие хелперы отчёта. Часть ({@link #step}, {@link #safe}) вызывается из inline-advice
+ * (ByteBuddy копирует тело advice в чужой байткод, поэтому {@code public static}); часть
+ * ({@link #attach}, {@link #render}, {@link #bodyContentType}) — из обычных листенеров/
+ * фильтров/интерцепторов (REST/WireMock/Kafka), чтобы рендер значений, выбор статуса и раскладка
+ * вложений были единообразны и безопасны. Это НЕ публичный API (см. {@code package-info}).
  */
 public final class AllureAdviceSupport {
 
@@ -52,5 +52,41 @@ public final class AllureAdviceSupport {
             s = s.substring(0, MAX_LEN) + "…";
         }
         return s;
+    }
+
+    /**
+     * Кладёт метаданные (заголовки/строку статуса и т.п.) и ТЕЛО ОТДЕЛЬНЫМИ вложениями. JSON-тело
+     * разворачиваем в столбик ({@link AllureJson#indent} — только пробелы/переносы, значения не
+     * трогаем) и помечаем {@code application/json} → в отчёте оно и с ОТСТУПАМИ, и с подсветкой
+     * синтаксиса (Allure красит {@code application/json}). Не-JSON тело — как есть, {@code text/plain}.
+     * Пустое тело не кладём. JSON не пересериализуем (числа/порядок ключей байт-в-байт) и не тянем
+     * JSON-зависимость.
+     */
+    public static void attach(String metaName, String meta, String bodyName, String body) {
+        Allure.addAttachment(metaName, "text/plain", meta);
+        if (body != null && !body.isBlank()) {
+            String type = bodyContentType(body);
+            String content = "application/json".equals(type) ? AllureJson.indent(body) : body;
+            Allure.addAttachment(bodyName, type, content);
+        }
+    }
+
+    /**
+     * Безопасный ПОЛНЫЙ рендер значения для ВЛОЖЕНИЯ (в отличие от {@link #safe} — БЕЗ обрезки по
+     * длине: тело/значение во вложении режем незачем). Не бросает: {@code toString()} объекта может
+     * кинуть → тогда {@code "<?>"} (иначе упал бы весь шаг). Для имени шага используй {@link #safe}.
+     */
+    public static String render(Object value) {
+        try {
+            return String.valueOf(value);
+        } catch (Throwable t) {
+            return "<?>";
+        }
+    }
+
+    /** {@code application/json}, если строка (после trim) начинается с {@code &#123;}/{@code [}; иначе {@code text/plain}. */
+    public static String bodyContentType(String body) {
+        String t = body == null ? "" : body.stripLeading();
+        return (t.startsWith("{") || t.startsWith("[")) ? "application/json" : "text/plain";
     }
 }

@@ -1,5 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.rest.internal;
 
+import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import io.qameta.allure.Allure;
 import org.springframework.http.HttpRequest;
@@ -56,23 +57,26 @@ public class AllureRestTemplateInterceptor implements ClientHttpRequestIntercept
         HttpStatusCode status = response.getStatusCode();
         String stepName = AllureHttp.stepName(method, AllureHttp.pathAndQuery(url), status.value());
 
-        final String reqText = format(method + " " + url, request.getHeaders(), reqBody);
-        final String respText = format(String.valueOf(status.value()), response.getHeaders(), respBody);
+        final String reqText = format(method + " " + url, request.getHeaders());
+        final String respText = format(String.valueOf(status.value()), response.getHeaders());
         Allure.step(stepName, step -> {
-            Allure.addAttachment("HTTP Request", "text/plain", reqText);
-            Allure.addAttachment("HTTP Response", "text/plain", respText);
+            AllureAdviceSupport.attach("HTTP Request", reqText, "HTTP Request Body", body(reqBody));
+            AllureAdviceSupport.attach("HTTP Response", respText, "HTTP Response Body", body(respBody));
         });
     }
 
-    private static String format(String firstLine, Map<String, List<String>> headers, byte[] body) {
+    /** Метаданные (строка статуса/URL + заголовки) БЕЗ тела — тело кладём отдельным вложением. */
+    private static String format(String firstLine, Map<String, List<String>> headers) {
         StringBuilder sb = new StringBuilder(firstLine).append('\n');
         if (headers != null) {
             headers.forEach((name, values) -> values.forEach(v -> sb.append(name).append(": ").append(v).append('\n')));
         }
-        if (body != null && body.length > 0) {
-            sb.append('\n').append(new String(body, StandardCharsets.UTF_8));
-        }
         return sb.toString();
+    }
+
+    /** Тело как строка (UTF-8); пустое/отсутствующее — {@code null} (вложение не создаётся). */
+    private static String body(byte[] body) {
+        return (body == null || body.length == 0) ? null : new String(body, StandardCharsets.UTF_8);
     }
 
     /** Обёртка ответа с буферизованным телом: статус/заголовки делегируем, тело отдаём из байтов. */

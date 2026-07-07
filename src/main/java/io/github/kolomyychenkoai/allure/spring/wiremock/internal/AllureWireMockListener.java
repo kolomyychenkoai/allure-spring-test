@@ -3,6 +3,7 @@ package io.github.kolomyychenkoai.allure.spring.wiremock.internal;
 import com.github.tomakehurst.wiremock.http.HttpHeaders;
 import com.github.tomakehurst.wiremock.http.Request;
 import com.github.tomakehurst.wiremock.http.Response;
+import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import io.qameta.allure.Allure;
 
@@ -42,7 +43,9 @@ public final class AllureWireMockListener {
                     request.getUrl(),
                     response.getStatus(),
                     formatRequest(request),
-                    formatResponse(response)));
+                    body(request.getBodyAsString()),
+                    formatResponse(response),
+                    body(response.getBodyAsString())));
         } catch (Throwable t) {
             // инструментирование не должно ронять тест, но сбой не глотаем молча — видно на WARNING
             AllureInstrumentationLogger.warn("WireMockCapture", t);
@@ -60,11 +63,13 @@ public final class AllureWireMockListener {
             String stepName = "Запрос к заглушке: " + exchange.method() + " " + exchange.url()
                     + " → " + exchange.status();
             String req = exchange.requestDetails();
+            String reqBody = exchange.requestBody();
             String resp = exchange.responseDetails();
+            String respBody = exchange.responseBody();
             try {
                 Allure.step(stepName, () -> {
-                    Allure.addAttachment("WireMock Request", "text/plain", req);
-                    Allure.addAttachment("WireMock Response", "text/plain", resp);
+                    AllureAdviceSupport.attach("WireMock Request", req, "WireMock Request Body", reqBody);
+                    AllureAdviceSupport.attach("WireMock Response", resp, "WireMock Response Body", respBody);
                 });
             } catch (Throwable t) {
                 AllureInstrumentationLogger.warn("WireMockFlush", t); // не роняем тест, но видно на WARNING
@@ -77,26 +82,25 @@ public final class AllureWireMockListener {
         EXCHANGES.clear();
     }
 
+    /** Метаданные запроса (метод/url/заголовки) БЕЗ тела — тело кладём отдельным вложением. */
     private static String formatRequest(Request request) {
         StringBuilder sb = new StringBuilder();
         sb.append(request.getMethod()).append(' ').append(request.getUrl()).append('\n');
         appendHeaders(sb, request.getHeaders());
-        String body = request.getBodyAsString();
-        if (body != null && !body.isEmpty()) {
-            sb.append('\n').append(body);
-        }
         return sb.toString();
     }
 
+    /** Метаданные ответа (статус/заголовки) БЕЗ тела — тело кладём отдельным вложением. */
     private static String formatResponse(Response response) {
         StringBuilder sb = new StringBuilder();
         sb.append(response.getStatus()).append('\n');
         appendHeaders(sb, response.getHeaders());
-        String body = response.getBodyAsString();
-        if (body != null && !body.isEmpty()) {
-            sb.append('\n').append(body);
-        }
         return sb.toString();
+    }
+
+    /** Пустое/отсутствующее тело → {@code null} (вложение не создаётся). */
+    private static String body(String body) {
+        return (body == null || body.isEmpty()) ? null : body;
     }
 
     private static void appendHeaders(StringBuilder sb, HttpHeaders headers) {
@@ -106,6 +110,7 @@ public final class AllureWireMockListener {
     }
 
     private record CapturedExchange(String method, String url, int status,
-                                    String requestDetails, String responseDetails) {
+                                    String requestDetails, String requestBody,
+                                    String responseDetails, String responseBody) {
     }
 }

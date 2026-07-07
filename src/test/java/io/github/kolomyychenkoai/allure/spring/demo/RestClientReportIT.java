@@ -39,8 +39,8 @@ class RestClientReportIT {
         CurrentReport.check(steps.stream().anyMatch("HTTP GET /api/hello/world → 200"::equals),
                 () -> "нет HTTP-шага RestClient: " + steps);
 
-        String resp = CurrentReport.attachmentContent("HTTP Response").orElse("");
-        CurrentReport.check(resp.contains("hello world"), () -> "HTTP Response без тела: " + resp);
+        String resp = CurrentReport.attachmentContent("HTTP Response Body").orElse("");
+        CurrentReport.check(resp.contains("hello world"), () -> "HTTP Response Body без тела: " + resp);
     }
 
     @Test
@@ -67,7 +67,7 @@ class RestClientReportIT {
         CurrentReport.check(steps.stream().anyMatch("HTTP POST /api/echo → 200"::equals),
                 () -> "нет POST-шага RestClient: " + steps);
 
-        String req = CurrentReport.attachmentContent("HTTP Request").orElse("");
+        String req = CurrentReport.attachmentContent("HTTP Request Body").orElse("");
         CurrentReport.check(req.contains("laptop"), () -> "тело POST-запроса не попало: " + req);
     }
 }

@@ -36,10 +36,30 @@ class AllureKafkaProducerTest {
                 AllureKafkaProducerInstrumentation.onSend(record));
 
         assertThat(allure.hasStep(result, "Kafka: отправлено → order-events [k1]")).isTrue();
+        // метаданные (topic/key) — text/plain
         assertThat(allure.attachment(result, "Отправленное сообщение").orElseThrow())
                 .contains("Topic: order-events")
-                .contains("Key: k1")
-                .contains("\"id\":7"); // значение payload, а не короткий токен «id»
+                .contains("Key: k1");
+        // значение payload — отдельным вложением application/json, развёрнутым в столбик
+        assertThat(allure.attachment(result, "Значение сообщения").orElseThrow())
+                .contains("\"id\": 7")   // развёрнуто (пробел после :), значение payload
+                .contains("\n  ");        // с отступами
+        assertThat(allure.attachmentType(result, "Значение сообщения").orElseThrow())
+                .isEqualTo("application/json");
+    }
+
+    @Test
+    @DisplayName("длинное value (>500) во вложении НЕ обрезано (render, а не safe) на call-site продьюсера")
+    void longValueNotTruncated() {
+        // мутация render(record.value())→safe(...) в onSend → значение урезалось бы до 500 → RED
+        String big = "x".repeat(600);
+        ProducerRecord<String, String> record =
+                new ProducerRecord<>("order-events", "k1", "{\"data\":\"" + big + "\"}");
+
+        TestResult result = allure.run("send-big", () ->
+                AllureKafkaProducerInstrumentation.onSend(record));
+
+        assertThat(allure.attachment(result, "Значение сообщения").orElseThrow()).contains(big);
     }
 
     @Test

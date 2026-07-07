@@ -124,6 +124,15 @@ public final class CurrentReport {
         }
     }
 
+    /** Content-type вложения по имени (для проверки, что тело — отдельное {@code application/json}). */
+    public static Optional<String> attachmentType(String name) {
+        return steps().stream()
+                .flatMap(s -> s.getAttachments().stream())
+                .filter(a -> name.equals(a.getName()))
+                .map(Attachment::getType)
+                .findFirst();
+    }
+
     /**
      * Проверка для level-B БЕЗ шага в отчёте: голый {@code throw}, НЕ через
      * {@code org.junit.jupiter.api.Assertions} — иначе (после перехвата JUnit-ассертов) сам

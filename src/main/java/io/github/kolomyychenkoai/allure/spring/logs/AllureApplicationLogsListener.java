@@ -11,7 +11,7 @@ import org.springframework.test.context.TestExecutionListener;
  * вложение «Application Logs». Активируется автоматически через {@code META-INF/spring.factories}
  * — потребителю не нужно писать код.
  * <p>
- * Вложение кладётся на уровень тест-кейса (а не отдельным шагом, как «Configuration»):
+ * Вложение кладётся на уровень тест-кейса (а не отдельным шагом, как «Конфиги приложения»):
  * логи — это сквозной артефакт всего теста, а не дискретное действие.
  * <p>
  * {@code getOrder() = HIGHEST_PRECEDENCE}: {@code beforeTestMethod} срабатывает раньше
