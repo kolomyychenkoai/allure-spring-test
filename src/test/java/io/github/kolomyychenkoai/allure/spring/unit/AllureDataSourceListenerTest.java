@@ -47,11 +47,27 @@ class AllureDataSourceListenerTest {
         return info;
     }
 
+    private ExecutionInfo execFailed() {
+        ExecutionInfo info = exec();
+        info.setSuccess(false);
+        return info;
+    }
+
     /** PreparedStatement.setXxx(index, value) — как datasource-proxy записывает связанный параметр. */
     private static ParameterSetOperation param(String setter, Class<?> valueType, int index, Object value) {
         try {
             var method = PreparedStatement.class.getMethod(setter, int.class, valueType);
             return new ParameterSetOperation(method, new Object[]{index, value});
+        } catch (NoSuchMethodException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** CallableStatement.registerOutParameter(index, sqlType) — out-параметр хранимки (второй арг — КОД типа). */
+    private static ParameterSetOperation outParam(int index, int sqlType) {
+        try {
+            var method = java.sql.CallableStatement.class.getMethod("registerOutParameter", int.class, int.class);
+            return new ParameterSetOperation(method, new Object[]{index, sqlType});
         } catch (NoSuchMethodException e) {
             throw new IllegalStateException(e);
         }
@@ -144,8 +160,8 @@ class AllureDataSourceListenerTest {
                 listener.afterQuery(exec(), List.of(query)));
 
         assertThat(allure.attachment(result, "SQL Query").orElseThrow())
-                .contains("values ('first')")   // первый ряд подставлен
-                .contains("batch")               // пометка про пропущенные ряды
+                .contains("values ('first')")        // первый ряд подставлен
+                .contains("пакетная вставка")        // пометка про пропущенные ряды
                 .contains("из 2");
     }
 
@@ -159,5 +175,53 @@ class AllureDataSourceListenerTest {
         TestResult del = allure.run("sql-delete", () ->
                 listener.afterQuery(exec(), List.of(query("delete from widget where id=?"))));
         assertThat(allure.hasStep(del, "SQL DELETE widget")).isTrue();
+    }
+
+    @Test
+    @DisplayName("неудачный запрос: в футере вложения «✗ ошибка», а не «✓ успешно»")
+    void rendersErrorFooter() {
+        TestResult result = allure.run("sql-failed", () ->
+                listener.afterQuery(execFailed(), List.of(query("insert into widget (name) values (?)"))));
+
+        // мутация: если футер захардкодят на «✓ успешно» — покажем «успех» на упавшей записи (соврём приёмщику)
+        assertThat(allure.attachment(result, "SQL Query").orElseThrow())
+                .contains("✗ ошибка")
+                .doesNotContain("✓ успешно");
+    }
+
+    @Test
+    @DisplayName("инвариант «отчёт не врёт»: несвязанный ? остаётся ? (нет параметров и частичный биндинг)")
+    void keepsUnboundPlaceholders() {
+        // (а) параметров нет вовсе → все ? сохранены как есть, ничего не подставляем
+        TestResult noParams = allure.run("sql-noparams", () ->
+                listener.afterQuery(exec(), List.of(query("insert into widget (name, id) values (?, ?)"))));
+        assertThat(allure.attachment(noParams, "SQL Query").orElseThrow())
+                .contains("values (?, ?)");
+
+        // (б) связан только ?1 → ?2 остаётся ? (не глотаем, не сдвигаем)
+        QueryInfo partial = query("insert into widget (name, id) values (?, ?)");
+        partial.setParametersList(List.of(List.of(param("setString", String.class, 1, "solo"))));
+        TestResult result = allure.run("sql-partial", () ->
+                listener.afterQuery(exec(), List.of(partial)));
+        assertThat(allure.attachment(result, "SQL Query").orElseThrow())
+                .contains("values ('solo', ?)");
+    }
+
+    @Test
+    @DisplayName("registerOutParameter (CallableStatement): плейсхолдер остаётся ?, КОД типа не подставляем")
+    void skipsRegisterOutParameter() {
+        QueryInfo call = query("call compute(?, ?)");
+        // ?1 — обычное значение, ?2 — OUT-параметр (второй арг registerOutParameter = код java.sql.Types)
+        call.setParametersList(List.of(List.of(
+                param("setInt", int.class, 1, 5),
+                outParam(2, java.sql.Types.INTEGER))));
+
+        TestResult result = allure.run("sql-outparam", () ->
+                listener.afterQuery(exec(), List.of(call)));
+
+        // мутация: без пропуска registerOut во втором ? оказался бы код типа INTEGER (4) вместо ?
+        assertThat(allure.attachment(result, "SQL Query").orElseThrow())
+                .contains("call compute(5, ?)")
+                .doesNotContain("compute(5, 4)");
     }
 }

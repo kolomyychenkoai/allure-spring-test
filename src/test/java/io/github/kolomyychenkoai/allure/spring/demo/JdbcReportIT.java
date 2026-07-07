@@ -54,8 +54,8 @@ class JdbcReportIT {
                 () -> "нет шага DB JdbcTemplate.update: " + steps);
         CurrentReport.check(steps.stream().anyMatch("DB JdbcTemplate.queryForObject"::equals),
                 () -> "нет шага DB JdbcTemplate.queryForObject: " + steps);
-        CurrentReport.check(CurrentReport.attachmentContent("SQL").orElse("").toLowerCase().contains("insert into widget"),
-                () -> "SQL без текста запроса: " + CurrentReport.attachmentContent("SQL"));
+        CurrentReport.check(CurrentReport.attachmentContent("SQL (шаблон)").orElse("").toLowerCase().contains("insert into widget"),
+                () -> "SQL без текста запроса: " + CurrentReport.attachmentContent("SQL (шаблон)"));
         // содержимое результата ИМЕННО шага queryForObject (что вернулось) — через реальную цепочку,
         // не только уровень A. Берём DB Result конкретного шага: первый общий DB Result — это update (=1).
         CurrentReport.check(dbResultOfStep("DB JdbcTemplate.queryForObject").orElse("").contains("jdbc-gadget"),
@@ -77,8 +77,8 @@ class JdbcReportIT {
         // внутренний делегат JdbcTemplate.update подавлён счётчиком глубины
         CurrentReport.check(steps.stream().noneMatch("DB JdbcTemplate.update"::equals),
                 () -> "делегат JdbcTemplate.update не должен давать отдельный шаг: " + steps);
-        CurrentReport.check(CurrentReport.attachmentContent("SQL").orElse("").contains(":n"),
-                () -> "в шаге NamedParameter должен быть именованный SQL (:n): " + CurrentReport.attachmentContent("SQL"));
+        CurrentReport.check(CurrentReport.attachmentContent("SQL (шаблон)").orElse("").contains(":n"),
+                () -> "в шаге NamedParameter должен быть именованный SQL (:n): " + CurrentReport.attachmentContent("SQL (шаблон)"));
     }
 
     /** Содержимое вложения «DB Result» КОНКРЕТНОГО шага (общий хелпер берёт первый по имени). */

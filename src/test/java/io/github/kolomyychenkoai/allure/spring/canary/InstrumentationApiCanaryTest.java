@@ -172,12 +172,26 @@ class InstrumentationApiCanaryTest {
     }
 
     @Test
-    @DisplayName("datasource-proxy: ExecutionInfo/QueryInfo и DefaultQueryLogEntryCreator.getLogEntry(...5)")
+    @DisplayName("datasource-proxy: ExecutionInfo/QueryInfo + форма ParameterSetOperation (инлайн значений SQL)")
     void dataSourceProxyApi() {
         assertTrue(classPresent("net.ttddyy.dsproxy.ExecutionInfo"), "datasource-proxy ExecutionInfo уехал → AllureDataSourceListener");
         assertTrue(classPresent("net.ttddyy.dsproxy.QueryInfo"), "datasource-proxy QueryInfo уехал → AllureDataSourceListener");
-        assertTrue(hasMethod("net.ttddyy.dsproxy.listener.logging.DefaultQueryLogEntryCreator", "getLogEntry", 5, null),
-                "DefaultQueryLogEntryCreator.getLogEntry(ExecutionInfo, List, boolean, boolean, boolean) уехал → AllureDataSourceListener");
+        // футер вложения «✓/✗ · N мс»
+        assertTrue(hasMethod("net.ttddyy.dsproxy.ExecutionInfo", "isSuccess", 0, null),
+                "ExecutionInfo.isSuccess уехал → AllureDataSourceListener.renderQuery (футер ✓/✗)");
+        assertTrue(hasMethod("net.ttddyy.dsproxy.ExecutionInfo", "getElapsedTime", 0, null),
+                "ExecutionInfo.getElapsedTime уехал → AllureDataSourceListener.renderQuery (футер · N мс)");
+        // связанные параметры: QueryInfo.getParametersList() → List<List<ParameterSetOperation>>, форма getArgs()=[index,value]
+        assertTrue(hasMethod("net.ttddyy.dsproxy.QueryInfo", "getParametersList", 0, null),
+                "QueryInfo.getParametersList уехал → AllureDataSourceListener.renderQuery (инлайн значений сломается молча)");
+        assertTrue(hasMethod("net.ttddyy.dsproxy.proxy.ParameterSetOperation", "getArgs", 0, null),
+                "ParameterSetOperation.getArgs уехал → AllureDataSourceListener.inlineParams (ожидаем форму [0]=index, [1]=value)");
+        // канонические предикаты спец-параметров (иначе КОД типа java.sql.Types попал бы в отчёт как значение)
+        String pso = "net.ttddyy.dsproxy.proxy.ParameterSetOperation";
+        assertTrue(hasMethod(pso, "isSetNullParameterOperation", 1, pso),
+                "ParameterSetOperation.isSetNullParameterOperation уехал → AllureDataSourceListener.renderParam");
+        assertTrue(hasMethod(pso, "isRegisterOutParameterOperation", 1, pso),
+                "ParameterSetOperation.isRegisterOutParameterOperation уехал → AllureDataSourceListener.inlineParams");
     }
 
     @Test

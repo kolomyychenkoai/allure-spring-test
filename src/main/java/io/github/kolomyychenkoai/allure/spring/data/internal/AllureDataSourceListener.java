@@ -7,9 +7,9 @@ import net.ttddyy.dsproxy.QueryInfo;
 import net.ttddyy.dsproxy.listener.QueryExecutionListener;
 import net.ttddyy.dsproxy.proxy.ParameterSetOperation;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
 import java.util.regex.Pattern;
 
 /**
@@ -33,6 +33,11 @@ import java.util.regex.Pattern;
  * <p>
  * Потокобезопасен: собственного состояния у листенера нет ({@code TABLE_PATTERNS}
  * неизменяема, рендер — на локальных переменных).
+ * <p>
+ * ⚠️ Версионные допущения о internal API datasource-proxy (форма {@code QueryInfo.getParametersList()}
+ * и {@code ParameterSetOperation.getArgs()} = {@code [index, value]}, предикаты
+ * {@code isSetNull/isRegisterOutParameterOperation}) стережёт
+ * {@code InstrumentationApiCanaryTest#dataSourceProxyApi} — при апгрейде библиотеки чинить там.
  */
 public class AllureDataSourceListener implements QueryExecutionListener {
 
@@ -71,7 +76,7 @@ public class AllureDataSourceListener implements QueryExecutionListener {
         List<List<ParameterSetOperation>> rows = query.getParametersList();
         StringBuilder sb = new StringBuilder(inlineParams(query.getQuery(), firstRow(rows)));
         if (rows != null && rows.size() > 1) {
-            sb.append("\n(показан первый ряд из ").append(rows.size()).append(" — batch)");
+            sb.append("\n(показан первый ряд из ").append(rows.size()).append(" — пакетная вставка)");
         }
         sb.append("\n\n");
         sb.append(exec != null && exec.isSuccess() ? "✓ успешно" : "✗ ошибка");
@@ -90,13 +95,25 @@ public class AllureDataSourceListener implements QueryExecutionListener {
      * Подставляет значения связанных параметров вместо позиционных {@code ?}. N-й {@code ?}
      * соответствует параметру с индексом N (PreparedStatement, 1-based). Если значения нет —
      * {@code ?} остаётся (безопасный фолбэк). Именованные/нестандартные параметры пропускаются.
+     * <p>
+     * ⚠️ Замена позиционная и наивная: считает КАЖДЫЙ символ {@code ?} за плейсхолдер. Опирается
+     * на то, что SQL сюда приходит от ORM/JdbcTemplate, где {@code ?} — только плейсхолдеры (без
+     * литеральных {@code ?} в строках). Для рукописного native-SQL с literal-{@code ?} (напр.
+     * Postgres jsonb-операторы {@code ?}/{@code ?|}) нумерация может съехать — приемлемо: это
+     * читаемая доп-подсказка, а «сырьё» кода (шаблон с {@code ?}) видно в соседнем вложении
+     * «SQL (шаблон)» JdbcTemplate-пути.
      */
     private static String inlineParams(String sql, List<ParameterSetOperation> params) {
         if (sql == null || sql.indexOf('?') < 0 || params.isEmpty()) {
             return sql == null ? "" : sql;
         }
-        Map<Integer, String> byIndex = new TreeMap<>();
+        Map<Integer, String> byIndex = new HashMap<>();
         for (ParameterSetOperation op : params) {
+            // registerOutParameter(index, sqlType) у CallableStatement: второй аргумент — КОД типа,
+            // не значение (как и setNull). Плейсхолдер out-параметра оставляем ?, кода не подставляем.
+            if (ParameterSetOperation.isRegisterOutParameterOperation(op)) {
+                continue;
+            }
             Object[] args = op.getArgs(); // setXxx(index, value): [0]=индекс, [1]=значение
             if (args != null && args.length >= 2 && args[0] instanceof Integer idx) {
                 byIndex.put(idx, renderParam(op, args[1]));
@@ -121,11 +138,10 @@ public class AllureDataSourceListener implements QueryExecutionListener {
     /**
      * Значение параметра для подстановки. Особый случай — {@code setNull(index, sqlType)}: у него
      * второй аргумент это КОД типа java.sql.Types, а не значение; наивный рендер вывел бы число —
-     * поэтому по имени сеттера отдаём {@code NULL}.
+     * поэтому опознаём его каноническим предикатом datasource-proxy и отдаём {@code NULL}.
      */
     private static String renderParam(ParameterSetOperation op, Object rawValue) {
-        var method = op.getMethod();
-        if (method != null && "setNull".equals(method.getName())) {
+        if (ParameterSetOperation.isSetNullParameterOperation(op)) {
             return "NULL";
         }
         return formatValue(rawValue);
