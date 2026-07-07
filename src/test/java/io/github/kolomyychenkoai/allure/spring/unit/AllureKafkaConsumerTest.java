@@ -43,14 +43,18 @@ class AllureKafkaConsumerTest {
                 AllureKafkaConsumerInstrumentation.onPoll(records));
 
         assertThat(allure.hasStep(result, "Kafka: получено 1 сообщ.")).isTrue();
+        // метаданные — в общем вложении; value — своим (как у producer)
         assertThat(allure.attachment(result, "Принятые сообщения").orElseThrow())
                 .contains("Topic: order-events")
-                .contains("Key: k1")
-                .contains("\"id\":7"); // значение payload, а не короткий токен «id»
+                .contains("Key: k1");
+        assertThat(allure.attachment(result, "Значение сообщения").orElseThrow())
+                .contains("\"id\": 7"); // развёрнуто (пробел после :)
+        assertThat(allure.attachmentType(result, "Значение сообщения").orElseThrow())
+                .isEqualTo("application/json");
     }
 
     @Test
-    @DisplayName("несколько сообщений: «получено N», обе записи во вложении с разделителем")
+    @DisplayName("несколько сообщений: метаданные с разделителем, value каждой — своим вложением #N")
     void logsMultipleRecords() {
         TopicPartition tp = new TopicPartition("order-events", 0);
         ConsumerRecord<String, String> r1 = new ConsumerRecord<>("order-events", 0, 5L, "k1", "v1");
@@ -61,8 +65,12 @@ class AllureKafkaConsumerTest {
                 AllureKafkaConsumerInstrumentation.onPoll(records));
 
         assertThat(allure.hasStep(result, "Kafka: получено 2 сообщ.")).isTrue();
+        // метаданные обеих записей — в общем вложении с разделителем
         assertThat(allure.attachment(result, "Принятые сообщения").orElseThrow())
-                .contains("v1").contains("v2").contains("---");
+                .contains("Offset: 5").contains("Offset: 6").contains("---");
+        // value каждой записи — своим вложением #N (v1/v2 — не JSON → text/plain)
+        assertThat(allure.attachment(result, "Значение сообщения #1").orElseThrow()).contains("v1");
+        assertThat(allure.attachment(result, "Значение сообщения #2").orElseThrow()).contains("v2");
     }
 
     @Test

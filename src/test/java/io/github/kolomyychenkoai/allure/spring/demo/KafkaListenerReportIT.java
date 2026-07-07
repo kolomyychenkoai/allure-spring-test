@@ -64,11 +64,17 @@ class KafkaListenerReportIT {
         // краснеет, если replay-путь @KafkaListener (буфер на потоке контейнера → flush в
         // afterTestMethod) сломан. (Имя шага «Kafka: получено» лежит в result.json, а topic/
         // payload — в отдельном файле-вложении, поэтому co-located маркеры берём из вложения.)
-        CurrentReport.check(CurrentReport.anyResultFileContainsAll("Topic: listener-events", "\"id\":42"),
-                () -> "вложение приёма @KafkaListener (topic listener-events + payload id:42) не попало в отчёт");
-        // «Offset:» есть ТОЛЬКО в consumer-вложении (у producer его нет) — вместе с нашим topic
-        // доказывает, что это ПРИЁМ, а не отправка, и привязан к listener-events
-        CurrentReport.check(CurrentReport.anyResultFileContainsAll("Offset:", "Topic: listener-events"),
-                () -> "consumer-вложение (Offset для topic listener-events) не попало в отчёт");
+        // Мета приёма (topic/partition/offset) и VALUE теперь в РАЗНЫХ файлах-вложениях (value вынесен
+        // отдельным «Значение сообщения», как у producer). Проверяем оба отдельно.
+        // Мета: «Offset:» есть ТОЛЬКО у consumer (у producer нет) + наш уникальный topic listener-events
+        // (producer-тест шлёт в order-events) → доказывает, что это ПРИЁМ этого теста.
+        CurrentReport.check(CurrentReport.anyResultFileContainsAll("Topic: listener-events", "Offset:"),
+                () -> "мета приёма @KafkaListener (topic listener-events + Offset) не попала в отчёт");
+        // Value: развёрнутый payload id:42 (уникален — producer шлёт id:7) в отдельном вложении.
+        // NB: это ОДНО и то же сообщение и на отправке, и на приёме → сам value-ассерт не отделяет
+        // send от receive (payload идентичен). ПРИЁМ доказывает мета-ассерт выше (Offset: есть только
+        // у consumer'а); сама сплит-логика value→application/json запиннена KafkaReportIT+ConsumerTest.
+        CurrentReport.check(CurrentReport.anyResultFileContains("\"id\": 42"),
+                () -> "value приёма @KafkaListener (payload id:42) не попал в отдельное вложение «Значение сообщения»");
     }
 }

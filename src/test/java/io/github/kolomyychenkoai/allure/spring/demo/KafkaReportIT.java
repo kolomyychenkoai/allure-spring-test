@@ -80,7 +80,11 @@ class KafkaReportIT {
         CurrentReport.check(sentValueType.equals("application/json"),
                 () -> "«Значение сообщения» должно быть application/json, а было: " + sentValueType);
         String got = CurrentReport.attachmentContent("Принятые сообщения").orElse("");
-        CurrentReport.check(got.contains("\"id\":7"), () -> "received: " + got);
+        CurrentReport.check(got.contains("Topic: order-events"), () -> "received meta: " + got);
+        // value ПРИНЯТОГО тоже вынесен отдельным «Значение сообщения» (как sent) → таких вложений ДВА
+        long valueAtt = CurrentReport.attachmentNames().stream().filter("Значение сообщения"::equals).count();
+        CurrentReport.check(valueAtt == 2,
+                () -> "ожидалось 2 «Значение сообщения» (sent+received): " + CurrentReport.attachmentNames());
     }
 
     private ConsumerRecords<String, String> pollUntilReceived(KafkaConsumer<String, String> consumer) {
