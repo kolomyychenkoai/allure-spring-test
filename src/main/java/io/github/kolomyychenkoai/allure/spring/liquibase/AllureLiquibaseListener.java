@@ -1,6 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.liquibase;
 
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
+import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import io.github.kolomyychenkoai.allure.spring.internal.ClassPresence;
 import io.github.kolomyychenkoai.allure.spring.liquibase.internal.AllureLiquibaseInstrumentation;
 import liquibase.integration.spring.SpringLiquibase;
@@ -26,6 +27,15 @@ import org.springframework.test.context.TestExecutionListener;
  * проверяем наличие бина {@link SpringLiquibase} ({@link #contextRanLiquibase}). Иначе JVM-широкий
  * снимок «протекал» бы в тесты, где Liquibase не поднимался (Kafka/HTTP-only). Безопасно и без
  * Liquibase на classpath — гейт {@code LIQUIBASE_PRESENT} не даёт линковать liquibase-типы.
+ * <p>
+ * <b>Граница сигнала:</b> сигнал «БД реально поднималась» = Spring-Boot-бин {@link SpringLiquibase}.
+ * {@code MultiTenantSpringLiquibase} (он НЕ наследует {@code SpringLiquibase}) и не-Spring стартовые
+ * миграции (ручной {@code liquibase.update()} в init бина, кастомный мигратор) в снимок НЕ попадут.
+ * Live-путь ({@code liquibase.update()} во время теста) работает всегда, независимо от этого.
+ * <p>
+ * ⚠️ Допущение об ordering JUnit-Platform (Allure-кейс активен уже в {@code beforeTestMethod} —
+ * {@code AllureJunitPlatform.executionStarted} стартует его до фазы {@code before} узла) — его страж
+ * end-to-end {@code LiquibaseReportIT} (уровень B). Перепроверить при апгрейде junit-platform/allure-junit5.
  */
 public class AllureLiquibaseListener implements TestExecutionListener, Ordered {
 
@@ -63,10 +73,15 @@ public class AllureLiquibaseListener implements TestExecutionListener, Ordered {
      * реально применялись для этого теста (а не «протекли» из JVM-широкого снимка другого контекста).
      */
     static boolean contextRanLiquibase(ApplicationContext ctx) {
+        if (ctx == null) {
+            return false;
+        }
         try {
-            return ctx != null && ctx.getBeanNamesForType(SpringLiquibase.class).length > 0;
+            // false,false — дешёвый зонд без eager-init FactoryBean'ов
+            return ctx.getBeanNamesForType(SpringLiquibase.class, false, false).length > 0;
         } catch (Throwable t) {
-            return false; // контекст не поднялся / нет бина — снимок не рисуем
+            AllureInstrumentationLogger.warn("Liquibase", t); // не глушим молча: дефект контекста должен быть виден
+            return false;
         }
     }
 }

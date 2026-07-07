@@ -94,6 +94,9 @@ public final class AllureLiquibaseInstrumentation {
      * (дедуп по содержимому) и повторяет весь снимок. Зовётся из
      * {@code AllureLiquibaseListener#beforeTestMethod} (кейс уже активен: платформенный слушатель
      * Allure {@code AllureJunitPlatform.executionStarted} стартует кейс до фазы {@code before} узла).
+     * <p>
+     * Потокобезопасен: дренаж буфера + дедуп + защитная копия — под локом {@code STARTUP_SNAPSHOT}
+     * (буфер — {@code ConcurrentLinkedQueue}); {@code Allure.step} пишет в thread-local кейс своего теста.
      */
     public static void emitStartupSnapshot() {
         try {
