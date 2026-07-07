@@ -69,8 +69,9 @@ public final class AllureKafkaProducerInstrumentation {
             }
             final String meta = sb.toString();
             // значение — отдельным вложением (application/json, если похоже на JSON), БЕЗ 500-обрезки
-            // (обрезка safe() остаётся только в имени шага); Allure сам форматирует JSON красиво
-            final String value = record.value() == null ? null : String.valueOf(record.value());
+            // тело value БЕЗ обрезки (обрезка safe() остаётся только в имени шага), но НЕ-бросающий
+            // рендер (String.valueOf уронил бы весь шаг, если toString() кинет) — attach развернёт JSON
+            final String value = record.value() == null ? null : AllureAdviceSupport.render(record.value());
             Allure.step(stepName, step -> {
                 AllureAdviceSupport.attach("Отправленное сообщение", meta, "Значение сообщения", value);
             });

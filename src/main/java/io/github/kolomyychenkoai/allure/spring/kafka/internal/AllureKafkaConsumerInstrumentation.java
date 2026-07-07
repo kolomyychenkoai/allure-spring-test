@@ -100,6 +100,10 @@ public final class AllureKafkaConsumerInstrumentation {
         BUFFER.clear();
     }
 
+    // ⚠️ Приём батчит N записей в ОДНО вложение «Принятые сообщения» (разделитель ---), поэтому,
+    // в отличие от producer'а (одно сообщение → своё application/json-тело без обрезки), value тут
+    // НЕ выносим отдельным вложением и НЕ разворачиваем: сплит по-записно раздул бы дерево вложений.
+    // Осознанная асимметрия producer/consumer (известное ограничение; см. README/бэклог #5 про value).
     private static Captured render(ConsumerRecords<?, ?> records) {
         StringBuilder sb = new StringBuilder();
         int i = 0;

@@ -17,6 +17,24 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AllureAdviceSupportAttachTest {
 
     @Test
+    @DisplayName("тело во вложении НЕ обрезается по длине (в отличие от имени шага через safe)")
+    void attachDoesNotTruncateBody() {
+        // >500 символов: safe() обрезало бы, attach/render — нет. Мутация «render→safe на теле» → RED
+        String big = "x".repeat(600);
+        String body = "{\"data\":\"" + big + "\"}";
+        InMemoryAllure allure = new InMemoryAllure().install();
+        try {
+            TestResult result = allure.run("big", () ->
+                    AllureAdviceSupport.attach("Meta", "meta", "Body", body));
+            String stored = allure.attachment(result, "Body").orElseThrow();
+            assertThat(stored).contains(big);          // все 600 символов на месте
+            assertThat(stored.length()).isGreaterThan(600);
+        } finally {
+            allure.uninstall();
+        }
+    }
+
+    @Test
     @DisplayName("bodyContentType: JSON-объект/массив → application/json")
     void jsonBodies() {
         assertThat(AllureAdviceSupport.bodyContentType("{\"a\":1}")).isEqualTo("application/json");
@@ -50,7 +68,8 @@ class AllureAdviceSupportAttachTest {
 
             assertThat(allure.attachment(result, "Meta").orElseThrow()).contains("200");
             assertThat(allure.attachmentType(result, "Meta").orElseThrow()).isEqualTo("text/plain");
-            assertThat(allure.attachment(result, "Body").orElseThrow()).contains("\"id\":7");
+            // JSON-тело развёрнуто в столбик (пиннит индентацию; мутация «не indent» → RED)
+            assertThat(allure.attachment(result, "Body").orElseThrow()).isEqualTo("{\n  \"id\": 7\n}");
             assertThat(allure.attachmentType(result, "Body").orElseThrow()).isEqualTo("application/json");
         } finally {
             allure.uninstall();

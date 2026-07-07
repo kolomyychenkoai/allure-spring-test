@@ -40,9 +40,10 @@ class AllureKafkaProducerTest {
         assertThat(allure.attachment(result, "Отправленное сообщение").orElseThrow())
                 .contains("Topic: order-events")
                 .contains("Key: k1");
-        // значение payload — отдельным вложением application/json
+        // значение payload — отдельным вложением application/json, развёрнутым в столбик
         assertThat(allure.attachment(result, "Значение сообщения").orElseThrow())
-                .contains("\"id\":7"); // значение payload, а не короткий токен «id»
+                .contains("\"id\": 7")   // развёрнуто (пробел после :), значение payload
+                .contains("\n  ");        // с отступами
         assertThat(allure.attachmentType(result, "Значение сообщения").orElseThrow())
                 .isEqualTo("application/json");
     }

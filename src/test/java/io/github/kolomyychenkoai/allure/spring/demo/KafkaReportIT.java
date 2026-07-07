@@ -75,7 +75,7 @@ class KafkaReportIT {
         String sent = CurrentReport.attachmentContent("Отправленное сообщение").orElse("");
         CurrentReport.check(sent.contains("Topic: order-events"), () -> "sent meta: " + sent);
         String sentValue = CurrentReport.attachmentContent("Значение сообщения").orElse("");
-        CurrentReport.check(sentValue.contains("\"id\":7"), () -> "sent value: " + sentValue);
+        CurrentReport.check(sentValue.contains("\"id\": 7"), () -> "sent value: " + sentValue); // развёрнуто
         String sentValueType = CurrentReport.attachmentType("Значение сообщения").orElse("");
         CurrentReport.check(sentValueType.equals("application/json"),
                 () -> "«Значение сообщения» должно быть application/json, а было: " + sentValueType);
