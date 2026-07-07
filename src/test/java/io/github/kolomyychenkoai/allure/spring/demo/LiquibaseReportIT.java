@@ -26,8 +26,8 @@ import java.util.List;
  * Уровень B: миграции Liquibase попадают в отчёт двумя путями (см. {@code AllureLiquibaseInstrumentation}):
  * <ul>
  *   <li>ручная {@code liquibase.update()} ВО ВРЕМЯ теста — шаги по changeset'ам сразу;</li>
- *   <li>миграции на СТАРТЕ контекста — одним снимком в первом тесте (пишется в afterTestMethod).
- *       Из тела теста его не прочитать; проверяем в {@code @AfterAll} по уже записанному на диск
+ *   <li>миграции на СТАРТЕ контекста — снимком «🛢️ Liquibase: схема БД» в НАЧАЛЕ каждого теста
+ *       (пишется в beforeTestMethod). Проверяем в {@code @AfterAll} по уже записанному на диск
  *       результату — БЕЗ завязки на порядок тестов (как {@code WireMockReportIT}/{@code ReportSmokeIT}).</li>
  * </ul>
  * Liquibase в тестах глобально выключен (application.yml); здесь включаем точечно.
@@ -65,9 +65,9 @@ class LiquibaseReportIT {
     @AfterAll
     @DisplayName("снимок миграций, применённых на старте, записан в отчёт")
     static void startupSnapshotIsWritten() {
-        // снимок выложен в afterTestMethod (один раз на JVM); к @AfterAll он уже на диске.
+        // снимок пишется в beforeTestMethod (в начале каждого теста); к @AfterAll он уже на диске.
         // Проверяем без @Order — не важно, в каком порядке шли тесты класса.
-        CurrentReport.check(CurrentReport.anyResultFileContains("changeset на старте"),
+        CurrentReport.check(CurrentReport.anyResultFileContains("Liquibase: схема БД"),
                 () -> "нет снимка стартовых миграций Liquibase в записанных результатах");
         CurrentReport.check(CurrentReport.anyResultFileContainsAll("create-account", "add-account-email"),
                 () -> "снимок старта не содержит id применённых changeset'ов");

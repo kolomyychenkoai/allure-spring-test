@@ -26,13 +26,14 @@ import static net.bytebuddy.matcher.ElementMatchers.takesArguments;
  *       идёт на тест-потоке с активным кейсом → каждый changeset пишется СРАЗУ шагом
  *       «Liquibase: changeset &lt;id&gt; (&lt;author&gt;)».</li>
  *   <li><b>Миграция на СТАРТЕ контекста</b> (обычный случай Spring Boot) — идёт ДО теста, без
- *       активного кейса → changeset'ы буферизуем и выкладываем ОДНИМ снимком-шагом
- *       «Liquibase: применено N changeset на старте» в первом же тесте (см.
- *       {@link #flushStartupSnapshot()}, зовётся из {@code AllureLiquibaseListener}).</li>
+ *       активного кейса → changeset'ы буферизуем и повторяем ОДНИМ снимком-шагом
+ *       «🛢️ Liquibase: схема БД (N changeset)» в НАЧАЛЕ КАЖДОГО теста (см.
+ *       {@link #emitStartupSnapshot()}, зовётся из {@code AllureLiquibaseListener#beforeTestMethod}).</li>
  * </ul>
- * Снимок старта выкладывается РОВНО один раз на JVM (CAS-гард {@code SNAPSHOT_EMITTED}) — в
- * первом тесте, где есть активный кейс; дальше не повторяется. Живые changeset'ы в буфер
- * старта не попадают.
+ * Снимок старта копится в JVM-широкий {@code STARTUP_SNAPSHOT} (первый тест сливает в него буфер,
+ * дальше — реплей; дедуп по содержимому changeset) и рисуется в НАЧАЛЕ каждого теста — чтобы любой
+ * тест был самодостаточен (видно, на какой схеме БД он работает). Живые changeset'ы в буфер старта
+ * не попадают.
  * <p>
  * Перехватывается современная сигнатура {@code execute(DatabaseChangeLog, ChangeExecListener,
  * Database)} (3 аргумента). Упавший changeset шага не даёт — падение Allure покажет на уровне
@@ -43,19 +44,20 @@ import static net.bytebuddy.matcher.ElementMatchers.takesArguments;
  * <ul>
  *   <li>2-арг overload {@code execute} делегирует в 3-арг — поэтому матчим ТОЛЬКО 3-арг и не
  *       получаем дублей. НЕ добавляй {@code takesArguments(2)} — будет двойной шаг.</li>
- *   <li>live- и startup-пути ВЗАИМОИСКЛЮЧАЮТ во времени: startup-буфер заполняется только до
- *       первого теста (нет активного кейса), снимок выкладывается в первом тесте; во время теста
- *       changeset'ы идут только в live-путь. Поэтому дренаж буфера в {@link #flushStartupSnapshot()}
- *       не гонится с записью.</li>
+ *   <li>live- и startup-пути ВЗАИМОИСКЛЮЧАЮТ во времени: startup-буфер заполняется только на старте
+ *       контекста (нет активного кейса — фаза {@code prepare()} узла JUnit-Platform ДО старта кейса);
+ *       во время теста changeset'ы идут только в live-путь. Дренаж буфера в {@link #emitStartupSnapshot()}
+ *       идёт под локом на {@code STARTUP_SNAPSHOT}, поэтому не гонится с записью.</li>
  * </ul>
  */
 public final class AllureLiquibaseInstrumentation {
 
     private static final AtomicBoolean INSTALLED = new AtomicBoolean(false);
-    private static final AtomicBoolean SNAPSHOT_EMITTED = new AtomicBoolean(false);
 
-    // changeset'ы, применённые на старте контекста (нет активного кейса) — ждут снимка в первом тесте.
+    // changeset'ы старта, ждущие слива из буфера в снимок (нет активного кейса на старте контекста).
     private static final Queue<String> STARTUP_BUFFER = new ConcurrentLinkedQueue<>();
+    // накопленный снимок стартовой схемы (JVM-широкий) — реплеим в НАЧАЛЕ каждого теста; дедуп по содержимому.
+    private static final List<String> STARTUP_SNAPSHOT = new ArrayList<>();
 
     private AllureLiquibaseInstrumentation() {
     }
@@ -87,25 +89,36 @@ public final class AllureLiquibaseInstrumentation {
     }
 
     /**
-     * Выкладывает снимок changeset'ов, применённых на старте, ОДНИМ шагом — один раз на JVM,
-     * в первом тесте с активным кейсом. Зовётся из {@code AllureLiquibaseListener#afterTestMethod}.
+     * Рисует снимок стартовой схемы БД ОДНИМ шагом в НАЧАЛЕ каждого теста — чтобы любой тест был
+     * самодостаточен. Сливает новые changeset'ы из буфера в JVM-широкий {@code STARTUP_SNAPSHOT}
+     * (дедуп по содержимому) и повторяет весь снимок. Зовётся из
+     * {@code AllureLiquibaseListener#beforeTestMethod} (кейс уже активен: платформенный слушатель
+     * Allure {@code AllureJunitPlatform.executionStarted} стартует кейс до фазы {@code before} узла).
+     * <p>
+     * Потокобезопасен: дренаж буфера + дедуп + защитная копия — под локом {@code STARTUP_SNAPSHOT}
+     * (буфер — {@code ConcurrentLinkedQueue}); {@code Allure.step} пишет в thread-local кейс своего теста.
      */
-    public static void flushStartupSnapshot() {
+    public static void emitStartupSnapshot() {
         try {
-            if (!Allure.getLifecycle().getCurrentTestCase().isPresent() || STARTUP_BUFFER.isEmpty()) {
+            if (!Allure.getLifecycle().getCurrentTestCase().isPresent()) {
                 return;
             }
-            if (!SNAPSHOT_EMITTED.compareAndSet(false, true)) {
-                return; // снимок уже выложен
-            }
-            List<String> applied = new ArrayList<>();
-            String d;
-            while ((d = STARTUP_BUFFER.poll()) != null) {
-                applied.add(d);
+            List<String> applied;
+            synchronized (STARTUP_SNAPSHOT) {
+                String d;
+                while ((d = STARTUP_BUFFER.poll()) != null) {
+                    if (!STARTUP_SNAPSHOT.contains(d)) {
+                        STARTUP_SNAPSHOT.add(d); // n мал (число changeset базы) — O(n) contains ок
+                    }
+                }
+                if (STARTUP_SNAPSHOT.isEmpty()) {
+                    return; // Liquibase на старте не запускался — тихо выходим
+                }
+                applied = new ArrayList<>(STARTUP_SNAPSHOT);
             }
             int count = applied.size();
             String body = String.join("\n---\n", applied);
-            Allure.step("Liquibase: применено " + count + " changeset на старте", step -> {
+            Allure.step("🛢️ Liquibase: схема БД (" + count + " changeset)", step -> {
                 Allure.addAttachment("Применённые миграции", "text/plain", body);
             });
         } catch (Throwable t) {
