@@ -1,5 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.rest.internal;
 
+import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import io.qameta.allure.Allure;
 import io.restassured.filter.Filter;
@@ -39,8 +40,10 @@ public class AllureRestAssuredFilter implements Filter {
             String stepName = AllureHttp.stepName(requestSpec.getMethod(),
                     AllureHttp.pathAndQuery(requestSpec.getURI()), response.getStatusCode());
             Allure.step(stepName, step -> {
-                Allure.addAttachment("HTTP Request", "text/plain", formatRequest(requestSpec));
-                Allure.addAttachment("HTTP Response", "text/plain", formatResponse(response));
+                AllureAdviceSupport.attach("HTTP Request", metaRequest(requestSpec),
+                        "HTTP Request Body", bodyOfRequest(requestSpec));
+                AllureAdviceSupport.attach("HTTP Response", metaResponse(response),
+                        "HTTP Response Body", bodyOfResponse(response));
             });
         } catch (Throwable t) {
             AllureInstrumentationLogger.warn("RestAssured", t);
@@ -49,35 +52,45 @@ public class AllureRestAssuredFilter implements Filter {
         return response;
     }
 
-    private static String formatRequest(FilterableRequestSpecification req) {
+    /** Метаданные запроса (метод/URL/заголовки) БЕЗ тела — тело кладём отдельным вложением. */
+    private static String metaRequest(FilterableRequestSpecification req) {
         try {
             StringBuilder sb = new StringBuilder();
             sb.append(req.getMethod()).append(' ').append(req.getURI()).append('\n');
             req.getHeaders().forEach(h ->
                     sb.append(h.getName()).append(": ").append(h.getValue()).append('\n'));
-            Object body = req.getBody();
-            if (body != null) {
-                sb.append('\n').append(body);
-            }
             return sb.toString();
         } catch (Exception e) {
             return "<request unavailable: " + e.getClass().getSimpleName() + ">";
         }
     }
 
-    private static String formatResponse(Response resp) {
+    private static String bodyOfRequest(FilterableRequestSpecification req) {
+        try {
+            Object body = req.getBody();
+            return body == null ? null : String.valueOf(body);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static String metaResponse(Response resp) {
         try {
             StringBuilder sb = new StringBuilder();
             sb.append(resp.getStatusCode()).append(' ').append(resp.getStatusLine()).append('\n');
             resp.getHeaders().forEach(h ->
                     sb.append(h.getName()).append(": ").append(h.getValue()).append('\n'));
-            String body = resp.getBody().asString();
-            if (body != null && !body.isEmpty()) {
-                sb.append('\n').append(body);
-            }
             return sb.toString();
         } catch (Exception e) {
             return "<response unavailable: " + e.getClass().getSimpleName() + ">";
+        }
+    }
+
+    private static String bodyOfResponse(Response resp) {
+        try {
+            return resp.getBody().asString();
+        } catch (Exception e) {
+            return null;
         }
     }
 }

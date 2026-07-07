@@ -35,7 +35,7 @@ class AllureConfigurationListenerTest {
     }
 
     @Test
-    @DisplayName("свойства приложения попадают в шаг Configuration (маскирования нет)")
+    @DisplayName("свойства приложения попадают в шаг Конфиги приложения (маскирования нет)")
     void attachesApplicationProperties() {
         StandardEnvironment env = new StandardEnvironment();
         env.getPropertySources().addFirst(new MockPropertySource()
@@ -46,8 +46,8 @@ class AllureConfigurationListenerTest {
 
         TestResult result = allure.run("config", () -> listener.beforeTestMethod(ctx));
 
-        assertThat(allure.hasStep(result, "Configuration")).isTrue();
-        String props = allure.attachment(result, "Properties").orElseThrow();
+        assertThat(allure.hasStep(result, "Конфиги приложения")).isTrue();
+        String props = allure.attachment(result, "Свойства").orElseThrow();
         assertThat(props)
                 .contains("spring.application.name=demo")
                 .contains("custom.foo=bar")
@@ -65,7 +65,7 @@ class AllureConfigurationListenerTest {
 
         TestResult result = allure.run("config-unset", () -> listener.beforeTestMethod(ctx));
 
-        assertThat(allure.attachment(result, "Properties").orElseThrow())
+        assertThat(allure.attachment(result, "Свойства").orElseThrow())
                 .contains("custom.nullable=<unset>");
     }
 
@@ -80,7 +80,7 @@ class AllureConfigurationListenerTest {
 
         TestResult result = allure.run("config-unresolved", () -> listener.beforeTestMethod(ctx));
 
-        assertThat(allure.attachment(result, "Properties").orElseThrow())
+        assertThat(allure.attachment(result, "Свойства").orElseThrow())
                 .contains("custom.bad=<unresolved>");
     }
 }

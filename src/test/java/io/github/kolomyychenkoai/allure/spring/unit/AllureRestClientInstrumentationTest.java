@@ -72,7 +72,7 @@ class AllureRestClientInstrumentationTest {
         assertThat(result.getSteps().stream().map(s -> s.getName()))
                 .anyMatch(n -> n.startsWith("HTTP GET") && n.endsWith("/api/ping?x=1 → 200"));
         assertThat(allure.attachment(result, "HTTP Request").orElseThrow()).contains("GET ").contains("/api/ping");
-        assertThat(allure.attachment(result, "HTTP Response").orElseThrow()).contains("pong");
+        assertThat(allure.attachment(result, "HTTP Response Body").orElseThrow()).contains("pong");
     }
 
     @Test
@@ -86,7 +86,7 @@ class AllureRestClientInstrumentationTest {
 
         assertThat(result.getSteps().stream().map(s -> s.getName()))
                 .anyMatch(n -> n.startsWith("HTTP POST") && n.endsWith("/api/echo → 200"));
-        assertThat(allure.attachment(result, "HTTP Request").orElseThrow()).contains("productName").contains("laptop");
+        assertThat(allure.attachment(result, "HTTP Request Body").orElseThrow()).contains("productName").contains("laptop");
     }
 
     @Test

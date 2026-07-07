@@ -60,8 +60,9 @@ class AllureMockMvcResultHandlerTest {
         assertThat(allure.attachment(result, "HTTP Request").orElseThrow())
                 .contains("GET /api/hello/world");
         assertThat(allure.attachment(result, "HTTP Response").orElseThrow())
-                .contains("200")
-                .contains("hello world");
+                .contains("200"); // метаданные (статус) — в основном вложении
+        assertThat(allure.attachment(result, "HTTP Response Body").orElseThrow())
+                .contains("hello world"); // тело — в отдельном вложении
     }
 
     @Test
@@ -74,10 +75,14 @@ class AllureMockMvcResultHandlerTest {
 
         assertThat(allure.hasStep(result, "HTTP POST /api/echo → 200")).isTrue();
         assertThat(allure.attachment(result, "HTTP Request").orElseThrow())
-                .contains("POST /api/echo")
-                .contains("productName");
-        assertThat(allure.attachment(result, "HTTP Response").orElseThrow())
-                .contains("productName");
+                .contains("POST /api/echo"); // метаданные (метод/путь)
+        assertThat(allure.attachment(result, "HTTP Request Body").orElseThrow())
+                .contains("productName"); // тело запроса — отдельным вложением
+        assertThat(allure.attachment(result, "HTTP Response Body").orElseThrow())
+                .contains("productName"); // тело ответа — отдельным вложением
+        // тело — application/json (Allure форматирует красиво)
+        assertThat(allure.attachmentType(result, "HTTP Response Body").orElseThrow())
+                .isEqualTo("application/json");
     }
 
     @Test

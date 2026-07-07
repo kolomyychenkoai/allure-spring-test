@@ -15,7 +15,7 @@ import org.springframework.boot.test.context.SpringBootTest;
  * Уровень B: «живой» прогон. Листенеры конфигурации/логов подключаются САМИ (только через
  * {@code META-INF/spring.factories}, в классе ноль настройки Allure).
  * <p>
- * Шаг «Configuration» config-листенер пишет в {@code beforeTestMethod} — он уже в текущем
+ * Шаг «Конфиги приложения» config-листенер пишет в {@code beforeTestMethod} — он уже в текущем
  * кейсе во время теста (проверяем сразу). Вложение «Application Logs» logs-листенер
  * добавляет в {@code afterTestMethod} — из тела теста его не прочитать. Проверяем его в
  * {@code @AfterAll}: к этому моменту Allure уже записал вложение на диск, а отдельного
@@ -32,13 +32,13 @@ class ReportSmokeIT {
     private static final String LOG_MARKER = "ReportSmokeIT-marker-7f3a9c";
 
     @Test
-    @DisplayName("config-листенер даёт шаг Configuration; логи эмитятся")
+    @DisplayName("config-листенер даёт шаг Конфиги приложения; логи эмитятся")
     void emitsConfigStepAndLogs() {
         log.info("Привет из ReportSmokeIT [{}] — строка для Application Logs", LOG_MARKER);
         log.warn("Предупреждение со значением value={}", 42);
 
         // verify — через немой CurrentReport (JUnit assertTrue сам стал бы шагом «Проверка: …»)
-        CurrentReport.assertStep("Configuration");
+        CurrentReport.assertStep("Конфиги приложения");
     }
 
     @AfterAll

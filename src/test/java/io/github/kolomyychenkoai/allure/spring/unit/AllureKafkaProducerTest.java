@@ -36,10 +36,15 @@ class AllureKafkaProducerTest {
                 AllureKafkaProducerInstrumentation.onSend(record));
 
         assertThat(allure.hasStep(result, "Kafka: отправлено → order-events [k1]")).isTrue();
+        // метаданные (topic/key) — text/plain
         assertThat(allure.attachment(result, "Отправленное сообщение").orElseThrow())
                 .contains("Topic: order-events")
-                .contains("Key: k1")
+                .contains("Key: k1");
+        // значение payload — отдельным вложением application/json
+        assertThat(allure.attachment(result, "Значение сообщения").orElseThrow())
                 .contains("\"id\":7"); // значение payload, а не короткий токен «id»
+        assertThat(allure.attachmentType(result, "Значение сообщения").orElseThrow())
+                .isEqualTo("application/json");
     }
 
     @Test

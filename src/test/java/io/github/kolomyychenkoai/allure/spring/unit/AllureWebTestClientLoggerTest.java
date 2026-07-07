@@ -66,7 +66,10 @@ class AllureWebTestClientLoggerTest {
 
         assertThat(report.getSteps().stream().map(s -> s.getName()))
                 .anyMatch(n -> n.startsWith("HTTP GET") && n.endsWith("/api/hello/world → 200"));
-        assertThat(allure.attachment(report, "HTTP Response").orElseThrow()).contains("hello world");
+        // тело переехало в отдельное вложение application/json
+        assertThat(allure.attachment(report, "HTTP Response Body").orElseThrow()).contains("hello world");
+        assertThat(allure.attachmentType(report, "HTTP Response Body").orElseThrow())
+                .isEqualTo("application/json");
     }
 
     @Test

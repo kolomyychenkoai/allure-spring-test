@@ -88,7 +88,11 @@ class RestAssuredReportIT {
         // содержимое вложений пришло через реальную цепочку
         String req = CurrentReport.attachmentContent("HTTP Request").orElse("");
         CurrentReport.check(req.contains("/api/hello/world"), () -> "HTTP Request без пути: " + req);
-        String resp = CurrentReport.attachmentContent("HTTP Response").orElse("");
-        CurrentReport.check(resp.contains("world"), () -> "HTTP Response без тела: " + resp);
+        // тело переехало в ОТДЕЛЬНОЕ вложение «HTTP Response Body» типа application/json
+        String resp = CurrentReport.attachmentContent("HTTP Response Body").orElse("");
+        CurrentReport.check(resp.contains("world"), () -> "HTTP Response Body без тела: " + resp);
+        String respType = CurrentReport.attachmentType("HTTP Response Body").orElse("");
+        CurrentReport.check(respType.equals("application/json"),
+                () -> "HTTP Response Body должно быть application/json, а было: " + respType);
     }
 }

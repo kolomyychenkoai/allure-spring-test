@@ -37,7 +37,7 @@ class MockMvcStandaloneReportIT {
         long count = steps.stream().filter("HTTP GET /api/hello/world → 200"::equals).count();
         CurrentReport.check(count == 1, () -> "ожидали ровно один HTTP-шаг standalone MockMvc: " + steps);
 
-        String resp = CurrentReport.attachmentContent("HTTP Response").orElse("");
-        CurrentReport.check(resp.contains("hello world"), () -> "HTTP Response без тела: " + resp);
+        String resp = CurrentReport.attachmentContent("HTTP Response Body").orElse("");
+        CurrentReport.check(resp.contains("hello world"), () -> "HTTP Response Body без тела: " + resp);
     }
 }

@@ -53,4 +53,23 @@ public final class AllureAdviceSupport {
         }
         return s;
     }
+
+    /**
+     * Кладёт метаданные (заголовки/строку статуса и т.п.) и ТЕЛО ОТДЕЛЬНЫМИ вложениями. Тело —
+     * с content-type {@code application/json}, если похоже на JSON: тогда Allure-репорт сам
+     * форматирует его красиво (с отступами/подсветкой), а не одной строкой. Пустое тело не кладём.
+     * Так мы НЕ пересериализуем (храним точные байты) и не тянем JSON-зависимость.
+     */
+    public static void attach(String metaName, String meta, String bodyName, String body) {
+        Allure.addAttachment(metaName, "text/plain", meta);
+        if (body != null && !body.isBlank()) {
+            Allure.addAttachment(bodyName, bodyContentType(body), body);
+        }
+    }
+
+    /** {@code application/json}, если строка (после trim) начинается с {@code &#123;}/{@code [}; иначе {@code text/plain}. */
+    public static String bodyContentType(String body) {
+        String t = body == null ? "" : body.stripLeading();
+        return (t.startsWith("{") || t.startsWith("[")) ? "application/json" : "text/plain";
+    }
 }

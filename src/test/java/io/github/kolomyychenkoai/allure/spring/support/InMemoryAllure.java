@@ -81,6 +81,14 @@ public final class InMemoryAllure implements AllureResultsWriter {
                 .findFirst();
     }
 
+    /** Content-type вложения по имени (для проверки, что тело — отдельное {@code application/json}). */
+    public Optional<String> attachmentType(TestResult result, String name) {
+        return allAttachments(result.getAttachments(), result.getSteps()).stream()
+                .filter(a -> name.equals(a.getName()))
+                .map(Attachment::getType)
+                .findFirst();
+    }
+
     /** Есть ли шаг с таким именем (на верхнем уровне). */
     public boolean hasStep(TestResult result, String name) {
         return result.getSteps().stream().anyMatch(s -> name.equals(s.getName()));

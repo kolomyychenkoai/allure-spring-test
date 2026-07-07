@@ -55,8 +55,11 @@ class AllureWireMockListenerTest {
         assertThat(allure.hasStep(result, "Запрос к заглушке: GET /api/prices → 200")).isTrue();
         assertThat(allure.attachment(result, "WireMock Request").orElseThrow())
                 .contains("GET /api/prices");
-        assertThat(allure.attachment(result, "WireMock Response").orElseThrow())
+        // тело ответа переехало в отдельное вложение application/json
+        assertThat(allure.attachment(result, "WireMock Response Body").orElseThrow())
                 .contains("price");
+        assertThat(allure.attachmentType(result, "WireMock Response Body").orElseThrow())
+                .isEqualTo("application/json");
     }
 
     @Test
