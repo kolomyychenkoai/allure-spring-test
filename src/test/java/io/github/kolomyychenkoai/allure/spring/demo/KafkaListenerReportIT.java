@@ -70,7 +70,10 @@ class KafkaListenerReportIT {
         // (producer-тест шлёт в order-events) → доказывает, что это ПРИЁМ этого теста.
         CurrentReport.check(CurrentReport.anyResultFileContainsAll("Topic: listener-events", "Offset:"),
                 () -> "мета приёма @KafkaListener (topic listener-events + Offset) не попала в отчёт");
-        // Value: развёрнутый payload id:42 (уникален — producer шлёт id:7) в отдельном вложении
+        // Value: развёрнутый payload id:42 (уникален — producer шлёт id:7) в отдельном вложении.
+        // NB: это ОДНО и то же сообщение и на отправке, и на приёме → сам value-ассерт не отделяет
+        // send от receive (payload идентичен). ПРИЁМ доказывает мета-ассерт выше (Offset: есть только
+        // у consumer'а); сама сплит-логика value→application/json запиннена KafkaReportIT+ConsumerTest.
         CurrentReport.check(CurrentReport.anyResultFileContains("\"id\": 42"),
                 () -> "value приёма @KafkaListener (payload id:42) не попал в отдельное вложение «Значение сообщения»");
     }
