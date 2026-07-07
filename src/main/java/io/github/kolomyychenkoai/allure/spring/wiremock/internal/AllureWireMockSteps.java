@@ -66,9 +66,21 @@ public final class AllureWireMockSteps {
             if (server == null || !active()) {
                 return;
             }
-            Allure.step("WireMock: сервер поднят (:" + server.port() + ")");
+            // порт как метка имени; на https-only сервере он недоступен — деградируем до имени БЕЗ порта
+            // (симметрично шагу сброса), а не теряем весь шаг
+            Integer port = safePort(server);
+            Allure.step("WireMock: сервер поднят" + (port != null ? " (:" + port + ")" : ""));
         } catch (Throwable t) {
             AllureInstrumentationLogger.warn("WireMockServerUp", t);
+        }
+    }
+
+    /** Порт сервера, либо null, если его нельзя получить (https-only/не запущен) — не роняем инструментирование. */
+    static Integer safePort(WireMockServer server) {
+        try {
+            return server.port();
+        } catch (Throwable t) {
+            return null;
         }
     }
 

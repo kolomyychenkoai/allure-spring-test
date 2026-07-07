@@ -100,14 +100,15 @@ class AllureWireMockVerifyTest {
     }
 
     @Test
-    @DisplayName("serverUp без активного тест-кейса ничего не пишет (гейт active())")
-    void serverUpWithoutActiveCaseWritesNothing() {
-        WireMockServer server = new WireMockServer(options().dynamicPort());
+    @DisplayName("serverUp на https-only сервере: шаг рисуется БЕЗ порта (safePort деградирует, не теряем шаг)")
+    void serverUpHttpsOnlyDegradesGracefully() {
+        // у https-only сервера нет HTTP-порта → server.port() кинет; safePort→null → имя без порта.
+        // мутация: верни в serverUp прямой server.port() → шаг пропадёт (Throwable) → RED
+        WireMockServer server = new WireMockServer(options().httpDisabled(true).dynamicHttpsPort());
         server.start();
         try {
-            AllureWireMockSteps.serverUp(server); // без allure.run → нет активного кейса
-            // мутация: убери гейт active() в serverUp → шаг запишется вне кейса → RED
-            assertThat(allure.wroteNothing()).isTrue();
+            TestResult result = allure.run("up-https", () -> AllureWireMockSteps.serverUp(server));
+            assertThat(allure.hasStep(result, "WireMock: сервер поднят")).isTrue();
         } finally {
             server.stop();
         }
