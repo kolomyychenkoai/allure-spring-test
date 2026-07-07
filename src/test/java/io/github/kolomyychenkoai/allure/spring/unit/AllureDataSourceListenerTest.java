@@ -80,7 +80,7 @@ class AllureDataSourceListenerTest {
     }
 
     @Test
-    @DisplayName("связанные параметры PreparedStatement: их ЗНАЧЕНИЯ видны во вложении SQL Query")
+    @DisplayName("связанные параметры подставляются В ТЕКСТ запроса (вместо ?), а не отдельным списком")
     void rendersBoundParameterValues() {
         QueryInfo query = query("insert into widget (name, id) values (?, ?)");
         // связываем ?1='laptop', ?2=42 — ровно как datasource-proxy после setString/setInt
@@ -91,10 +91,62 @@ class AllureDataSourceListenerTest {
         TestResult result = allure.run("sql-params", () ->
                 listener.afterQuery(exec(), List.of(query)));
 
-        // мутация: если main перестанет рендерить параметры (напр. logCreator без Params) — значения исчезнут → RED
+        // подстановка позиционная: строка — в кавычках, число — как есть, голых ? не остаётся.
+        // Мутация: если main вернёт шаблон с ? (перестанет подставлять) — упадёт на doesNotContain('?').
         assertThat(allure.attachment(result, "SQL Query").orElseThrow())
-                .contains("laptop")   // значение строкового параметра
-                .contains("42");      // значение числового параметра
+                .contains("values ('laptop', 42)")
+                .doesNotContain("?");
+    }
+
+    @Test
+    @DisplayName("NULL и экранирование одинарной кавычки в значении параметра")
+    void rendersNullAndEscapesQuotes() {
+        QueryInfo query = query("update widget set name=? where note=?");
+        query.setParametersList(List.of(List.of(
+                param("setString", String.class, 1, "O'Brien"), // кавычка в значении
+                param("setString", String.class, 2, null))));    // null-значение строкой
+
+        TestResult result = allure.run("sql-null", () ->
+                listener.afterQuery(exec(), List.of(query)));
+
+        assertThat(allure.attachment(result, "SQL Query").orElseThrow())
+                .contains("name='O''Brien'")  // одинарная кавычка удвоена
+                .contains("note=NULL");
+    }
+
+    @Test
+    @DisplayName("setNull(index, sqlType): в текст идёт NULL, а не КОД типа java.sql.Types")
+    void rendersSetNull() {
+        QueryInfo query = query("update widget set name=? where id=?");
+        // setNull(1, VARCHAR): второй аргумент — код типа (12), НЕ значение
+        query.setParametersList(List.of(List.of(
+                param("setNull", int.class, 1, java.sql.Types.VARCHAR),
+                param("setInt", int.class, 2, 7))));
+
+        TestResult result = allure.run("sql-setnull", () ->
+                listener.afterQuery(exec(), List.of(query)));
+
+        // мутация: без спец-обработки setNull вывелось бы «name=12» (код VARCHAR) — тут ждём NULL
+        assertThat(allure.attachment(result, "SQL Query").orElseThrow())
+                .contains("name=NULL where id=7")
+                .doesNotContain("name=12");
+    }
+
+    @Test
+    @DisplayName("batch (>1 ряда параметров): показан первый ряд + честная пометка про batch")
+    void rendersBatchNote() {
+        QueryInfo query = query("insert into widget (name) values (?)");
+        query.setParametersList(List.of(
+                List.of(param("setString", String.class, 1, "first")),
+                List.of(param("setString", String.class, 1, "second"))));
+
+        TestResult result = allure.run("sql-batch", () ->
+                listener.afterQuery(exec(), List.of(query)));
+
+        assertThat(allure.attachment(result, "SQL Query").orElseThrow())
+                .contains("values ('first')")   // первый ряд подставлен
+                .contains("batch")               // пометка про пропущенные ряды
+                .contains("из 2");
     }
 
     @Test

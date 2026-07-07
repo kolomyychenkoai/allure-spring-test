@@ -64,6 +64,9 @@ class DataJpaReportIT {
                 () -> "нет шага SQL SELECT (findById/findAll): " + steps);
         CurrentReport.check(CurrentReport.attachmentContent("SQL Query").orElse("").toLowerCase().contains("widget"),
                 () -> "SQL Query без текста запроса: " + CurrentReport.attachmentContent("SQL Query"));
+        // значение параметра ПОДСТАВЛЕНО в текст (а не голый ?) — иначе ручному приёмщику непонятно, что записали
+        CurrentReport.check(CurrentReport.attachmentContent("SQL Query").orElse("").contains("'gadget'"),
+                () -> "SQL Query без подставленного значения параметра: " + CurrentReport.attachmentContent("SQL Query"));
     }
 
     @Test

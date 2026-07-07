@@ -5,17 +5,25 @@ import io.qameta.allure.Allure;
 import net.ttddyy.dsproxy.ExecutionInfo;
 import net.ttddyy.dsproxy.QueryInfo;
 import net.ttddyy.dsproxy.listener.QueryExecutionListener;
-import net.ttddyy.dsproxy.listener.logging.DefaultQueryLogEntryCreator;
+import net.ttddyy.dsproxy.proxy.ParameterSetOperation;
 
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.regex.Pattern;
 
 /**
  * Логирует РЕАЛЬНЫЙ SQL (через обёртку DataSource, datasource-proxy): каждый
  * выполненный запрос даёт в отчёте шаг «SQL &lt;OP&gt;» с вложением «SQL Query» —
- * текст запроса, параметры, время, успех. Дополняет аспект репозиториев («DB …»),
- * который показывает вызов метода и сущности.
+ * текст запроса с ПОДСТАВЛЕННЫМИ значениями связанных параметров (а не голые
+ * {@code ?}), плюс время и успех. Дополняет аспект репозиториев («DB …»), который
+ * показывает вызов метода и сущности.
+ * <p>
+ * Почему подставляем значения: голый {@code insert … values (?)} ручному приёмщику
+ * непонятен — не видно, ЧТО записали. Связанные параметры PreparedStatement (их даёт
+ * datasource-proxy) подставляются в текст: {@code values ('gadget')}. Строки — в
+ * кавычках с экранированием, числа/булевы — как есть, {@code NULL} — как {@code NULL}.
+ * Если значения нет — {@code ?} остаётся (безопасный фолбэк, отчёт не врёт).
  * <p>
  * Гейтинг — по активному Allure тест-кейсу: DDL при старте контекста в отчёт
  * не попадает. Всё в try/catch — инструментирование не роняет тест.
@@ -23,8 +31,8 @@ import java.util.regex.Pattern;
  * Порядок: SQL-шаг идёт ПЕРЕД соседним «DB Repo.method» (SQL выполняется внутри
  * вызова, а аспект эмитит свой шаг уже после) — это by-design.
  * <p>
- * Потокобезопасен: {@code logCreator} — stateless-форматтер datasource-proxy, {@code TABLE_PATTERNS}
- * неизменяема; собственного изменяемого состояния у листенера нет.
+ * Потокобезопасен: собственного состояния у листенера нет ({@code TABLE_PATTERNS}
+ * неизменяема, рендер — на локальных переменных).
  */
 public class AllureDataSourceListener implements QueryExecutionListener {
 
@@ -35,8 +43,6 @@ public class AllureDataSourceListener implements QueryExecutionListener {
             "DELETE", Pattern.compile("(?i)delete\\s+from\\s+([\\w.\"`]+)"),
             "MERGE", Pattern.compile("(?i)merge\\s+into\\s+([\\w.\"`]+)"),
             "SELECT", Pattern.compile("(?i)\\bfrom\\s+([\\w.\"`]+)"));
-
-    private final DefaultQueryLogEntryCreator logCreator = new DefaultQueryLogEntryCreator();
 
     @Override
     public void beforeQuery(ExecutionInfo execInfo, List<QueryInfo> queryInfoList) {
@@ -50,13 +56,93 @@ public class AllureDataSourceListener implements QueryExecutionListener {
                     || !Allure.getLifecycle().getCurrentTestCase().isPresent()) {
                 return;
             }
-            String body = logCreator.getLogEntry(execInfo, queryInfoList, false, false, false);
-            Allure.step(stepName(queryInfoList.get(0).getQuery()), step -> {
+            QueryInfo first = queryInfoList.get(0);
+            String body = renderQuery(first, execInfo);
+            Allure.step(stepName(first.getQuery()), step -> {
                 Allure.addAttachment("SQL Query", "text/plain", body);
             });
         } catch (Throwable t) {
             AllureInstrumentationLogger.warn("DbSqlListener", t); // не роняем тест, сбой видно на WARNING
         }
+    }
+
+    /** Текст запроса с подставленными значениями + короткая строка «успех · время». */
+    private static String renderQuery(QueryInfo query, ExecutionInfo exec) {
+        List<List<ParameterSetOperation>> rows = query.getParametersList();
+        StringBuilder sb = new StringBuilder(inlineParams(query.getQuery(), firstRow(rows)));
+        if (rows != null && rows.size() > 1) {
+            sb.append("\n(показан первый ряд из ").append(rows.size()).append(" — batch)");
+        }
+        sb.append("\n\n");
+        sb.append(exec != null && exec.isSuccess() ? "✓ успешно" : "✗ ошибка");
+        if (exec != null) {
+            sb.append(" · ").append(exec.getElapsedTime()).append(" мс");
+        }
+        return sb.toString();
+    }
+
+    /** Первый (не-батчевый) набор связанных параметров запроса; пусто, если их нет. */
+    private static List<ParameterSetOperation> firstRow(List<List<ParameterSetOperation>> rows) {
+        return (rows == null || rows.isEmpty()) ? List.of() : rows.get(0);
+    }
+
+    /**
+     * Подставляет значения связанных параметров вместо позиционных {@code ?}. N-й {@code ?}
+     * соответствует параметру с индексом N (PreparedStatement, 1-based). Если значения нет —
+     * {@code ?} остаётся (безопасный фолбэк). Именованные/нестандартные параметры пропускаются.
+     */
+    private static String inlineParams(String sql, List<ParameterSetOperation> params) {
+        if (sql == null || sql.indexOf('?') < 0 || params.isEmpty()) {
+            return sql == null ? "" : sql;
+        }
+        Map<Integer, String> byIndex = new TreeMap<>();
+        for (ParameterSetOperation op : params) {
+            Object[] args = op.getArgs(); // setXxx(index, value): [0]=индекс, [1]=значение
+            if (args != null && args.length >= 2 && args[0] instanceof Integer idx) {
+                byIndex.put(idx, renderParam(op, args[1]));
+            }
+        }
+        if (byIndex.isEmpty()) {
+            return sql;
+        }
+        StringBuilder out = new StringBuilder(sql.length() + 16);
+        int position = 1;
+        for (int i = 0; i < sql.length(); i++) {
+            char c = sql.charAt(i);
+            if (c == '?') {
+                out.append(byIndex.getOrDefault(position++, "?"));
+            } else {
+                out.append(c);
+            }
+        }
+        return out.toString();
+    }
+
+    /**
+     * Значение параметра для подстановки. Особый случай — {@code setNull(index, sqlType)}: у него
+     * второй аргумент это КОД типа java.sql.Types, а не значение; наивный рендер вывел бы число —
+     * поэтому по имени сеттера отдаём {@code NULL}.
+     */
+    private static String renderParam(ParameterSetOperation op, Object rawValue) {
+        var method = op.getMethod();
+        if (method != null && "setNull".equals(method.getName())) {
+            return "NULL";
+        }
+        return formatValue(rawValue);
+    }
+
+    /** Значение для подстановки: число/булево — как есть, null — NULL, остальное — в кавычках. */
+    private static String formatValue(Object value) {
+        if (value == null) {
+            return "NULL";
+        }
+        if (value instanceof Number || value instanceof Boolean) {
+            return value.toString();
+        }
+        if (value instanceof byte[]) {
+            return "'<binary>'"; // не вываливаем бинарь в отчёт
+        }
+        return "'" + value.toString().replace("'", "''") + "'"; // экранируем одинарную кавычку
     }
 
     /** Имя шага: «SQL <OP> <таблица>» — чтобы разные запросы различались в дереве. */
