@@ -9,6 +9,8 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -46,7 +48,7 @@ public final class AllureKafkaConsumerInstrumentation {
     // Рендерим в строку СРАЗУ при захвате (ConsumerRecords недолговечны), храним готовый текст.
     private static final Queue<Captured> BUFFER = new ConcurrentLinkedQueue<>();
 
-    private record Captured(int count, String body) {
+    private record Captured(int count, String meta, List<String> values) {
     }
 
     private AllureKafkaConsumerInstrumentation() {
@@ -100,29 +102,37 @@ public final class AllureKafkaConsumerInstrumentation {
         BUFFER.clear();
     }
 
-    // ⚠️ Приём батчит N записей в ОДНО вложение «Принятые сообщения» (разделитель ---), поэтому,
-    // в отличие от producer'а (одно сообщение → своё application/json-тело без обрезки), value тут
-    // НЕ выносим отдельным вложением и НЕ разворачиваем: сплит по-записно раздул бы дерево вложений.
-    // Осознанная асимметрия producer/consumer (известное ограничение; см. README/бэклог #5 про value).
+    // Симметрично producer'у: метаданные КАЖДОЙ записи (topic/partition/offset/key) — в общем
+    // text/plain-вложении «Принятые сообщения», а value КАЖДОЙ записи — своим вложением «Значение
+    // сообщения [#N]» (application/json + развёрнуто, если JSON). Value рендерим через render()
+    // (не-бросающий, без 500-обрезки), не safe().
     private static Captured render(ConsumerRecords<?, ?> records) {
-        StringBuilder sb = new StringBuilder();
+        StringBuilder meta = new StringBuilder();
+        List<String> values = new ArrayList<>();
         int i = 0;
         for (ConsumerRecord<?, ?> record : records) {
             if (i++ > 0) {
-                sb.append("\n---\n");
+                meta.append("\n---\n");
             }
-            sb.append("Topic: ").append(record.topic())
+            meta.append("Topic: ").append(record.topic())
                     .append("\nPartition: ").append(record.partition())
                     .append("\nOffset: ").append(record.offset())
-                    .append("\nKey: ").append(AllureAdviceSupport.safe(record.key()))
-                    .append("\nValue: ").append(AllureAdviceSupport.safe(record.value()));
+                    .append("\nKey: ").append(AllureAdviceSupport.safe(record.key()));
+            values.add(record.value() == null ? null : AllureAdviceSupport.render(record.value()));
         }
-        return new Captured(records.count(), sb.toString());
+        return new Captured(records.count(), meta.toString(), values);
     }
 
     private static void emit(Captured captured) {
         Allure.step("Kafka: получено " + captured.count() + " сообщ.", step -> {
-            Allure.addAttachment("Принятые сообщения", "text/plain", captured.body());
+            Allure.addAttachment("Принятые сообщения", "text/plain", captured.meta());
+            // value каждой записи — своим вложением (application/json + отступы, если JSON)
+            List<String> values = captured.values();
+            boolean many = values.size() > 1;
+            for (int i = 0; i < values.size(); i++) {
+                String name = many ? "Значение сообщения #" + (i + 1) : "Значение сообщения";
+                AllureAdviceSupport.attachBody(name, values.get(i));
+            }
         });
     }
 

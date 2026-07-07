@@ -64,10 +64,20 @@ public final class AllureAdviceSupport {
      */
     public static void attach(String metaName, String meta, String bodyName, String body) {
         Allure.addAttachment(metaName, "text/plain", meta);
+        attachBody(bodyName, body);
+    }
+
+    /**
+     * Кладёт ТОЛЬКО тело отдельным вложением (без метаданных): JSON → {@code application/json} +
+     * развёрнуто в столбик ({@link AllureJson#indent}), иначе {@code text/plain} как есть. Пустое/
+     * {@code null} тело не кладём. Для случаев, где метаданные общие, а тел несколько (напр. Kafka —
+     * value КАЖДОЙ принятой записи своим вложением).
+     */
+    public static void attachBody(String name, String body) {
         if (body != null && !body.isBlank()) {
             String type = bodyContentType(body);
             String content = "application/json".equals(type) ? AllureJson.indent(body) : body;
-            Allure.addAttachment(bodyName, type, content);
+            Allure.addAttachment(name, type, content);
         }
     }
 
