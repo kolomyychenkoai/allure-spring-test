@@ -82,6 +82,8 @@ class WireMockReportIT {
         wireMock.resetAll(); // снимает near-miss/сценарии ДО сброса + шаг сброса
 
         List<String> steps = CurrentReport.stepNames();
+        // шаг «сервер поднят (:port)» рисуется в beforeTestMethod → читается из тела; пиннит живую цепочку
+        CurrentReport.assertStep("WireMock: сервер поднят (:" + wireMock.port() + ")");
         CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("Создана заглушка:") && n.contains("/api/prices")),
                 () -> "" + steps);
         CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("Проверка обращений к заглушке")), () -> "" + steps);

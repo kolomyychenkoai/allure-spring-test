@@ -56,6 +56,23 @@ public final class AllureWireMockSteps {
     }
 
     /**
+     * Живой шаг «WireMock: сервер поднят (:port)» в начале теста — чтобы в отчёте было видно, что
+     * mock-инфра поднята и на каком порту (симметрично шагу сброса «WireMock: сброс заглушек (:port)»).
+     * Рисуется листенером в {@code beforeTestMethod} для каждого найденного запущенного сервера, поэтому
+     * per-test и без протечки. Без активного кейса — no-op; сбой не роняет тест.
+     */
+    public static void serverUp(WireMockServer server) {
+        try {
+            if (server == null || !active()) {
+                return;
+            }
+            Allure.step("WireMock: сервер поднят (:" + server.port() + ")");
+        } catch (Throwable t) {
+            AllureInstrumentationLogger.warn("WireMockServerUp", t);
+        }
+    }
+
+    /**
      * Near-miss для незаматченных запросов. Вызывать ПЕРЕД {@code resetAll}, иначе журнал стёрт.
      * Шаг ИНФОРМАЦИОННЫЙ (PASSED): сам по себе near-miss тест не роняет — это диагностика
      * «почему запрос не сматчился» (diff во вложении). Красить в BROKEN без падающего теста

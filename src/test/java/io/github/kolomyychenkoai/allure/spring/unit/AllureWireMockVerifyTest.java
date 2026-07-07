@@ -1,5 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
 
+import io.github.kolomyychenkoai.allure.spring.wiremock.internal.AllureWireMockSteps;
 import io.github.kolomyychenkoai.allure.spring.wiremock.internal.AllureWireMockVerifyInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.qameta.allure.model.Attachment;
@@ -82,6 +83,34 @@ class AllureWireMockVerifyTest {
                 new AssertionError("ожидалось обращение, которого не было")));
 
         assertThat(stepNames(result)).noneMatch(n -> n.startsWith("Проверка обращений"));
+    }
+
+    @Test
+    @DisplayName("serverUp: шаг «WireMock: сервер поднят (:port)» с реальным портом")
+    void logsServerUp() {
+        WireMockServer server = new WireMockServer(options().dynamicPort());
+        server.start();
+        try {
+            TestResult result = allure.run("up", () -> AllureWireMockSteps.serverUp(server));
+            // мутация: убери порт из имени → рассинхрон с ассертом; убери шаг из beforeTestMethod → RED в IT
+            assertThat(allure.hasStep(result, "WireMock: сервер поднят (:" + server.port() + ")")).isTrue();
+        } finally {
+            server.stop();
+        }
+    }
+
+    @Test
+    @DisplayName("serverUp без активного тест-кейса ничего не пишет (гейт active())")
+    void serverUpWithoutActiveCaseWritesNothing() {
+        WireMockServer server = new WireMockServer(options().dynamicPort());
+        server.start();
+        try {
+            AllureWireMockSteps.serverUp(server); // без allure.run → нет активного кейса
+            // мутация: убери гейт active() в serverUp → шаг запишется вне кейса → RED
+            assertThat(allure.wroteNothing()).isTrue();
+        } finally {
+            server.stop();
+        }
     }
 
     @Test
