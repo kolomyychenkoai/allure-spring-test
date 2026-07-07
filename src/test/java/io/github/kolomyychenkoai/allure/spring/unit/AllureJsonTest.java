@@ -45,6 +45,13 @@ class AllureJsonTest {
     }
 
     @Test
+    @DisplayName("unicode-escape \\uXXXX внутри строки сохраняется дословно")
+    void respectsUnicodeEscape() {
+        assertThat(AllureJson.indent("{\"m\":\"\\u0041\\uD83D\"}"))
+                .isEqualTo("{\n  \"m\": \"\\u0041\\uD83D\"\n}");
+    }
+
+    @Test
     @DisplayName("уже многострочный JSON перенормализуется (идемпотентно по структуре)")
     void reindentsPrettyInput() {
         String pretty = "{\n  \"a\": 1\n}";

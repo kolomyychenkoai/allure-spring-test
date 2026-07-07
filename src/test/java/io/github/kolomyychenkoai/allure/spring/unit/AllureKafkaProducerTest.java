@@ -49,6 +49,20 @@ class AllureKafkaProducerTest {
     }
 
     @Test
+    @DisplayName("длинное value (>500) во вложении НЕ обрезано (render, а не safe) на call-site продьюсера")
+    void longValueNotTruncated() {
+        // мутация render(record.value())→safe(...) в onSend → значение урезалось бы до 500 → RED
+        String big = "x".repeat(600);
+        ProducerRecord<String, String> record =
+                new ProducerRecord<>("order-events", "k1", "{\"data\":\"" + big + "\"}");
+
+        TestResult result = allure.run("send-big", () ->
+                AllureKafkaProducerInstrumentation.onSend(record));
+
+        assertThat(allure.attachment(result, "Значение сообщения").orElseThrow()).contains(big);
+    }
+
+    @Test
     @DisplayName("отправка без ключа: имя шага без [key], в теле Key: null")
     void logsSentRecordWithoutKey() {
         ProducerRecord<String, String> record =
