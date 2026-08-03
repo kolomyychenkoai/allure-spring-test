@@ -278,4 +278,99 @@ class InstrumentationApiCanaryTest {
         assertTrue(hasMethod(a, "assertAll", -1, null),
                 "Assertions.assertAll уехал → пересмотри исключение assertAll в AllureJUnitJupiterAssertionsInstrumentation");
     }
+
+    @Test
+    @DisplayName("AssertJ: приватное поле AbstractAssert.actual (@Advice.FieldValue(\"actual\"))")
+    void assertjActualField() {
+        // AllureAssertJInstrumentation читает значение через @Advice.FieldValue("actual") — это имя
+        // ПРИВАТНОГО поля. Переименуют → трансформация типа падает целиком, и без счётчика сбоев
+        // это было бы невидимо: исчезли бы ВСЕ шаги AssertJ при зелёных тестах.
+        assertTrue(hasField("org.assertj.core.api.AbstractAssert", "actual"),
+                "AbstractAssert.actual уехал → обнови @Advice.FieldValue в AllureAssertJInstrumentation");
+    }
+
+    @Test
+    @DisplayName("Spring Boot test-autoconfigure: кастомайзеры MockMvc и WebTestClient (@ConditionalOnClass)")
+    void springBootTestCustomizers() {
+        // Гейты @ConditionalOnClass читаются ASM-ом БЕЗ загрузки класса: если класс уехал, условие
+        // просто false — автоконфиг молча не применяется, HTTP-шаги исчезают без единого сообщения.
+        // Spring Boot 4 разбивает spring-boot-test-autoconfigure на модули по технологиям — это
+        // первый кандидат на переезд при апгрейде.
+        assertTrue(classPresent("org.springframework.boot.test.autoconfigure.web.servlet.MockMvcBuilderCustomizer"),
+                "MockMvcBuilderCustomizer уехал → обнови @ConditionalOnClass в AllureMockMvcAutoConfiguration");
+        assertTrue(classPresent("org.springframework.boot.test.web.reactive.server.WebTestClientBuilderCustomizer"),
+                "WebTestClientBuilderCustomizer уехал → обнови @ConditionalOnClass в AllureWebTestClientAutoConfiguration");
+        assertTrue(classPresent("org.springframework.test.web.servlet.ResultHandler"),
+                "ResultHandler уехал → AllureMockMvcAutoConfiguration вешает AllureMockMvcResultHandler через него");
+    }
+
+    @Test
+    @DisplayName("RestAssured: метод content и класс-исключение ResponseAwareMatcher")
+    void restAssuredValidationExtras() {
+        String vroi = "io.restassured.internal.ValidatableResponseOptionsImpl";
+        assertTrue(hasMethod(vroi, "content", -1, null),
+                "ValidatableResponseOptionsImpl.content уехал → обнови список имён в AllureRestAssuredValidationInstrumentation");
+        // матчер ИСКЛЮЧАЕТ перегрузки с ResponseAwareMatcher: уедет класс — исключение начнёт
+        // молча пропускать их в отчёт (лишние/битые шаги), а не падать
+        assertTrue(classPresent("io.restassured.matcher.ResponseAwareMatcher"),
+                "ResponseAwareMatcher уехал → пересмотри исключение hasType(...) в AllureRestAssuredValidationInstrumentation");
+    }
+
+    @Test
+    @DisplayName("JPA: jakarta.persistence.Entity (разбор полей сущностей во вложении DB Result)")
+    void jpaEntityAnnotation() {
+        // AllureRepositoryAspect ищет аннотацию через Class.forName и при ClassNotFoundException
+        // ТИХО деградирует к generic toString() — вложение остаётся, но становится бесполезным
+        assertTrue(classPresent("jakarta.persistence.Entity"),
+                "jakarta.persistence.Entity уехал → AllureRepositoryAspect перестанет разбирать поля сущностей");
+    }
+
+    @Test
+    @DisplayName("Гейты присутствия (ClassPresence): строки-имена из листенеров")
+    void classPresenceGates() {
+        // Каждая строка — выключатель целого модуля: не найден класс → листенер молча не включается.
+        // Полный инвентарь строк из *Listener (grep ClassPresence.isPresent в src/main).
+        for (String[] gate : new String[][]{
+                {"org.springframework.test.web.servlet.MockMvc", "AllureMockMvcListener"},
+                {"org.springframework.web.client.RestTemplate", "AllureRestTemplateListener"},
+                {"org.springframework.web.client.RestClient", "AllureRestClientListener"},
+                {"io.restassured.RestAssured", "AllureRestAssuredListener"},
+                {"org.springframework.jdbc.core.JdbcTemplate", "AllureJdbcListener"},
+                {"ch.qos.logback.classic.LoggerContext", "AllureApplicationLogsListener"},
+                {"com.github.tomakehurst.wiremock.WireMockServer", "AllureWireMockTestListener"},
+                {"liquibase.changelog.ChangeSet", "AllureLiquibaseListener"},
+                {"org.awaitility.Awaitility", "AllureAwaitilityListener"}}) {
+            assertTrue(classPresent(gate[0]),
+                    gate[0] + " уехал → " + gate[1] + " молча выключится (обнови строку ClassPresence.isPresent)");
+        }
+    }
+
+    @Test
+    @DisplayName("byte-buddy знает формат классов текущей JVM (иначе весь перехват тихо мёртв)")
+    void byteBuddySupportsCurrentJvmClassFormat() {
+        // Апгрейд JDK опережает byte-buddy: если формат class-файлов новее известного ему,
+        // трансформация падает на КАЖДОМ типе. Прямая канарейка на Java 25+.
+        assertTrue(net.bytebuddy.ClassFileVersion.ofThisVm(net.bytebuddy.ClassFileVersion.JAVA_V21)
+                        .isAtMost(net.bytebuddy.ClassFileVersion.latest()),
+                "byte-buddy не знает формат классов этой JVM → весь байткод-слой мёртв. "
+                        + "Подними версию byte-buddy (или включи -Dnet.bytebuddy.experimental=true ОСОЗНАННО)");
+    }
+
+    /** Есть ли у класса поле (в т.ч. приватное) — для канареек на {@code @Advice.FieldValue}. */
+    private static boolean hasField(String className, String field) {
+        try {
+            Class<?> c = Class.forName(className);
+            for (Class<?> k = c; k != null; k = k.getSuperclass()) {
+                try {
+                    k.getDeclaredField(field);
+                    return true;
+                } catch (NoSuchFieldException next) {
+                    // ищем выше по иерархии
+                }
+            }
+            return false;
+        } catch (ClassNotFoundException e) {
+            return false;
+        }
+    }
 }

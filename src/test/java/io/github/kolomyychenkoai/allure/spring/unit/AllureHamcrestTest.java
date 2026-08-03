@@ -80,6 +80,17 @@ class AllureHamcrestTest {
     }
 
     @Test
+    @DisplayName("одна проверка = РОВНО один шаг (2-арг делегирует в 3-арг, дубля быть не должно)")
+    void singleAssertOneStep() {
+        // Перехвачен ТОЛЬКО 3-арг assertThat — на допущении «2-арг делегирует в него».
+        // Если апгрейд Hamcrest разорвёт делегацию, шаг либо пропадёт (это ловит logsTwoArg),
+        // либо задвоится, если перехватят оба пути — это ловит счётчик здесь.
+        TestResult result = allure.run("one", () -> MatcherAssert.assertThat("mouse", is("mouse")));
+
+        assertThat(stepNames(result)).hasSize(1);
+    }
+
+    @Test
     @DisplayName("не-equality матчеры и не-строковый actual: имена шагов читаемы, без падений")
     void logsVariousMatchersAndTypes() {
         TestResult result = allure.run("various", () -> {

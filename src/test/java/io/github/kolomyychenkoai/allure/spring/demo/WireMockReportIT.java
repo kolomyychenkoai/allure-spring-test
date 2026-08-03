@@ -94,6 +94,16 @@ class WireMockReportIT {
         // имя шага сброса несёт РЕАЛЬНЫЙ порт сервера — пинним на живой цепочке, а не просто startsWith
         CurrentReport.assertStep("WireMock: сброс заглушек (:" + wireMock.port() + ")");
 
+        // Проверка допущений о ДЕЛЕГАЦИИ (stubFor→register, verify→verifyThat, resetAll→resetMappings):
+        // перехвачена одна точка каждой цепочки. Разорвут делегацию и перехватятся обе — шаги
+        // задвоятся. Считаем: 4 вызова stubFor = 4 шага, 2 вызова verify = 2 шага, 1 resetAll = 1 шаг.
+        long stubSteps = steps.stream().filter(n -> n.startsWith("Создана заглушка:")).count();
+        long verifySteps = steps.stream().filter(n -> n.startsWith("Проверка обращений к заглушке")).count();
+        long resetSteps = steps.stream().filter(n -> n.startsWith("WireMock: сброс заглушек")).count();
+        CurrentReport.check(stubSteps == 4, () -> "4 вызова stubFor должны дать 4 шага, а есть " + stubSteps + ": " + steps);
+        CurrentReport.check(verifySteps == 2, () -> "2 вызова verify должны дать 2 шага, а есть " + verifySteps + ": " + steps);
+        CurrentReport.check(resetSteps == 1, () -> "resetAll должен дать один шаг, а есть " + resetSteps + ": " + steps);
+
         // содержимое вложения стаба через реальную цепочку
         String stub = CurrentReport.attachmentContent("WireMock Stub").orElse("");
         CurrentReport.check(stub.contains("/api/prices"), () -> "WireMock Stub: " + stub);

@@ -54,6 +54,21 @@ test-classpath, который сам себя «вшивает». Точки в
 - **Allure JUnit-интеграция**, чтобы результаты вообще записывались (например `allure-junit5`)
 - ByteBuddy на test-classpath — обычно уже есть транзитивно (Mockito / spring-boot-starter-test)
 
+> **На Java 21+** библиотека привязывает байткод-агент к своей же JVM (self-attach). JDK при этом
+> печатает предупреждение, а в будущих версиях такая привязка может быть запрещена по умолчанию
+> ([JEP 451](https://openjdk.org/jeps/451)) — тогда перехват тихо выключится и отчёт обеднеет.
+> Разрешить явно (у нас в `pom.xml` так и сделано, Mockito требует того же):
+>
+> ```xml
+> <plugin>
+>     <groupId>org.apache.maven.plugins</groupId>
+>     <artifactId>maven-surefire-plugin</artifactId>
+>     <configuration>
+>         <argLine>-XX:+EnableDynamicAgentLoading</argLine>
+>     </configuration>
+> </plugin>
+> ```
+
 ## Установка
 
 > Нужен полный копи-паст «собрать → подключить в свой сервис → отчёт → залить в TestOps»?

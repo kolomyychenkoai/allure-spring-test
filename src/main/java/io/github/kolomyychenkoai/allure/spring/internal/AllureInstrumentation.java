@@ -3,7 +3,9 @@ package io.github.kolomyychenkoai.allure.spring.internal;
 import net.bytebuddy.agent.ByteBuddyAgent;
 import net.bytebuddy.agent.builder.AgentBuilder;
 import net.bytebuddy.description.type.TypeDescription;
+import net.bytebuddy.dynamic.DynamicType;
 import net.bytebuddy.matcher.ElementMatcher;
+import net.bytebuddy.utility.JavaModule;
 
 import java.lang.instrument.Instrumentation;
 
@@ -64,11 +66,40 @@ public final class AllureInstrumentation {
                     // Стоимость — разовый обход загруженных классов на КАЖДУЮ установку модуля
                     // (один раз на JVM, на init листенера); в steady-state не пересканирует.
                     .with(AgentBuilder.RedefinitionStrategy.DiscoveryStrategy.Reiterating.INSTANCE)
+                    // без слушателя ошибки трансформации уходят в Listener.NoOp — не видно НИЧЕГО
+                    .with(new FailureListener())
                     .type(typeMatcher)
                     .transform(transformer)
                     .installOn(instrumentation);
+            InstrumentationDiagnostics.markInstalled();
         } catch (Throwable t) {
-            AllureInstrumentationLogger.warn("Instrumentation", t);
+            InstrumentationDiagnostics.recordFailure("<install>", t);
+        }
+    }
+
+    /**
+     * Копит сбои трансформации в {@link InstrumentationDiagnostics}. Переопределяем РОВНО два
+     * колбэка: {@code onError} (ради чего всё) и {@code onTransformation} (позитивный сигнал
+     * «типы реально перехвачены»). {@code onDiscovery}/{@code onIgnored}/{@code onComplete}
+     * намеренно оставлены no-op: они дёргаются на КАЖДЫЙ загружаемый класс JVM — это горячий
+     * путь загрузки классов, а полезной информации там нет.
+     * <p>
+     * Класс вложенный и создаётся ЛОКАЛЬНО внутри {@link #retransform}: статическим полем его
+     * делать нельзя — {@code <clinit>} потянул бы типы byte-buddy и сломал {@link #available()},
+     * который обязан работать и без byte-buddy на classpath.
+     */
+    private static final class FailureListener extends AgentBuilder.Listener.Adapter {
+
+        @Override
+        public void onTransformation(TypeDescription typeDescription, ClassLoader classLoader,
+                                     JavaModule module, boolean loaded, DynamicType dynamicType) {
+            InstrumentationDiagnostics.recordTransformation();
+        }
+
+        @Override
+        public void onError(String typeName, ClassLoader classLoader, JavaModule module,
+                            boolean loaded, Throwable throwable) {
+            InstrumentationDiagnostics.recordFailure(typeName, throwable);
         }
     }
 }

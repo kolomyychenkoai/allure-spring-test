@@ -297,7 +297,56 @@
                     <systemPropertyVariables>
                         <allure.results.directory>${project.build.directory}/allure-results</allure.results.directory>
                     </systemPropertyVariables>
+                    <!-- Self-attach byte-buddy-агента (ByteBuddyAgent.install) на JDK 21+ печатает
+                         предупреждение, а в будущих JDK может быть запрещён по умолчанию (JEP 451).
+                         Разрешаем явно: иначе весь байткод-слой ТИХО выключится. -->
+                    <argLine>-XX:+EnableDynamicAgentLoading</argLine>
                 </configuration>
+                <executions>
+                    <!-- ВТОРОЙ прогон, ОТДЕЛЬНАЯ JVM: инвентарь видов шагов против эталона.
+                         Класс называется ReportInventoryCheck и НЕ подпадает под includes выше,
+                         поэтому в основном прогоне не участвует — двойного запуска нет by design.
+                         К моменту старта основной прогон завершён и все result.json на диске. -->
+                    <execution>
+                        <id>report-inventory</id>
+                        <phase>test</phase>
+                        <goals><goal>test</goal></goals>
+                        <configuration>
+                            <includes>
+                                <include>**/inventory/ReportInventoryCheck.java</include>
+                            </includes>
+                            <runOrder>filesystem</runOrder>
+                            <!-- точечный прогон (mvn test -Dtest=…) не должен падать «нет тестов» -->
+                            <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Каталог результатов чистим ПЕРЕД тестами, а не только в `mvn clean`: иначе
+                 CurrentReport.anyResultFileContains (сканирует ВЕСЬ каталог) и инвентарь читают
+                 файлы прошлых прогонов — ложно-зелёный ровно там, где ловим тихую поломку. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-clean-plugin</artifactId>
+                <version>3.4.0</version>
+                <executions>
+                    <execution>
+                        <id>wipe-allure-results</id>
+                        <phase>process-test-classes</phase>
+                        <goals><goal>clean</goal></goals>
+                        <configuration>
+                            <!-- ОБЯЗАТЕЛЬНО: иначе цель clean снесёт весь target/ посреди сборки -->
+                            <excludeDefaultDirectories>true</excludeDefaultDirectories>
+                            <failOnError>false</failOnError>
+                            <filesets>
+                                <fileset>
+                                    <directory>${project.build.directory}/allure-results</directory>
+                                </fileset>
+                            </filesets>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
 
             <!-- Allure CLI: mvn allure:serve / allure:report -->

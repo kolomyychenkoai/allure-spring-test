@@ -60,6 +60,12 @@ class LiquibaseReportIT {
         List<String> steps = CurrentReport.stepNames();
         CurrentReport.check(steps.stream().anyMatch("Liquibase: changeset create-live-account (allure)"::equals),
                 () -> "нет шага живой миграции Liquibase: " + steps);
+        // Перехвачен ТОЛЬКО 3-арг ChangeSet.execute — на допущении «2-арг делегирует в него».
+        // Разорвут делегацию и перехватятся оба пути → шаг задвоится. Считаем: один changeset = один шаг.
+        long changesetSteps = steps.stream().filter(n -> n.startsWith("Liquibase: changeset")).count();
+        CurrentReport.check(changesetSteps == 1,
+                () -> "один changeset должен дать РОВНО один шаг (проверка допущения о делегации "
+                        + "ChangeSet.execute), а есть " + changesetSteps + ": " + steps);
     }
 
     @AfterAll
