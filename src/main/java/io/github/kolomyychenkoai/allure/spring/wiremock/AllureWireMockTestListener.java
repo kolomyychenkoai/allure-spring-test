@@ -2,6 +2,7 @@ package io.github.kolomyychenkoai.allure.spring.wiremock;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
+import io.github.kolomyychenkoai.allure.spring.internal.ByteBuddyPresence;
 import io.github.kolomyychenkoai.allure.spring.internal.ClassPresence;
 import io.github.kolomyychenkoai.allure.spring.wiremock.internal.AllureWireMockListener;
 import io.github.kolomyychenkoai.allure.spring.wiremock.internal.AllureWireMockSteps;
@@ -27,7 +28,7 @@ import java.util.WeakHashMap;
  * Заглушки/verify/resetAll ловятся байткодом — см. {@link AllureWireMockVerifyInstrumentation}.
  * Код в тестах не нужен. Регистрируется через {@code META-INF/spring.factories}.
  * <p>
- * Перед установкой байткода проверяется {@link AllureInstrumentation#available()} — если
+ * Перед установкой байткода проверяется {@link ByteBuddyPresence#available()} — если
  * byte-buddy нет на classpath, тихий no-op. Если WireMock нет — матчер ничего не находит.
  * <p>
  * near-miss и состояния сценариев снимаются в {@code afterTestMethod} для тестов БЕЗ
@@ -54,7 +55,7 @@ public class AllureWireMockTestListener implements TestExecutionListener, Ordere
 
     @Override
     public void beforeTestClass(TestContext testContext) {
-        if (!WIREMOCK_PRESENT || !AllureInstrumentation.available()) {
+        if (!WIREMOCK_PRESENT || !ByteBuddyPresence.available()) {
             return;
         }
         // verify()/resetAll/stubFor нет listener-хука — ставим байткод-инструментирование один раз

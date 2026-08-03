@@ -18,8 +18,10 @@ import java.lang.instrument.Instrumentation;
  * <p>
  * <b>byte-buddy в scope {@code provided}</b> — у потребителя он обычно есть транзитивно
  * (mockito / spring-boot-starter-test). Если есть сомнение, что byte-buddy на classpath,
- * вызывающий модуль должен проверить {@link #available()} ПЕРЕД тем, как строить matcher
- * и transformer (их типы из byte-buddy, иначе упадёт линковка вызывающего класса).
+ * вызывающий модуль обязан спросить {@link ByteBuddyPresence#available()} ПЕРЕД тем, как
+ * трогать этот класс: строить matcher и transformer нельзя (их типы из byte-buddy), да и сам
+ * {@code AllureInstrumentation} без библиотеки НЕ ЗАГРУЗИТСЯ — он упоминает её типы в теле
+ * {@link #retransform}, а линкуется класс целиком.
  */
 public final class AllureInstrumentation {
 
@@ -27,9 +29,14 @@ public final class AllureInstrumentation {
     }
 
     /**
-     * Есть ли byte-buddy на classpath. Проверка по имени класса (без инициализации),
-     * сама по себе типы byte-buddy не тянет — безопасно звать даже когда его нет.
+     * Есть ли byte-buddy на classpath.
+     *
+     * @deprecated звать ОТСЮДА бессмысленно: чтобы добраться до этого метода, JVM должна
+     * загрузить {@code AllureInstrumentation}, а он без byte-buddy не линкуется
+     * ({@link NoClassDefFoundError} до входа в метод). Гард — {@link ByteBuddyPresence#available()}.
+     * Метод оставлен, чтобы не ломать потребителей, ссылавшихся на него.
      */
+    @Deprecated(since = "0.1.0")
     public static boolean available() {
         try {
             Class.forName("net.bytebuddy.agent.ByteBuddyAgent", false,
@@ -55,6 +62,11 @@ public final class AllureInstrumentation {
                                    AgentBuilder.Transformer transformer) {
         try {
             Instrumentation instrumentation = ByteBuddyAgent.install();
+            // отмечаем СРАЗУ после привязки агента: во-первых, это она и есть по смыслу;
+            // во-вторых, installOn с Reiterating тут же обходит загруженные классы и может
+            // дёрнуть колбэк — инициализировать класс диагностики внутри ClassFileTransformer
+            // не стоит (классический источник ClassCircularityError в агентах)
+            InstrumentationDiagnostics.markInstalled();
             new AgentBuilder.Default()
                     .disableClassFormatChanges()
                     .with(AgentBuilder.RedefinitionStrategy.RETRANSFORMATION)
@@ -71,7 +83,6 @@ public final class AllureInstrumentation {
                     .type(typeMatcher)
                     .transform(transformer)
                     .installOn(instrumentation);
-            InstrumentationDiagnostics.markInstalled();
         } catch (Throwable t) {
             InstrumentationDiagnostics.recordFailure("<install>", t);
         }

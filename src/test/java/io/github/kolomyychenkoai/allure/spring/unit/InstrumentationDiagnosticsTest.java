@@ -1,5 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
 
+import io.qameta.allure.Epic;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.internal.InstrumentationDiagnostics;
 import net.bytebuddy.asm.Advice;
@@ -17,6 +18,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
  * постоянно доказывает, что детектор не слепой. Позитивный тест сам по себе этого не даёт —
  * счётчик, который всегда показывает ноль, выглядит точно так же.
  */
+@Epic("Внутренние проверки библиотеки")
 class InstrumentationDiagnosticsTest {
 
     /** Мишень перехвата: только для этого теста, чтобы не трогать чужие типы. */
@@ -41,10 +43,8 @@ class InstrumentationDiagnosticsTest {
     }
 
     @Test
-    @DisplayName("успешная установка: агент привязан, типы трансформированы, сбоев не добавилось")
+    @DisplayName("успешная установка: агент привязан, типы трансформированы, сбоев по своей мишени нет")
     void успешнаяУстановкаНеДаётСбоев() {
-        int before = InstrumentationDiagnostics.failureCount();
-
         AllureInstrumentation.retransform(named(Probe.class.getName()),
                 (builder, type, loader, module, pd) -> builder.visit(
                         Advice.to(RewriteAdvice.class).on(named("ping"))));
@@ -53,7 +53,9 @@ class InstrumentationDiagnosticsTest {
         assertThat(new Probe().ping()).isEqualTo("instrumented");
         assertThat(InstrumentationDiagnostics.installed()).isTrue();
         assertThat(InstrumentationDiagnostics.transformedCount()).isPositive();
-        assertThat(InstrumentationDiagnostics.failureCount()).isEqualTo(before);
+        // проверяем АДРЕСНО: счётчик глобальный на JVM, и сбой соседнего модуля в этом окне
+        // покрасил бы тест не по своей вине (порядок тестов случайный)
+        assertThat(InstrumentationDiagnostics.failures()).noneMatch(f -> f.contains("$Probe →"));
     }
 
     @Test

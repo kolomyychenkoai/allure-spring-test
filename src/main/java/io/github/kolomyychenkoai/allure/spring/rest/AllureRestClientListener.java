@@ -1,6 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.rest;
 
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
+import io.github.kolomyychenkoai.allure.spring.internal.ByteBuddyPresence;
 import io.github.kolomyychenkoai.allure.spring.internal.ClassPresence;
 import io.github.kolomyychenkoai.allure.spring.rest.internal.AllureRestClientInstrumentation;
 import org.springframework.core.Ordered;
@@ -27,7 +28,7 @@ public class AllureRestClientListener implements TestExecutionListener, Ordered 
 
     @Override
     public void beforeTestClass(TestContext testContext) {
-        if (!RESTCLIENT_PRESENT || !AllureInstrumentation.available()) {
+        if (!RESTCLIENT_PRESENT || !ByteBuddyPresence.available()) {
             return;
         }
         AllureRestClientInstrumentation.install();

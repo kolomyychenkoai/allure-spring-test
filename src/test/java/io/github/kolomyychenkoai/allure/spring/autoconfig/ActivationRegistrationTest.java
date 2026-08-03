@@ -1,5 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.autoconfig;
 
+import io.qameta.allure.Epic;
 import io.github.kolomyychenkoai.allure.spring.support.TestApp;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -27,6 +28,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@link SpringFactoriesLoader} и {@link ImportCandidates} — те же классы, которыми
  * пользуются Spring Test и Spring Boot.
  */
+@Epic("Внутренние проверки библиотеки")
 class ActivationRegistrationTest {
 
     /** Полный инвентарь листенеров из spring.factories (держать в синхроне с файлом). */
@@ -60,6 +62,11 @@ class ActivationRegistrationTest {
         List<String> found = SpringFactoriesLoader.forDefaultResourceLocation(getClass().getClassLoader())
                 .load(TestExecutionListener.class,
                         SpringFactoriesLoader.FailureHandler.handleMessage((message, failure) -> {
+                            // СВОИ сбои называем вслух: иначе человек увидит «листенера нет в списке»
+                            // и не увидит NoClassDefFoundError, из-за которого его не создали
+                            if (message.get().contains("io.github.kolomyychenkoai")) {
+                                System.err.println("НЕ СОЗДАЛСЯ НАШ ЛИСТЕНЕР: " + message.get() + " — " + failure);
+                            }
                         })).stream()
                 .map(listener -> listener.getClass().getName())
                 .filter(name -> name.startsWith("io.github.kolomyychenkoai"))

@@ -1,6 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.rest;
 
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
+import io.github.kolomyychenkoai.allure.spring.internal.ByteBuddyPresence;
 import io.github.kolomyychenkoai.allure.spring.internal.ClassPresence;
 import io.github.kolomyychenkoai.allure.spring.rest.internal.AllureMockMvcInstrumentation;
 import org.springframework.core.Ordered;
@@ -14,7 +15,7 @@ import org.springframework.test.context.TestExecutionListener;
  * Регистрируется через {@code META-INF/spring.factories}.
  * <p>
  * Гейты: нет MockMvc на classpath — нечего инструментировать; нет byte-buddy —
- * {@link AllureInstrumentation#available()} false, тихий no-op (типы matcher/advice не линкуются).
+ * {@link ByteBuddyPresence#available()} false, тихий no-op (типы matcher/advice не линкуются).
  */
 public class AllureMockMvcListener implements TestExecutionListener, Ordered {
 
@@ -28,7 +29,7 @@ public class AllureMockMvcListener implements TestExecutionListener, Ordered {
 
     @Override
     public void beforeTestClass(TestContext testContext) {
-        if (!MOCKMVC_PRESENT || !AllureInstrumentation.available()) {
+        if (!MOCKMVC_PRESENT || !ByteBuddyPresence.available()) {
             return;
         }
         AllureMockMvcInstrumentation.install();

@@ -299,25 +299,21 @@
                     </systemPropertyVariables>
                     <!-- Self-attach byte-buddy-агента (ByteBuddyAgent.install) на JDK 21+ печатает
                          предупреждение, а в будущих JDK может быть запрещён по умолчанию (JEP 451).
-                         Разрешаем явно: иначе весь байткод-слой ТИХО выключится. -->
+                         Разрешаем явно: иначе весь байткод-слой ТИХО выключится.
+                         ⚠️ Если в проекте появится jacoco — писать «@{argLine} -XX:+…», иначе его
+                         argLine затрётся и покрытие пропадёт молча. -->
                     <argLine>-XX:+EnableDynamicAgentLoading</argLine>
                 </configuration>
                 <executions>
-                    <!-- ВТОРОЙ прогон, ОТДЕЛЬНАЯ JVM: инвентарь видов шагов против эталона.
-                         Класс называется ReportInventoryCheck и НЕ подпадает под includes выше,
-                         поэтому в основном прогоне не участвует — двойного запуска нет by design.
-                         К моменту старта основной прогон завершён и все result.json на диске. -->
                     <execution>
-                        <id>report-inventory</id>
-                        <phase>test</phase>
-                        <goals><goal>test</goal></goals>
+                        <id>default-test</id>
                         <configuration>
-                            <includes>
-                                <include>**/inventory/ReportInventoryCheck.java</include>
-                            </includes>
-                            <runOrder>filesystem</runOrder>
-                            <!-- точечный прогон (mvn test -Dtest=…) не должен падать «нет тестов» -->
-                            <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
+                            <!-- Инвентарь гоняется ОТДЕЛЬНЫМ прогоном (профиль report-inventory):
+                                 в основном ему нечего проверять — результаты ещё пишутся.
+                                 Правило записано, а не подразумевается именем класса. -->
+                            <excludes>
+                                <exclude>**/inventory/ReportInventoryCheck.java</exclude>
+                            </excludes>
                         </configuration>
                     </execution>
                 </executions>
@@ -417,4 +413,45 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!-- ВТОРОЙ прогон, ОТДЕЛЬНАЯ JVM: инвентарь видов шагов против эталона. К его старту
+             основной прогон завершён и все result.json на диске.
+
+             Профиль, а не просто execution: user-property `test` перебивает <includes> у ВСЕХ
+             executions сразу, поэтому `mvn test -Dtest=KafkaReportIT` гонял бы KafkaReportIT
+             ДВАЖДЫ (второй встроенный брокер, дубли в allure-results). Активация по отсутствию
+             `test` выключает второй прогон целиком: точечный запуск снова стоит один прогон,
+             а инвентарь на неполных данных всё равно бессмыслен. -->
+        <profile>
+            <id>report-inventory</id>
+            <activation>
+                <property>
+                    <name>!test</name>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>report-inventory</id>
+                                <phase>test</phase>
+                                <goals><goal>test</goal></goals>
+                                <configuration>
+                                    <includes>
+                                        <include>**/inventory/ReportInventoryCheck.java</include>
+                                    </includes>
+                                    <excludes combine.self="override"/>
+                                    <runOrder>filesystem</runOrder>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

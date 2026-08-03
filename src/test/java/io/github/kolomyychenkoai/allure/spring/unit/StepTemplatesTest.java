@@ -1,5 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
 
+import io.qameta.allure.Epic;
 import io.github.kolomyychenkoai.allure.spring.inventory.StepTemplates;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -15,6 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code ReportInventoryCheck} вечно-зелёным — детектор, который не краснеет никогда,
  * хуже отсутствия детектора.
  */
+@Epic("Внутренние проверки библиотеки")
 class StepTemplatesTest {
 
     @Nested
@@ -85,6 +87,15 @@ class StepTemplatesTest {
                     .isEqualTo("SQL INSERT widget")
                     .isNotEqualTo(StepTemplates.step("SQL SELECT widget"))
                     .isNotEqualTo(StepTemplates.step("SQL INSERT PUBLIC.DATABASECHANGELOG"));
+        }
+
+        @Test
+        @DisplayName("оператор не теряется, если в самом значении есть « — »")
+        void операторВыживаетТиреВЗначении() {
+            // жадное «(.+)» цеплялось бы за ПОСЛЕДНЕЕ тире и дало бы «— готово» вместо «— isEqualTo»:
+            // вид шага начал бы зависеть от ДАННЫХ теста
+            assertThat(StepTemplates.step("Проверка: значение итог — готово — isEqualTo итог — готово"))
+                    .isEqualTo("Проверка: значение <V> — isEqualTo <V>");
         }
 
         @Test
@@ -175,14 +186,22 @@ class StepTemplatesTest {
         @Test
         void типВходитВВид() {
             // тихая деградация притти-JSON: имя то же, тип другой — ОБЯЗАН быть другой вид
-            assertThat(StepTemplates.attachment("HTTP Response Body", "application/json"))
+            assertThat(StepTemplates.attachment("HTTP Response Body", "application/json", true))
                     .isEqualTo("HTTP Response Body | application/json")
-                    .isNotEqualTo(StepTemplates.attachment("HTTP Response Body", "text/plain"));
+                    .isNotEqualTo(StepTemplates.attachment("HTTP Response Body", "text/plain", true));
+        }
+
+        @Test
+        @DisplayName("пустое содержимое — отдельный вид (имя и тип на месте, а толку нет)")
+        void пустоеСодержимоеОтдельныйВид() {
+            assertThat(StepTemplates.attachment("DB Result", "text/plain", false))
+                    .isEqualTo("DB Result | text/plain | пусто")
+                    .isNotEqualTo(StepTemplates.attachment("DB Result", "text/plain", true));
         }
 
         @Test
         void пустойТипНеЛомает() {
-            assertThat(StepTemplates.attachment("Свойства", null)).isEqualTo("Свойства | -");
+            assertThat(StepTemplates.attachment("Свойства", null, true)).isEqualTo("Свойства | -");
         }
     }
 
@@ -207,6 +226,13 @@ class StepTemplatesTest {
         void длинноеИмяОбрезается() {
             String out = StepTemplates.step("x".repeat(400));
             assertThat(out).hasSize(161).endsWith("…");
+        }
+
+        @Test
+        @DisplayName("два разных длинных имени не схлопываются обрезкой в один вид")
+        void длинныеИменаОстаютсяРазными() {
+            assertThat(StepTemplates.step("Шаг A " + "x".repeat(400)))
+                    .isNotEqualTo(StepTemplates.step("Шаг B " + "x".repeat(400)));
         }
     }
 }

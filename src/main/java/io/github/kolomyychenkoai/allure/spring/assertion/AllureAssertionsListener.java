@@ -5,6 +5,7 @@ import io.github.kolomyychenkoai.allure.spring.assertion.internal.AllureHamcrest
 import io.github.kolomyychenkoai.allure.spring.assertion.internal.AllureJUnitJupiterAssertionsInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.assertion.internal.AllureSpringAssertionsInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
+import io.github.kolomyychenkoai.allure.spring.internal.ByteBuddyPresence;
 import org.springframework.core.Ordered;
 import org.springframework.test.context.TestContext;
 import org.springframework.test.context.TestExecutionListener;
@@ -14,7 +15,7 @@ import org.springframework.test.context.TestExecutionListener;
  * тест-классом: Spring AssertionErrors, Hamcrest, AssertJ и JUnit Jupiter Assertions. Регистрируется через
  * {@code META-INF/spring.factories}.
  * <p>
- * Перед установкой проверяется {@link AllureInstrumentation#available()} — если byte-buddy
+ * Перед установкой проверяется {@link ByteBuddyPresence#available()} — если byte-buddy
  * нет на classpath, листенер тихо ничего не ставит (типы matcher/advice не линкуются).
  * Если конкретной библиотеки ассертов нет — её матчер просто ничего не находит (no-op).
  */
@@ -27,7 +28,7 @@ public class AllureAssertionsListener implements TestExecutionListener, Ordered 
 
     @Override
     public void beforeTestClass(TestContext testContext) {
-        if (!AllureInstrumentation.available()) {
+        if (!ByteBuddyPresence.available()) {
             return;
         }
         AllureSpringAssertionsInstrumentation.install();

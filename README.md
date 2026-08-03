@@ -68,6 +68,10 @@ test-classpath, который сам себя «вшивает». Точки в
 >     </configuration>
 > </plugin>
 > ```
+>
+> ⚠️ **Если у вас подключён jacoco** — пишите `<argLine>@{argLine} -XX:+EnableDynamicAgentLoading</argLine>`:
+> собственный `argLine` затирает тот, что jacoco подставляет для сбора покрытия, и покрытие
+> пропадёт молча.
 
 ## Установка
 
