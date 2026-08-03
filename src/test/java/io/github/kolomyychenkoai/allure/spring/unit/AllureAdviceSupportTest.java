@@ -54,6 +54,9 @@ class AllureAdviceSupportTest {
         };
         assertThat(AllureAdviceSupport.safe(lambda)).isEqualTo("<лямбда>");
         assertThat(AllureAdviceSupport.safe((Runnable) AllureAdviceSupportTest::helper)).isEqualTo("<лямбда>");
+        // varargs приходят МАССИВОМ (AssertJ satisfies — это Consumer<T>...): элементы обязаны
+        // проходить ту же очистку, иначе лямбда внутри массива печаталась бы хэшем
+        assertThat(AllureAdviceSupport.safe(new Object[]{lambda})).isEqualTo("[<лямбда>]");
     }
 
     @Test

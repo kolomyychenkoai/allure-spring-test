@@ -60,6 +60,20 @@ class AssertJReportIT {
         CurrentReport.assertStep("Проверка: значение Order[name=laptop] — hasFieldOrPropertyWithValue name, laptop");
     }
 
+    @Test
+    @DisplayName("массивы и satisfies дают ЧИТАЕМОЕ имя шага (без [I@… и $$Lambda)")
+    void arraysAndLambdasRenderReadably() {
+        // satisfies/returns/matches намеренно перехватываются (это настоящие проверки), но их
+        // аргумент — лямбда: без общего фикса рендера в имени шага был бы «$$Lambda/0x…@1a2b».
+        // Массивы: примитивные раньше печатались как «[I@6d06d69c».
+        assertThat(new int[]{1, 2, 3}).containsExactly(1, 2, 3);
+        assertThat(new Order("laptop")).satisfies(order -> {
+        });
+
+        CurrentReport.assertStep("Проверка: значение [1, 2, 3] — containsExactly [1, 2, 3]");
+        CurrentReport.assertStep("Проверка: значение Order[name=laptop] — satisfies [<лямбда>]");
+    }
+
     /** Мишень для проверки полей объекта (hasFieldOrPropertyWithValue объявлен в AbstractObjectAssert). */
     record Order(String name) {
     }

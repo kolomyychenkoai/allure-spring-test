@@ -25,12 +25,14 @@ AllureMockitoReportIT | Мок-проверка: Pricing.price(<ARGS>) (ожид
 AllureMockitoReportIT | Мок-проверка: Pricing.total(<ARGS>) (ожидали ×<N>)  ×1  # AllureMockitoHandler
 AssertJReportIT | Конфиги приложения  ×1  # AllureConfigurationListener
 AssertJReportIT | Проверка: значение <V> — contains <V>  ×1  # AllureAssertJInstrumentation
+AssertJReportIT | Проверка: значение <V> — containsExactly <V>  ×1  # AllureAssertJInstrumentation
 AssertJReportIT | Проверка: значение <V> — hasFieldOrPropertyWithValue <V>  ×1  # AllureAssertJInstrumentation (объявлен в абстрактном классе, ADR 0001)
 AssertJReportIT | Проверка: значение <V> — hasSize <V>  ×1  # AllureAssertJInstrumentation
 AssertJReportIT | Проверка: значение <V> — isBetween <V>  ×1  # AllureAssertJInstrumentation (объявлен в абстрактном классе, ADR 0001)
 AssertJReportIT | Проверка: значение <V> — isCloseTo <V>  ×1  # AllureAssertJInstrumentation (объявлен в абстрактном классе, ADR 0001)
 AssertJReportIT | Проверка: значение <V> — isEqualTo <V>  ×1  # AllureAssertJInstrumentation
 AssertJReportIT | Проверка: значение <V> — isGreaterThan <V>  ×1  # AllureAssertJInstrumentation
+AssertJReportIT | Проверка: значение <V> — satisfies <V>  ×1  # AllureAssertJInstrumentation
 AssertJReportIT | Проверка: значение <V> — startsWith <V>  ×1  # AllureAssertJInstrumentation
 AwaitilityReportIT | Конфиги приложения  ×1  # AllureConfigurationListener
 AwaitilityReportIT | Ожидание: результат готов — выполнено за <MS> мс  ×1  # AllureAwaitilityConditionListener

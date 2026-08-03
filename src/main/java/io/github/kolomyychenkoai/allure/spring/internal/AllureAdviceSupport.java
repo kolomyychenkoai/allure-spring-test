@@ -92,7 +92,15 @@ public final class AllureAdviceSupport {
 
     private static String array(Object value) {
         if (value instanceof Object[] objects) {
-            return Arrays.deepToString(objects);
+            // Элементы рендерим ТЕМ ЖЕ правилом, а не deepToString: varargs-аргументы приходят
+            // массивом (AssertJ satisfies/matches — это Consumer<T>...), и лямбда внутри массива
+            // иначе печаталась бы как «$$Lambda/0x…@1a2b» в обход всей очистки.
+            StringBuilder out = new StringBuilder("[");
+            for (int i = 0; i < Math.min(objects.length, MAX_ARRAY_ITEMS); i++) {
+                out.append(i > 0 ? ", " : "").append(renderForName(objects[i]));
+            }
+            return out.append(objects.length > MAX_ARRAY_ITEMS ? ", … всего " + objects.length + "]" : "]")
+                    .toString();
         }
         if (value instanceof byte[] bytes) {
             return bytes.length > MAX_BINARY ? "<двоичные данные, " + bytes.length + " байт>" : Arrays.toString(bytes);
