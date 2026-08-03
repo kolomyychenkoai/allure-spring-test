@@ -68,7 +68,14 @@ public final class AllureAdviceSupport {
         return s;
     }
 
+    /** Предел вложенности массивов: у рукописного обхода нет детекта циклов, как у deepToString. */
+    private static final int MAX_DEPTH = 4;
+
     private static String renderForName(Object value) {
+        return renderForName(value, 0);
+    }
+
+    private static String renderForName(Object value, int depth) {
         if (value == null) {
             return "null";
         }
@@ -79,38 +86,67 @@ public final class AllureAdviceSupport {
             return "<лямбда>";
         }
         if (type.isArray()) {
-            return array(value);
+            return depth >= MAX_DEPTH ? "[…]" : array(value, depth);
         }
         String text = String.valueOf(value);
-        // toString() не переопределён → Object.toString() = имя класса + '@' + hex(hashCode).
-        // Сравнение ТОЧНОЕ, поэтому легитимные toString с '@' внутри не страдают.
-        // hashCode() зовём только ПОСЛЕ успешного toString — не будим ленивые прокси раньше времени.
-        return text != null && text.equals(type.getName() + "@" + Integer.toHexString(value.hashCode()))
-                ? "<" + type.getSimpleName() + ">"
-                : text;
+        if (text == null) {
+            return "<null-toString>"; // toString() вернул null — наружу null не отдаём
+        }
+        return isIdentityToString(text, value, type) ? "<" + readableName(type) + ">" : text;
     }
 
-    private static String array(Object value) {
-        if (value instanceof Object[] objects) {
-            // Элементы рендерим ТЕМ ЖЕ правилом, а не deepToString: varargs-аргументы приходят
-            // массивом (AssertJ satisfies/matches — это Consumer<T>...), и лямбда внутри массива
-            // иначе печаталась бы как «$$Lambda/0x…@1a2b» в обход всей очистки.
-            StringBuilder out = new StringBuilder("[");
-            for (int i = 0; i < Math.min(objects.length, MAX_ARRAY_ITEMS); i++) {
-                out.append(i > 0 ? ", " : "").append(renderForName(objects[i]));
-            }
-            return out.append(objects.length > MAX_ARRAY_ITEMS ? ", … всего " + objects.length + "]" : "]")
-                    .toString();
+    /**
+     * Похоже ли на {@code Object.toString()} (= имя класса + '@' + hex(hashCode)) — то есть
+     * {@code toString()} не переопределён и в имя шага течёт хэш.
+     * <p>
+     * Сначала дешёвая проверка ФОРМЫ по префиксу, и только потом {@code hashCode()} — и он
+     * в своём try: у неинициализированного Hibernate-прокси он и бросает
+     * ({@code LazyInitializationException}), и будит прокси. Исправный {@code toString()}
+     * из-за сломанного {@code hashCode()} терять нельзя.
+     */
+    private static boolean isIdentityToString(String text, Object value, Class<?> type) {
+        String name = type.getName();
+        if (text.length() <= name.length() || text.charAt(name.length()) != '@' || !text.startsWith(name)) {
+            return false;
         }
+        try {
+            return text.equals(name + "@" + Integer.toHexString(value.hashCode()));
+        } catch (Throwable keepText) {
+            return false;
+        }
+    }
+
+    /** У анонимных классов {@code getSimpleName()} пуст — берём то, чем он является. */
+    private static String readableName(Class<?> type) {
+        String simple = type.getSimpleName();
+        if (!simple.isEmpty()) {
+            return simple;
+        }
+        Class<?>[] interfaces = type.getInterfaces();
+        if (interfaces.length > 0) {
+            return interfaces[0].getSimpleName();
+        }
+        Class<?> parent = type.getSuperclass();
+        return parent == null ? "?" : parent.getSimpleName();
+    }
+
+    private static String array(Object value, int depth) {
         if (value instanceof byte[] bytes) {
             return bytes.length > MAX_BINARY ? "<двоичные данные, " + bytes.length + " байт>" : Arrays.toString(bytes);
         }
+        boolean objects = value instanceof Object[];
         int length = java.lang.reflect.Array.getLength(value);
         StringBuilder out = new StringBuilder("[");
-        for (int i = 0; i < Math.min(length, MAX_ARRAY_ITEMS); i++) {
-            out.append(i > 0 ? ", " : "").append(java.lang.reflect.Array.get(value, i));
+        int shown = 0;
+        // Элементы Object[] рендерим ТЕМ ЖЕ правилом, а не deepToString: varargs приходят массивом
+        // (AssertJ satisfies/matches — это Consumer<T>...), и лямбда внутри массива иначе
+        // печаталась бы как «$$Lambda/0x…@1a2b» в обход всей очистки.
+        while (shown < Math.min(length, MAX_ARRAY_ITEMS) && out.length() <= MAX_LEN) {
+            Object item = java.lang.reflect.Array.get(value, shown);
+            out.append(shown > 0 ? ", " : "").append(objects ? renderForName(item, depth + 1) : item);
+            shown++;
         }
-        return out.append(length > MAX_ARRAY_ITEMS ? ", … всего " + length + "]" : "]").toString();
+        return out.append(shown < length ? ", … всего " + length + "]" : "]").toString();
     }
 
     /**

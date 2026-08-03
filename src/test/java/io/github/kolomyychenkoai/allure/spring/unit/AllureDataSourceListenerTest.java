@@ -123,7 +123,8 @@ class AllureDataSourceListenerTest {
 
         TestResult result = allure.run("sql-batch-huge", () -> listener.afterQuery(exec(), huge));
 
-        assertThat(result.getSteps()).hasSizeLessThanOrEqualTo(50);
+        // именно hasSize, а не «не больше»: при откате починки (shown=1) «не больше 50» осталось бы зелёным
+        assertThat(result.getSteps()).hasSize(50);
         assertThat(result.getSteps().stream().flatMap(s -> s.getAttachments().stream())
                 .map(att -> allure.attachmentContent(att).orElse(""))
                 .anyMatch(body -> body.contains("из 120"))).isTrue();

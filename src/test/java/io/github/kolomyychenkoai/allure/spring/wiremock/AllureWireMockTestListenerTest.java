@@ -72,6 +72,16 @@ class AllureWireMockTestListenerTest {
     }
 
     @Test
+    @DisplayName("контекст закрыт (@DirtiesContext) — за бинами НЕ лезем, иначе воскресим его")
+    void doesNotResurrectClosedContext() {
+        TestContext testContext = context(NoFields.class, new NoFields());
+        doReturn(false).when(testContext).hasApplicationContext();
+
+        assertThat(listener.findServers(testContext)).isEmpty();
+        org.mockito.Mockito.verify(testContext, org.mockito.Mockito.never()).getApplicationContext();
+    }
+
+    @Test
     @DisplayName("находит WireMockServer среди бинов контекста (@AutoConfigureWireMock)")
     void findsServerAmongBeans() {
         WireMockServer server = running();
@@ -79,6 +89,7 @@ class AllureWireMockTestListenerTest {
                 mock(org.springframework.context.ApplicationContext.class);
         doReturn(java.util.Map.of("wireMockServer", server)).when(ctx).getBeansOfType(WireMockServer.class);
         TestContext testContext = context(NoFields.class, new NoFields());
+        doReturn(true).when(testContext).hasApplicationContext();
         doReturn(ctx).when(testContext).getApplicationContext();
 
         assertThat(listener.findServers(testContext)).containsExactly(server);

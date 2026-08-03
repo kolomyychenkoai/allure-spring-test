@@ -104,9 +104,13 @@ public final class ReportInventory {
     }
 
     /** Сколько раз вид встречался в одном тест-кейсе: минимум и максимум по кейсам. */
-    public record Range(int min, int max) {
-        Range with(int n) {
-            return new Range(Math.min(min, n), Math.max(max, n));
+    public record Range(int min, int max, int cases) {
+        public Range(int min, int max) {
+            this(min, max, 1);
+        }
+
+        Range with(Range other) {
+            return new Range(Math.min(min, other.min()), Math.max(max, other.max()), cases + other.cases());
         }
 
         @Override
@@ -226,7 +230,7 @@ public final class ReportInventory {
                 Map<Kind, Integer> local = new HashMap<>();
                 collectAttachments(root, owner, attachments, resultsDir, missingFiles, dirtyNames, local);
                 collectSteps(root, owner, null, steps, attachments, resultsDir, missingFiles, dirtyNames, local);
-                local.forEach((kind, n) -> perCase.merge(kind, new Range(n, n), (a, b) -> a.with(b.max())));
+                local.forEach((kind, n) -> perCase.merge(kind, new Range(n, n), Range::with));
             }
         } catch (IOException e) {
             throw new UncheckedIOException(e);
@@ -570,11 +574,19 @@ public final class ReportInventory {
     public static Map<Kind, Count> seedCounts(Scan scan, Baseline previous) {
         Map<Kind, Count> counts = new TreeMap<>(previous.counts());
         scan.perCase().forEach((kind, range) -> {
-            if (range.min() == range.max()) {
-                counts.put(kind, new Count(range.min(), false));
-            } else {
-                counts.remove(kind); // стало плавать — маркер снимаем, иначе будет флак
-            }
+            // Разброс МЕЖДУ кейсами → «×≥min»: число решает чужая библиотека (сколько SELECT сделает
+            // Hibernate), жёстко пиннить нечего. Одинаковое число → «×N»: именно оно ловит ЗАДВОЕНИЕ,
+            // ради которого кратность и заведена.
+            //
+            // Осознанный размен (ревьюер предлагал требовать наблюдения в ДВУХ кейсах): у вида,
+            // встреченного в одном кейсе, «min==max» действительно тавтология — но таких видов
+            // большинство, и требование «двух наблюдений» превратило бы почти всё в «×≥1», а «×≥1»
+            // задвоение НЕ ловит (2 ≥ 1). Проверено мутацией: со «×≥» снятый дедуп AssertJ проходит
+            // зелёным. Цена размена — служебные виды (Liquibase/Hibernate) при апгрейде дадут
+            // законное расхождение; лечится пересевом, и об этом сказано в docs/upgrade-checklist.md.
+            counts.put(kind, range.min() == range.max()
+                    ? new Count(range.min(), false)
+                    : new Count(range.min(), true));
         });
         return counts;
     }

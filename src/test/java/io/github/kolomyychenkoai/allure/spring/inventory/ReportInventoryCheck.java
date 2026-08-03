@@ -38,6 +38,8 @@ class ReportInventoryCheck {
     private static final String UPDATE_FLAG = "inventory.update";
     private static final String REMOVE_FLAG = "inventory.remove";
     private static final String STRICT_FLAG = "inventory.strict";
+    /** Пересев маркеров кратности «×N» по замеру прогона. */
+    private static final String COUNTS_FLAG = "inventory.counts";
     /** Каталог дампов — одна константа на двоих с {@link InstrumentationDiagnosticsDump}. */
     private static final Path DIAGNOSTICS_DIR = InstrumentationDiagnosticsDump.DIR;
 
@@ -125,7 +127,19 @@ class ReportInventoryCheck {
         }
         // Посев кратности по ЗАМЕРУ: -Dinventory.counts=true проставит «×N» тем видам, чьё число
         // стабильно во всех кейсах, и снимет маркер с тех, что стали плавать.
-        Baseline toWrite = Boolean.getBoolean("inventory.counts")
+        if (Boolean.getBoolean(COUNTS_FLAG)) {
+            // Ослабление кратности — такой же способ распустить сетку, как удаление вида,
+            // поэтому изменения маркеров печатаем поимённо, а не прячем в diff из 200 строк.
+            Map<Kind, ReportInventory.Count> seeded = ReportInventory.seedCounts(scan, baseline);
+            baseline.counts().forEach((kind, was) -> {
+                ReportInventory.Count now = seeded.get(kind);
+                if (now == null || !now.toString().equals(was.toString())) {
+                    System.out.println("ИНВЕНТАРЬ: кратность " + kind + " — было " + was
+                            + ", стало " + (now == null ? "без маркера" : now));
+                }
+            });
+        }
+        Baseline toWrite = Boolean.getBoolean(COUNTS_FLAG)
                 ? new Baseline(baseline.steps(), baseline.attachments(), baseline.optional(),
                         baseline.comments(), ReportInventory.seedCounts(scan, baseline))
                 : baseline;
@@ -167,7 +181,7 @@ class ReportInventoryCheck {
         }
 
         if (!verdict.countMismatches().isEmpty()) {
-            out.append("\nКРАТНОСТЬ РАЗЪЕХАЛАСЬ (шаг стал появляться иначе — типичное задвоение перехвата):\n");
+            out.append("\nКРАТНОСТЬ РАЗЪЕХАЛАСЬ — либо перехват ЗАДВОИЛСЯ, либо витрина изменилась осознанно:\n");
             verdict.countMismatches().forEach(mismatch -> out.append("  × ").append(mismatch.kind())
                     .append(" — ждали ").append(mismatch.expected())
                     .append(" в каждом кейсе, увидели ").append(mismatch.seen())
@@ -211,8 +225,17 @@ class ReportInventoryCheck {
                   1) канарейка InstrumentationApiCanaryTest — уехал ли API чужой библиотеки;
                   2) сбои перехвата — раздел выше (каталог target/instrumentation-diagnostics/);
                   3) если сбоев нет — матчер просто перестал совпадать (типичный апгрейд).
-                Если пропажа ОСОЗНАННА: mvn clean test -D""")
-                .append(UPDATE_FLAG).append("=true -D").append(REMOVE_FLAG).append("=true, затем закоммить эталон.\n");
+                Если изменение ОСОЗНАННО:
+                """);
+        out.append("  пропал/появился вид  → mvn clean test -D").append(UPDATE_FLAG)
+                .append("=true -D").append(REMOVE_FLAG).append("=true\n");
+        if (!verdict.countMismatches().isEmpty()) {
+            // Без этого флага маркеры ×N не перезапишутся: обновление пройдёт, git diff останется
+            // пустым, а прогон — красным. Рецепт обязан ЧИНИТЬ то падение, под которым напечатан.
+            out.append("  изменилась кратность → mvn clean test -D").append(UPDATE_FLAG)
+                    .append("=true -D").append(COUNTS_FLAG).append("=true\n");
+        }
+        out.append("  затем прочитать git diff эталона и закоммитить.\n");
         return out.toString();
     }
 

@@ -4,6 +4,7 @@ import io.qameta.allure.Epic;
 import io.github.kolomyychenkoai.allure.spring.inventory.ReportInventory;
 import io.github.kolomyychenkoai.allure.spring.inventory.ReportInventory.Baseline;
 import io.github.kolomyychenkoai.allure.spring.inventory.ReportInventory.Kind;
+import io.github.kolomyychenkoai.allure.spring.inventory.ReportInventory.Range;
 import io.github.kolomyychenkoai.allure.spring.inventory.ReportInventory.Scan;
 import io.github.kolomyychenkoai.allure.spring.inventory.ReportInventory.UpdateVerdict;
 import io.github.kolomyychenkoai.allure.spring.inventory.ReportInventory.Verdict;
@@ -322,6 +323,29 @@ class ReportInventoryTest {
         }
 
         @Test
+        @DisplayName("скан СЧИТАЕТ кратность по кейсам: два файла с 1 и 2 вхождениями → 1..2")
+        void scanCountsPerCase(@TempDir Path dir) throws IOException {
+            // Звено «scan → perCase» раньше не проверял никто: убери local.merge — все маркеры
+            // становятся инертными, и сборка остаётся зелёной.
+            Files.writeString(dir.resolve("a-result.json"), """
+                    {"labels":[{"name":"testClass","value":"io.github.kolomyychenkoai.allure.spring.demo.KafkaReportIT"}],
+                     "steps":[{"name":"Kafka: отправлено → t [k]"}]}
+                    """, StandardCharsets.UTF_8);
+            Files.writeString(dir.resolve("b-result.json"), """
+                    {"labels":[{"name":"testClass","value":"io.github.kolomyychenkoai.allure.spring.demo.KafkaReportIT"}],
+                     "steps":[{"name":"Kafka: отправлено → t [k]"},{"name":"Kafka: отправлено → t [k]"}]}
+                    """, StandardCharsets.UTF_8);
+
+            Range range = ReportInventory.scan(dir).perCase()
+                    .get(kind("KafkaReportIT", "Kafka: отправлено → t [<KEY>]"));
+
+            assertThat(range).isNotNull();
+            assertThat(range.min()).isEqualTo(1);
+            assertThat(range.max()).isEqualTo(2);
+            assertThat(range.cases()).as("наблюдений должно быть два").isEqualTo(2);
+        }
+
+        @Test
         @DisplayName("несуществующий каталог даёт пустой результат, а не падение")
         void scanMissingDirectory(@TempDir Path dir) {
             Scan scan = ReportInventory.scan(dir.resolve("нет-такого"));
@@ -399,6 +423,52 @@ class ReportInventoryTest {
             assertThat(baseline.comments()).containsEntry(
                     kind("KafkaReportIT", "Kafka: отправлено"), "AllureKafkaProducerInstrumentation");
             assertThat(baseline.owners()).containsExactly("KafkaReportIT", "LiquibaseReportIT");
+        }
+
+        @Test
+        @DisplayName("маркер кратности переживает круг «запись → чтение» (иначе белый список пуст)")
+        void countMarkerRoundTrip(@TempDir Path dir) throws IOException {
+            // Звено «формат файла» раньше не проверял никто: сломанный COUNT_MARKER тихо обнулял
+            // ВЕСЬ белый список, и гейт кратности становился декоративным при зелёной сборке.
+            Path file = dir.resolve("inventory/baseline.txt");
+            Kind exact = kind("A", "Шаг ровно один");
+            Kind atLeast = kind("A", "Шаг не меньше трёх");
+            Baseline previous = new Baseline(Set.of(exact, atLeast), Set.of(), Set.of(), Map.of(),
+                    Map.of(exact, new ReportInventory.Count(2, false),
+                            atLeast, new ReportInventory.Count(3, true)));
+
+            ReportInventory.write(file, scanOf(Set.of(exact, atLeast), Set.of()), previous);
+            Baseline reread = ReportInventory.readBaseline(file);
+
+            assertThat(reread.counts()).containsOnlyKeys(exact, atLeast);
+            assertThat(reread.counts().get(exact).value()).isEqualTo(2);
+            assertThat(reread.counts().get(exact).atLeast()).isFalse();
+            assertThat(reread.counts().get(atLeast).atLeast()).isTrue();
+            // и сами виды не пострадали от «откусывания» маркера из строки
+            assertThat(reread.steps()).containsExactlyInAnyOrder(exact, atLeast);
+        }
+
+        @Test
+        @DisplayName("посев: одинаковое число → ×N (ловит задвоение), разброс → ×≥N (терпит рост)")
+        void seedMarksStableAndFloating() {
+            Kind onlyOnce = kind("A", "Виден один раз");
+            Kind stable = kind("A", "Стабильный");
+            Kind floating = kind("A", "Плавающий");
+            Scan scan = new Scan(new TreeSet<>(), new TreeSet<>(), Set.of("A"), 1, List.of(), List.of(), List.of(),
+                    Map.of(onlyOnce, new ReportInventory.Range(6, 6, 1),
+                            stable, new ReportInventory.Range(1, 1, 4),
+                            floating, new ReportInventory.Range(1, 3, 4)));
+
+            Map<Kind, ReportInventory.Count> seeded =
+                    ReportInventory.seedCounts(scan, baselineOf(Set.of(), Set.of()));
+
+            // вид из одного кейса тоже пиннится жёстко: «×≥N» задвоение не ловит (2 ≥ 1),
+            // а именно оно — главный класс регрессии. Размен объяснён в javadoc seedCounts.
+            assertThat(seeded.get(onlyOnce).atLeast()).isFalse();
+            assertThat(seeded.get(onlyOnce).value()).isEqualTo(6);
+            assertThat(seeded.get(stable).atLeast()).isFalse();
+            assertThat(seeded.get(floating).atLeast()).isTrue();
+            assertThat(seeded.get(floating).value()).isEqualTo(1);
         }
 
         @Test

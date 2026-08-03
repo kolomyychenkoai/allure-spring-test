@@ -178,6 +178,13 @@ public class AllureWireMockTestListener implements TestExecutionListener, Ordere
     }
 
     private static List<WireMockServer> beans(TestContext testContext) {
+        // hasApplicationContext, а не getApplicationContext: наш afterTestMethod идёт ПОСЛЕДНИМ
+        // (HIGHEST_PRECEDENCE = крайний с обеих сторон), то есть уже после того, как
+        // @DirtiesContext закрыл и выселил контекст. Безусловный геттер ВОСКРЕСИЛ БЫ его —
+        // лишняя полная загрузка контекста в чужом прогоне.
+        if (!testContext.hasApplicationContext()) {
+            return List.of();
+        }
         try {
             return new ArrayList<>(testContext.getApplicationContext()
                     .getBeansOfType(WireMockServer.class).values());
