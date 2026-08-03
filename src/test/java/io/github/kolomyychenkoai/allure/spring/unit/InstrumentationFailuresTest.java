@@ -94,31 +94,6 @@ class InstrumentationFailuresTest {
     }
 
     @Test
-    @DisplayName("сбои конструкторов AssertJ — ожидаемый компромисс ADR 0001, сигнал молчит")
-    void assertJConstructorFailuresAreExpected(@TempDir Path dir) throws Exception {
-        dump(dir, "jvm-1.txt", """
-                installed=true
-                failures=1
-                failure: org.assertj.core.api.StringAssert → IllegalStateException: Cannot catch exception during constructor call for public org.assertj.core.api.StringAssert(java.lang.String)
-                """);
-
-        assertThat(report(dir)).isNull();
-    }
-
-    @Test
-    @DisplayName("ДРУГОЙ сбой у тех же типов AssertJ — уже наш, гасить нельзя")
-    void otherAssertJFailuresAreOurs(@TempDir Path dir) throws Exception {
-        // гасим узко: исключение по ADR 0001 — только про конструкторы, всё прочее там же значимо
-        dump(dir, "jvm-1.txt", """
-                installed=true
-                failures=1
-                failure: org.assertj.core.api.StringAssert → NoSuchMethodError: actual
-                """);
-
-        assertThat(report(dir)).contains("org.assertj.core.api.StringAssert");
-    }
-
-    @Test
     @DisplayName("игнор — по ИМЕНИ ТИПА, а не по тексту исключения")
     void ignoreMatchesTypeNotMessage(@TempDir Path dir) throws Exception {
         // настоящий сбой, у которого имя игнорируемого типа лишь упомянуто в сообщении,
@@ -139,12 +114,22 @@ class InstrumentationFailuresTest {
         // (сейчас они вплетаются успешно), картина изменится принципиально при зелёном гейте
         StringBuilder dump = new StringBuilder("installed=true\n");
         for (int i = 0; i < 200; i++) {
-            dump.append("failure: org.assertj.core.api.Type").append(i)
-                    .append(" → IllegalStateException: Cannot catch exception during constructor call\n");
+            dump.append("failure: org.mockito.internal.creation.bytebuddy.MockMethodAdvice")
+                    .append(" → NoSuchTypeException: MockMethodDispatcher\n");
         }
         dump(dir, "jvm-1.txt", dump.toString());
 
-        assertThat(report(dir)).contains("подавленных сбоев 200").contains("ADR 0001");
+        assertThat(report(dir)).contains("подавленных сбоев 200");
+    }
+
+    @Test
+    @DisplayName("выборка сбоев усечена — красный (ограниченный буфер, прочитанный как полная картина, врёт)")
+    void truncatedSampleIsLoud(@TempDir Path dir) throws Exception {
+        // счётчик точный, а выборка ограничена: если сбоев больше, чем строк, «настоящий 51-й»
+        // в дамп не попадёт и гейт промолчит. Об усечении обязан сообщать сам механизм.
+        dump(dir, "jvm-1.txt", "installed=true\nfailures=90\nsample_truncated=true\nfailure: com.acme.Thing → Boom\n");
+
+        assertThat(report(dir)).contains("УСЕЧЕНА");
     }
 
     @Test

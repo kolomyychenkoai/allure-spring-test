@@ -32,6 +32,7 @@ public final class InstrumentationDiagnostics {
     private static final int MAX_LOGGED = 5;
 
     private static final AtomicBoolean INSTALLED = new AtomicBoolean();
+    private static final AtomicBoolean SAMPLE_TRUNCATED = new AtomicBoolean();
     private static final AtomicInteger FAILURES = new AtomicInteger();
     private static final AtomicInteger TRANSFORMED = new AtomicInteger();
     private static final Queue<String> SAMPLE = new ConcurrentLinkedQueue<>();
@@ -57,6 +58,11 @@ public final class InstrumentationDiagnostics {
         return TRANSFORMED.get();
     }
 
+    /** Не поместились ли уникальные сбои в выборку — тогда {@link #failures()} НЕПОЛНА. */
+    public static boolean sampleTruncated() {
+        return SAMPLE_TRUNCATED.get();
+    }
+
     /** Выборка сбоев «тип → причина» (до {@value #MAX_SAMPLE}); копия, наружу мутабельное не отдаём. */
     public static List<String> failures() {
         return List.copyOf(SAMPLE);
@@ -73,8 +79,17 @@ public final class InstrumentationDiagnostics {
     static void recordFailure(String typeName, Throwable t) {
         int n = FAILURES.incrementAndGet();
         String brief = typeName + " → " + brief(t);
-        if (n <= MAX_SAMPLE) {
-            SAMPLE.add(brief);
+        // Выборка ограничена, поэтому храним УНИКАЛЬНЫЕ записи: иначе полсотни одинаковых
+        // артефактов одного апгрейда вытеснили бы из неё настоящую поломку — а она приходит
+        // позже (артефакты установки регистрируются первыми).
+        if (!SAMPLE.contains(brief)) {
+            if (SAMPLE.size() < MAX_SAMPLE) {
+                SAMPLE.add(brief);
+            } else {
+                // выборка переполнена УНИКАЛЬНЫМИ записями: дальше гейт видит не всё,
+                // и знать об этом он должен от механизма, а не по расхождению чисел
+                SAMPLE_TRUNCATED.set(true);
+            }
         }
         if (n <= MAX_LOGGED) {
             AllureInstrumentationLogger.warn("Instrumentation/" + typeName, t);
