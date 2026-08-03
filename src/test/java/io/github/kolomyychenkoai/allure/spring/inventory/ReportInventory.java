@@ -9,8 +9,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -52,6 +54,13 @@ public final class ReportInventory {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     /** Комментарий-подпись отделяется ДВУМЯ пробелами перед «#» — «#» внутри имени шага не мешает. */
     private static final Pattern COMMENT = Pattern.compile("\\s{2,}#");
+    /**
+     * Маркер ожидаемой кратности в конце строки эталона: «  ×1», «  ×≥2».
+     * Два пробела обязательны: «×» встречается ВНУТРИ имён видов («(ожидали ×<N>)»).
+     */
+    private static final Pattern COUNT_MARKER = Pattern.compile("\\s{2,}×(≥)?(\\d+)\\s*$");
+    /** Маркер статусного вида: « [BROKEN]», « [FAILED]», « [SKIPPED]». */
+    private static final Pattern STATUS_MARKER = Pattern.compile(" \\[[A-Z]+]$");
 
     private ReportInventory() {
     }
@@ -72,7 +81,8 @@ public final class ReportInventory {
 
     /** Что реально произвёл прогон. */
     public record Scan(Set<Kind> steps, Set<Kind> attachments, Set<String> owners, int resultFiles,
-                       List<String> unreadable, List<String> missingFiles, List<String> dirtyNames) {
+                       List<String> unreadable, List<String> missingFiles, List<String> dirtyNames,
+                       Map<Kind, Range> perCase) {
     }
 
     /** Состояние содержимого вложения. */
@@ -85,9 +95,38 @@ public final class ReportInventory {
         MISSING
     }
 
+    /** Ожидаемая кратность вида: «ровно N в каждом кейсе» либо «не меньше N». */
+    public record Count(int value, boolean atLeast) {
+        @Override
+        public String toString() {
+            return "×" + (atLeast ? "≥" : "") + value;
+        }
+    }
+
+    /** Сколько раз вид встречался в одном тест-кейсе: минимум и максимум по кейсам. */
+    public record Range(int min, int max) {
+        Range with(int n) {
+            return new Range(Math.min(min, n), Math.max(max, n));
+        }
+
+        @Override
+        public String toString() {
+            return min == max ? String.valueOf(min) : min + ".." + max;
+        }
+    }
+
+    /** Кратность разъехалась: ждали одно, увидели другое. */
+    public record CountMismatch(Kind kind, Count expected, Range seen) {
+    }
+
     /** Что записано в эталоне. */
     public record Baseline(Set<Kind> steps, Set<Kind> attachments, Set<Kind> optional,
-                           Map<Kind, String> comments) {
+                           Map<Kind, String> comments, Map<Kind, Count> counts) {
+
+        public Baseline(Set<Kind> steps, Set<Kind> attachments, Set<Kind> optional, Map<Kind, String> comments) {
+            this(steps, attachments, optional, comments, Map.of());
+        }
+
         public Set<String> owners() {
             Set<String> owners = new TreeSet<>();
             Stream.concat(steps.stream(), attachments.stream())
@@ -106,7 +145,22 @@ public final class ReportInventory {
      */
     public record Verdict(boolean noData, List<Kind> missingSteps, List<Kind> missingAttachments,
                           List<Kind> extraSteps, List<Kind> extraAttachments,
-                          List<String> silentOwners, List<String> unknownOwners) {
+                          List<String> silentOwners, List<String> unknownOwners,
+                          List<CountMismatch> countMismatches) {
+
+        public Verdict(boolean noData, List<Kind> missingSteps, List<Kind> missingAttachments,
+                       List<Kind> extraSteps, List<Kind> extraAttachments,
+                       List<String> silentOwners, List<String> unknownOwners) {
+            this(noData, missingSteps, missingAttachments, extraSteps, extraAttachments,
+                    silentOwners, unknownOwners, List.of());
+        }
+
+
+        /** Появился НОВЫЙ вид со статусом — библиотека начала фабриковать сбои там, где их не было. */
+        public boolean newFailures() {
+            return Stream.concat(extraSteps.stream(), extraAttachments.stream())
+                    .anyMatch(kind -> STATUS_MARKER.matcher(kind.text()).find());
+        }
 
         public boolean failed(boolean strict) {
             // silentOwners — самостоятельная причина падения, а не «следствие пропавших видов»:
@@ -114,6 +168,9 @@ public final class ReportInventory {
             // исчезнуть целиком при зелёной сборке.
             return noData || !missingSteps.isEmpty() || !missingAttachments.isEmpty()
                     || !unknownOwners.isEmpty() || !silentOwners.isEmpty()
+                    // новый ШАГ — это обогащение отчёта (норма), новый НЕ-PASSED статус — поломка:
+                    // правило библиотеки «упавшую проверку шагом не логируем» перестало соблюдаться
+                    || newFailures() || !countMismatches.isEmpty()
                     || (strict && (!extraSteps.isEmpty() || !extraAttachments.isEmpty()));
         }
 
@@ -143,11 +200,12 @@ public final class ReportInventory {
         Set<String> owners = new TreeSet<>();
         int files = 0;
         if (!Files.isDirectory(resultsDir)) {
-            return new Scan(steps, attachments, owners, 0, List.of(), List.of(), List.of());
+            return new Scan(steps, attachments, owners, 0, List.of(), List.of(), List.of(), Map.of());
         }
         List<String> unreadable = new ArrayList<>();
         List<String> missingFiles = new ArrayList<>();
         List<String> dirtyNames = new ArrayList<>();
+        Map<Kind, Range> perCase = new TreeMap<>();
         try (Stream<Path> list = Files.list(resultsDir)) {
             List<Path> results = list.filter(p -> p.getFileName().toString().endsWith("-result.json")).toList();
             for (Path file : results) {
@@ -162,27 +220,48 @@ public final class ReportInventory {
                 files++;
                 String owner = testClass.substring(testClass.lastIndexOf('.') + 1);
                 owners.add(owner);
-                collectAttachments(root, owner, attachments, resultsDir, missingFiles, dirtyNames);
-                collectSteps(root, owner, null, steps, attachments, resultsDir, missingFiles, dirtyNames);
+                // Кратность считаем ЗА ТЕСТ-КЕЙС, а не за класс: иначе добавление @Test двигало бы
+                // эталон по причине, не связанной с отчётом. Инвариант библиотеки — «один вызов =
+                // один шаг», и он про кейс.
+                Map<Kind, Integer> local = new HashMap<>();
+                collectAttachments(root, owner, attachments, resultsDir, missingFiles, dirtyNames, local);
+                collectSteps(root, owner, null, steps, attachments, resultsDir, missingFiles, dirtyNames, local);
+                local.forEach((kind, n) -> perCase.merge(kind, new Range(n, n), (a, b) -> a.with(b.max())));
             }
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        return new Scan(steps, attachments, owners, files, unreadable, missingFiles, dirtyNames);
+        return new Scan(steps, attachments, owners, files, unreadable, missingFiles, dirtyNames, perCase);
     }
 
     /** {@code parent} — шаблон НЕПОСРЕДСТВЕННОГО родителя (null для верхнего уровня). */
     private static void collectSteps(JsonNode node, String owner, String parent, Set<Kind> steps,
                                      Set<Kind> attachments, Path resultsDir,
-                                     List<String> missingFiles, List<String> dirtyNames) {
+                                     List<String> missingFiles, List<String> dirtyNames,
+                                     Map<Kind, Integer> local) {
         for (JsonNode step : node.path("steps")) {
             String raw = step.path("name").asText("");
             hygiene(owner, raw, dirtyNames);
             String template = StepTemplates.step(raw);
-            steps.add(new Kind(owner, parent == null ? template : parent + NESTED + template));
-            collectAttachments(step, owner, attachments, resultsDir, missingFiles, dirtyNames);
-            collectSteps(step, owner, template, steps, attachments, resultsDir, missingFiles, dirtyNames);
+            // Родительский префикс берём БЕЗ статус-суффикса: иначе один сломавшийся родитель
+            // переименовал бы все дочерние виды и дал каскад «пропало+появилось» вместо диагноза.
+            Kind kind = new Kind(owner,
+                    (parent == null ? template : parent + NESTED + template) + statusSuffix(step));
+            steps.add(kind);
+            local.merge(kind, 1, Integer::sum);
+            collectAttachments(step, owner, attachments, resultsDir, missingFiles, dirtyNames, local);
+            collectSteps(step, owner, template, steps, attachments, resultsDir, missingFiles, dirtyNames, local);
         }
+    }
+
+    /**
+     * Суффикс статуса — ТОЛЬКО для не-passed. Сегодня это ровно один вид на весь отчёт
+     * (BROKEN у ошибки репозитория), то есть эталон не раздувается, а регрессия
+     * «BROKEN стал PASSED» становится видимой: вид просто исчезает.
+     */
+    static String statusSuffix(JsonNode step) {
+        String status = step.path("status").asText("passed");
+        return status.isBlank() || "passed".equals(status) ? "" : " [" + status.toUpperCase(Locale.ROOT) + "]";
     }
 
     /** Гигиена по СЫРОМУ имени: нормализация маскирует хэши, то есть прячет ровно этот мусор. */
@@ -192,7 +271,8 @@ public final class ReportInventory {
     }
 
     private static void collectAttachments(JsonNode node, String owner, Set<Kind> attachments, Path resultsDir,
-                                           List<String> missingFiles, List<String> dirtyNames) {
+                                           List<String> missingFiles, List<String> dirtyNames,
+                                     Map<Kind, Integer> local) {
         for (JsonNode att : node.path("attachments")) {
             String name = att.path("name").asText("");
             hygiene(owner, name, dirtyNames);
@@ -203,8 +283,10 @@ public final class ReportInventory {
                 // «отчёт сломан», и лечится оно не обновлением эталона. Отдельный безусловный гейт.
                 missingFiles.add(owner + " | " + name + " → нет файла " + source);
             }
-            attachments.add(new Kind(owner, StepTemplates.attachment(
-                    name, att.path("type").asText(""), content != Content.EMPTY)));
+            Kind kind = new Kind(owner, StepTemplates.attachment(
+                    name, att.path("type").asText(""), content != Content.EMPTY));
+            attachments.add(kind);
+            local.merge(kind, 1, Integer::sum);
         }
     }
 
@@ -273,7 +355,7 @@ public final class ReportInventory {
                 missing(baseline.attachments(), baseline.optional(), scan.attachments()),
                 extra(baseline.steps(), scan.steps()),
                 extra(baseline.attachments(), scan.attachments()),
-                silent, unknown);
+                silent, unknown, counts(baseline.counts(), scan.perCase()));
     }
 
     /**
@@ -294,6 +376,31 @@ public final class ReportInventory {
         baseline.steps().stream().filter(kind -> !keptSteps.contains(kind)).forEach(removed::add);
         baseline.attachments().stream().filter(kind -> !keptAttachments.contains(kind)).forEach(removed::add);
         return new UpdateVerdict(lost, removed);
+    }
+
+    /**
+     * Виды, чья кратность разъехалась с ожидаемой. Считается только для видов, ПОМЕЧЕННЫХ в эталоне
+     * (маркер «×N»): белый список живёт в данных, а не в коде. Виды, которых прогон вовсе не дал,
+     * тут пропускаем — это уже {@code missing}, второй раз тот же факт не диагностируем.
+     * <p>
+     * Семантика по умолчанию — «ровно N в КАЖДОМ кейсе»: главный класс регрессии при апгрейде —
+     * ЗАДВОЕНИЕ (сломался граф само-делегации, отвалился CAS-гард), а «не меньше N» его не видит.
+     */
+    public static List<CountMismatch> counts(Map<Kind, Count> expected, Map<Kind, Range> seen) {
+        List<CountMismatch> mismatches = new ArrayList<>();
+        expected.forEach((kind, count) -> {
+            Range range = seen.get(kind);
+            if (range == null) {
+                return;
+            }
+            boolean ok = count.atLeast()
+                    ? range.min() >= count.value()
+                    : range.min() == count.value() && range.max() == count.value();
+            if (!ok) {
+                mismatches.add(new CountMismatch(kind, count, range));
+            }
+        });
+        return mismatches;
     }
 
     /** Виды из эталона, которых прогон не дал. С учётом «*» (где угодно) и «?» (необязательные). */
@@ -356,8 +463,9 @@ public final class ReportInventory {
         Set<Kind> attachments = new TreeSet<>();
         Set<Kind> optional = new TreeSet<>();
         Map<Kind, String> comments = new TreeMap<>();
+        Map<Kind, Count> counts = new TreeMap<>();
         if (!Files.isRegularFile(path)) {
-            return new Baseline(steps, attachments, optional, comments);
+            return new Baseline(steps, attachments, optional, comments, counts);
         }
         String section = "steps";
         for (String raw : readLines(path)) {
@@ -379,11 +487,20 @@ public final class ReportInventory {
                 comment = line.substring(commentAt.start()).replaceFirst("^\\s*#\\s*", "");
                 line = line.substring(0, commentAt.start()).strip();
             }
+            Count count = null;
+            Matcher countAt = COUNT_MARKER.matcher(line);
+            if (countAt.find()) {
+                count = new Count(Integer.parseInt(countAt.group(2)), countAt.group(1) != null);
+                line = line.substring(0, countAt.start()).strip();
+            }
             int sep = line.indexOf(" | ");
             if (sep < 0) {
                 continue;
             }
             Kind kind = new Kind(line.substring(0, sep).strip(), line.substring(sep + 3).strip());
+            if (count != null) {
+                counts.put(kind, count);
+            }
             ("attachments".equals(section) ? attachments : steps).add(kind);
             if (isOptional) {
                 optional.add(kind);
@@ -392,7 +509,7 @@ public final class ReportInventory {
                 comments.put(kind, comment);
             }
         }
-        return new Baseline(steps, attachments, optional, comments);
+        return new Baseline(steps, attachments, optional, comments, counts);
     }
 
     private static List<String> readLines(Path path) {
@@ -443,6 +560,25 @@ public final class ReportInventory {
         }
     }
 
+    /**
+     * Разовый посев маркеров кратности ПО ЗАМЕРУ: помечаем «×N» только те виды, чья кратность
+     * ОДИНАКОВА во всех кейсах прогона ({@code min == max}). Виды с плавающим числом (их решает
+     * Hibernate/Liquibase/сеть) остаются без маркера — и, значит, кратностью не стерегутся.
+     * <p>
+     * Так белый список получается из ФАКТА, а не из предположения «наверное, один раз».
+     */
+    public static Map<Kind, Count> seedCounts(Scan scan, Baseline previous) {
+        Map<Kind, Count> counts = new TreeMap<>(previous.counts());
+        scan.perCase().forEach((kind, range) -> {
+            if (range.min() == range.max()) {
+                counts.put(kind, new Count(range.min(), false));
+            } else {
+                counts.remove(kind); // стало плавать — маркер снимаем, иначе будет флак
+            }
+        });
+        return counts;
+    }
+
     /** К увиденному добавляем «аварийные клапаны» эталона: {@code *}-виды и {@code ?}-виды. */
     private static Set<Kind> merge(Set<Kind> seen, Set<Kind> previous, Baseline baseline) {
         Set<Kind> result = new TreeSet<>(seen);
@@ -462,6 +598,10 @@ public final class ReportInventory {
         for (Kind kind : kinds) {
             boolean optional = previous.optional().contains(kind);
             String line = (optional ? "? " : "") + kind;
+            Count count = previous.counts().get(kind);
+            if (count != null) {
+                line = line + "  " + count; // маркер переносится: белый список живёт в эталоне
+            }
             String comment = previous.comments().get(kind);
             if (comment != null) {
                 line = line + "  # " + comment;

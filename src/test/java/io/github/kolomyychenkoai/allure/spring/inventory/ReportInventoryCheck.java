@@ -123,7 +123,13 @@ class ReportInventoryCheck {
             update.removed().forEach(kind -> out.append("  − ").append(kind).append('\n'));
             throw new AssertionError(out.toString());
         }
-        ReportInventory.write(ReportInventory.BASELINE, scan, baseline);
+        // Посев кратности по ЗАМЕРУ: -Dinventory.counts=true проставит «×N» тем видам, чьё число
+        // стабильно во всех кейсах, и снимет маркер с тех, что стали плавать.
+        Baseline toWrite = Boolean.getBoolean("inventory.counts")
+                ? new Baseline(baseline.steps(), baseline.attachments(), baseline.optional(),
+                        baseline.comments(), ReportInventory.seedCounts(scan, baseline))
+                : baseline;
+        ReportInventory.write(ReportInventory.BASELINE, scan, toWrite);
         // Колонка «кто отвечает» — весь смысл формата: она печатается при пропаже вида как
         // указатель, куда идти. Новые виды приходят голыми, поэтому напоминаем сразу.
         long unsigned = java.util.stream.Stream.concat(scan.steps().stream(), scan.attachments().stream())
@@ -158,6 +164,14 @@ class ReportInventoryCheck {
         if (!verdict.silentOwners().isEmpty()) {
             out.append("\nКЛАССЫ БЕЗ РЕЗУЛЬТАТОВ (не запускались или упали до первого шага):\n");
             verdict.silentOwners().forEach(owner -> out.append("  ✗ ").append(owner).append('\n'));
+        }
+
+        if (!verdict.countMismatches().isEmpty()) {
+            out.append("\nКРАТНОСТЬ РАЗЪЕХАЛАСЬ (шаг стал появляться иначе — типичное задвоение перехвата):\n");
+            verdict.countMismatches().forEach(mismatch -> out.append("  × ").append(mismatch.kind())
+                    .append(" — ждали ").append(mismatch.expected())
+                    .append(" в каждом кейсе, увидели ").append(mismatch.seen())
+                    .append(responsible(baseline, mismatch.kind())).append('\n'));
         }
 
         Map<Kind, String> drift = ReportInventory.mimeDrift(verdict.missingAttachments(), scan);

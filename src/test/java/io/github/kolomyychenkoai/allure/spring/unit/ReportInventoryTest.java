@@ -41,7 +41,7 @@ class ReportInventoryTest {
         steps.forEach(k -> owners.add(k.owner()));
         attachments.forEach(k -> owners.add(k.owner()));
         return new Scan(new TreeSet<>(steps), new TreeSet<>(attachments), owners,
-                steps.size() + attachments.size(), List.of(), List.of(), List.of());
+                steps.size() + attachments.size(), List.of(), List.of(), List.of(), Map.of());
     }
 
     private static Baseline baselineOf(Set<Kind> steps, Set<Kind> attachments) {
@@ -102,6 +102,54 @@ class ReportInventoryTest {
 
             assertThat(verdict.unknownOwners()).containsExactly("НовыйReportIT");
             // без этого гейта новый модуль просто печатался бы как «новый вид» и сборка была зелёной
+            assertThat(verdict.failed(false)).isTrue();
+        }
+
+        @Test
+        @DisplayName("кратность: ждали ровно один шаг, увидели два — красный (типичное задвоение)")
+        void doubledStepIsCaught() {
+            Kind kind = kind("KafkaReportIT", "Kafka: отправлено");
+            Baseline baseline = new Baseline(Set.of(kind), Set.of(), Set.of(), Map.of(),
+                    Map.of(kind, new ReportInventory.Count(1, false)));
+            Scan scan = new Scan(new TreeSet<>(Set.of(kind)), new TreeSet<>(), Set.of("KafkaReportIT"), 1,
+                    List.of(), List.of(), List.of(), Map.of(kind, new ReportInventory.Range(2, 2)));
+
+            Verdict verdict = ReportInventory.verdict(scan, baseline);
+
+            assertThat(verdict.countMismatches()).singleElement()
+                    .extracting(m -> m.expected().toString() + " vs " + m.seen())
+                    .isEqualTo("×1 vs 2");
+            assertThat(verdict.failed(false)).isTrue();
+        }
+
+        @Test
+        @DisplayName("кратность «×≥N» терпит рост, но ловит падение ниже порога")
+        void atLeastCount() {
+            Kind kind = kind("A", "Шаг");
+            Baseline baseline = new Baseline(Set.of(kind), Set.of(), Set.of(), Map.of(),
+                    Map.of(kind, new ReportInventory.Count(2, true)));
+
+            assertThat(ReportInventory.counts(baseline.counts(), Map.of(kind, new ReportInventory.Range(3, 5)))).isEmpty();
+            assertThat(ReportInventory.counts(baseline.counts(), Map.of(kind, new ReportInventory.Range(1, 5)))).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("непомеченные виды кратностью не стерегутся (белый список живёт в эталоне)")
+        void unmarkedKindsAreNotCounted() {
+            assertThat(ReportInventory.counts(Map.of(), Map.of(kind("A", "Шаг"), new ReportInventory.Range(1, 9))))
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("новый СТАТУСНЫЙ вид роняет прогон всегда: библиотека начала фабриковать сбои")
+        void newStatusKindAlwaysFails() {
+            // обычный новый шаг — обогащение отчёта (норма); новый не-passed статус — поломка
+            // правила «упавшую проверку шагом не логируем»
+            Verdict verdict = ReportInventory.verdict(
+                    scanOf(Set.of(kind("A", "Шаг"), kind("A", "Шаг [FAILED]")), Set.of()),
+                    baselineOf(Set.of(kind("A", "Шаг")), Set.of()));
+
+            assertThat(verdict.newFailures()).isTrue();
             assertThat(verdict.failed(false)).isTrue();
         }
 

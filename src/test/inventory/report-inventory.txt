@@ -16,219 +16,220 @@
 #   «| пусто» у вложения — содержимое пустое (тоже вид: деградация видна).
 
 [steps]
-AllureMockitoReportIT | Конфиги приложения  # AllureConfigurationListener
+AllureMockitoReportIT | Конфиги приложения  ×1  # AllureConfigurationListener
 AllureMockitoReportIT | Мок-вызов: Pricing.price(<ARGS>) → <V>  # AllureMockitoHandler
-AllureMockitoReportIT | Мок-вызов: Pricing.total(<ARGS>) → <V>  # AllureMockitoHandler
-AllureMockitoReportIT | Мок-заглушка: Pricing.price(<ARGS>)  # AllureMockitoHandler
-AllureMockitoReportIT | Мок-заглушка: Pricing.total(<ARGS>)  # AllureMockitoHandler
-AllureMockitoReportIT | Мок-проверка: Pricing.price(<ARGS>) (ожидали ×<N>)  # AllureMockitoHandler
-AllureMockitoReportIT | Мок-проверка: Pricing.total(<ARGS>) (ожидали ×<N>)  # AllureMockitoHandler
-AssertJReportIT | Конфиги приложения  # AllureConfigurationListener
-AssertJReportIT | Проверка: значение <V> — contains <V>  # AllureAssertJInstrumentation
-AssertJReportIT | Проверка: значение <V> — hasFieldOrPropertyWithValue <V>  # AllureAssertJInstrumentation (объявлен в абстрактном классе, ADR 0001)
-AssertJReportIT | Проверка: значение <V> — hasSize <V>  # AllureAssertJInstrumentation
-AssertJReportIT | Проверка: значение <V> — isBetween <V>  # AllureAssertJInstrumentation (объявлен в абстрактном классе, ADR 0001)
-AssertJReportIT | Проверка: значение <V> — isCloseTo <V>  # AllureAssertJInstrumentation (объявлен в абстрактном классе, ADR 0001)
-AssertJReportIT | Проверка: значение <V> — isEqualTo <V>  # AllureAssertJInstrumentation
-AssertJReportIT | Проверка: значение <V> — isGreaterThan <V>  # AllureAssertJInstrumentation
-AssertJReportIT | Проверка: значение <V> — startsWith <V>  # AllureAssertJInstrumentation
-AwaitilityReportIT | Конфиги приложения  # AllureConfigurationListener
-AwaitilityReportIT | Ожидание: результат готов — выполнено за <MS> мс  # AllureAwaitilityConditionListener
-DataJpaReportIT | DB WidgetRepository.deleteById  # AllureRepositoryAspect
-DataJpaReportIT | DB WidgetRepository.deleteById ▸ SQL DELETE widget  # AllureDataSourceListener (вложен в «DB WidgetRepository.deleteById»)
-DataJpaReportIT | DB WidgetRepository.deleteById ▸ SQL SELECT widget  # AllureDataSourceListener (вложен в «DB WidgetRepository.deleteById»)
-DataJpaReportIT | DB WidgetRepository.findAll  # AllureRepositoryAspect
+AllureMockitoReportIT | Мок-вызов: Pricing.total(<ARGS>) → <V>  ×1  # AllureMockitoHandler
+AllureMockitoReportIT | Мок-заглушка: Pricing.price(<ARGS>)  ×1  # AllureMockitoHandler
+AllureMockitoReportIT | Мок-заглушка: Pricing.total(<ARGS>)  ×1  # AllureMockitoHandler
+AllureMockitoReportIT | Мок-проверка: Pricing.price(<ARGS>) (ожидали ×<N>)  ×1  # AllureMockitoHandler
+AllureMockitoReportIT | Мок-проверка: Pricing.total(<ARGS>) (ожидали ×<N>)  ×1  # AllureMockitoHandler
+AssertJReportIT | Конфиги приложения  ×1  # AllureConfigurationListener
+AssertJReportIT | Проверка: значение <V> — contains <V>  ×1  # AllureAssertJInstrumentation
+AssertJReportIT | Проверка: значение <V> — hasFieldOrPropertyWithValue <V>  ×1  # AllureAssertJInstrumentation (объявлен в абстрактном классе, ADR 0001)
+AssertJReportIT | Проверка: значение <V> — hasSize <V>  ×1  # AllureAssertJInstrumentation
+AssertJReportIT | Проверка: значение <V> — isBetween <V>  ×1  # AllureAssertJInstrumentation (объявлен в абстрактном классе, ADR 0001)
+AssertJReportIT | Проверка: значение <V> — isCloseTo <V>  ×1  # AllureAssertJInstrumentation (объявлен в абстрактном классе, ADR 0001)
+AssertJReportIT | Проверка: значение <V> — isEqualTo <V>  ×1  # AllureAssertJInstrumentation
+AssertJReportIT | Проверка: значение <V> — isGreaterThan <V>  ×1  # AllureAssertJInstrumentation
+AssertJReportIT | Проверка: значение <V> — startsWith <V>  ×1  # AllureAssertJInstrumentation
+AwaitilityReportIT | Конфиги приложения  ×1  # AllureConfigurationListener
+AwaitilityReportIT | Ожидание: результат готов — выполнено за <MS> мс  ×1  # AllureAwaitilityConditionListener
+DataJpaReportIT | DB WidgetRepository.deleteById  ×1  # AllureRepositoryAspect
+DataJpaReportIT | DB WidgetRepository.deleteById ▸ SQL DELETE widget  ×1  # AllureDataSourceListener (вложен в «DB WidgetRepository.deleteById»)
+DataJpaReportIT | DB WidgetRepository.deleteById ▸ SQL SELECT widget  ×1  # AllureDataSourceListener (вложен в «DB WidgetRepository.deleteById»)
+DataJpaReportIT | DB WidgetRepository.findAll  ×1  # AllureRepositoryAspect
 DataJpaReportIT | DB WidgetRepository.findAll ▸ SQL SELECT widget  # AllureDataSourceListener (вложен в «DB WidgetRepository.findAll»)
 DataJpaReportIT | DB WidgetRepository.findById  # AllureRepositoryAspect
+DataJpaReportIT | DB WidgetRepository.findById [BROKEN]  ×1
 DataJpaReportIT | DB WidgetRepository.findById ▸ SQL SELECT widget  # AllureDataSourceListener (вложен в «DB WidgetRepository.findById»)
 DataJpaReportIT | DB WidgetRepository.save  # AllureRepositoryAspect
-DataJpaReportIT | DB WidgetRepository.save ▸ SQL INSERT widget  # AllureDataSourceListener (вложен в «DB WidgetRepository.save»)
-DataJpaReportIT | DB WidgetRepository.save ▸ SQL SELECT widget  # AllureDataSourceListener (вложен в «DB WidgetRepository.save»)
-DataJpaReportIT | DB WidgetRepository.save ▸ SQL UPDATE widget  # AllureDataSourceListener (вложен в «DB WidgetRepository.save»)
-DataJpaReportIT | Конфиги приложения  # AllureConfigurationListener
-DataJpaReportIT | Проверка: значение <V> — contains <V>  # AllureAssertJInstrumentation
-DataJpaReportIT | Проверка: значение <V> — isEmpty  # AllureAssertJInstrumentation
-DataJpaReportIT | Проверка: значение <V> — isEqualTo <V>  # AllureAssertJInstrumentation
-DataJpaReportIT | Проверка: значение <V> — isInstanceOf <V>  # AllureAssertJInstrumentation
-DataJpaReportIT | Проверка: значение <V> — isPresent  # AllureAssertJInstrumentation
-HamcrestReportIT | Конфиги приложения  # AllureConfigurationListener
-HamcrestReportIT | Проверка: <REASON>: значение <V>, ожидалось <MATCHER>  # AllureHamcrestInstrumentation
-HamcrestReportIT | Проверка: значение <V>, ожидалось <MATCHER>  # AllureHamcrestInstrumentation
-JUnitJupiterAssertionsReportIT | Конфиги приложения  # AllureConfigurationListener
-JUnitJupiterAssertionsReportIT | Проверка: брошено <TYPE>  # AllureJUnitJupiterAssertionsInstrumentation
-JUnitJupiterAssertionsReportIT | Проверка: значение <V> не null  # AllureJUnitJupiterAssertionsInstrumentation
-JUnitJupiterAssertionsReportIT | Проверка: значение <V> — экземпляр <V>  # AllureJUnitJupiterAssertionsInstrumentation
-JUnitJupiterAssertionsReportIT | Проверка: количество положительно — верно  # AllureJUnitJupiterAssertionsInstrumentation
-JUnitJupiterAssertionsReportIT | Проверка: ожидалось <V> = <V>  # AllureJUnitJupiterAssertionsInstrumentation
-JdbcReportIT | DB JdbcTemplate.batchUpdate  # AllureJdbcInstrumentation
-JdbcReportIT | DB JdbcTemplate.batchUpdate ▸ SQL INSERT widget  # AllureDataSourceListener (шаг на каждый запрос пакета)
-JdbcReportIT | DB JdbcTemplate.batchUpdate ▸ SQL UPDATE widget  # AllureDataSourceListener (шаг на каждый запрос пакета)
-JdbcReportIT | DB JdbcTemplate.queryForObject  # AllureJdbcInstrumentation
-JdbcReportIT | DB JdbcTemplate.queryForObject ▸ SQL SELECT widget  # AllureDataSourceListener (вложен в «DB JdbcTemplate.queryForObject»)
-JdbcReportIT | DB JdbcTemplate.update  # AllureJdbcInstrumentation
-JdbcReportIT | DB JdbcTemplate.update ▸ SQL INSERT widget  # AllureDataSourceListener (вложен в «DB JdbcTemplate.update»)
-JdbcReportIT | DB NamedParameterJdbcTemplate.update  # AllureJdbcInstrumentation
-JdbcReportIT | DB NamedParameterJdbcTemplate.update ▸ SQL INSERT widget  # AllureDataSourceListener (вложен в «DB NamedParameterJdbcTemplate.update»)
-JdbcReportIT | Конфиги приложения  # AllureConfigurationListener
-JdbcReportIT | Проверка: значение <V> — isEqualTo <V>  # AllureAssertJInstrumentation
-KafkaListenerReportIT | Kafka: отправлено → listener-events [<KEY>]  # AllureKafkaProducerInstrumentation
-KafkaListenerReportIT | Kafka: получено <N> сообщ.  # AllureKafkaConsumerInstrumentation
-KafkaListenerReportIT | Конфиги приложения  # AllureConfigurationListener
-KafkaReportIT | Kafka: отправлено → order-events [<KEY>]  # AllureKafkaProducerInstrumentation
-KafkaReportIT | Kafka: получено <N> сообщ.  # AllureKafkaConsumerInstrumentation
-KafkaReportIT | Конфиги приложения  # AllureConfigurationListener
-LiquibaseReportIT | Liquibase: changeset create-live-account (allure)  # AllureLiquibaseInstrumentation
-LiquibaseReportIT | SQL CREATE  # AllureDataSourceListener
-LiquibaseReportIT | SQL INSERT PUBLIC.DATABASECHANGELOG  # AllureDataSourceListener
-LiquibaseReportIT | SQL SELECT  # AllureDataSourceListener
-LiquibaseReportIT | SQL SELECT PUBLIC.DATABASECHANGELOG  # AllureDataSourceListener
-LiquibaseReportIT | SQL SELECT PUBLIC.DATABASECHANGELOGLOCK  # AllureDataSourceListener
-LiquibaseReportIT | SQL UPDATE PUBLIC.DATABASECHANGELOGLOCK  # AllureDataSourceListener
-LiquibaseReportIT | Конфиги приложения  # AllureConfigurationListener
-LiquibaseReportIT | 🛢️ Liquibase: схема БД (<N> changeset)  # AllureLiquibaseListener (снимок стартовой схемы)
-MockMvcReportIT | HTTP GET /api/does-not-exist → 404  # AllureMockMvcResultHandler
-MockMvcReportIT | HTTP GET /api/hello/world → 200  # AllureMockMvcResultHandler
-MockMvcReportIT | HTTP GET /api/search?<QUERY> → 200  # AllureMockMvcResultHandler
-MockMvcReportIT | HTTP POST /api/echo → 200  # AllureMockMvcResultHandler
-MockMvcReportIT | Конфиги приложения  # AllureConfigurationListener
-MockMvcReportIT | Проверка: Status — ожидалось <V> = <V>  # AllureSpringAssertionsInstrumentation
-MockMvcStandaloneReportIT | HTTP GET /api/hello/world → 200  # AllureMockMvcInstrumentation
-MockMvcStandaloneReportIT | Конфиги приложения  # AllureConfigurationListener
-MockMvcStandaloneReportIT | Проверка: Status — ожидалось <V> = <V>  # AllureSpringAssertionsInstrumentation
-ReportSmokeIT | Конфиги приложения  # AllureConfigurationListener
-RestAssuredReportIT | HTTP GET /api/does-not-exist → 404  # AllureRestAssuredFilter
-RestAssuredReportIT | HTTP GET /api/hello/world → 200  # AllureRestAssuredFilter
-RestAssuredReportIT | HTTP GET /api/search?<QUERY> → 200  # AllureRestAssuredFilter
-RestAssuredReportIT | HTTP POST /api/echo → 200  # AllureRestAssuredFilter
-RestAssuredReportIT | Конфиги приложения  # AllureConfigurationListener
-RestAssuredReportIT | Проверка ответа: время ответа <V>  # AllureRestAssuredValidationInstrumentation
-RestAssuredReportIT | Проверка ответа: статус <V>  # AllureRestAssuredValidationInstrumentation
-RestAssuredReportIT | Проверка ответа: тело <V>  # AllureRestAssuredValidationInstrumentation
-RestAssuredReportIT | Проверка ответа: тип содержимого <V>  # AllureRestAssuredValidationInstrumentation
-RestClientReportIT | HTTP GET /api/hello/dup → 200  # AllureRestClientInstrumentation
-RestClientReportIT | HTTP GET /api/hello/world → 200  # AllureRestClientInstrumentation
-RestClientReportIT | HTTP POST /api/echo → 200  # AllureRestClientInstrumentation
-RestClientReportIT | Конфиги приложения  # AllureConfigurationListener
-RestTemplateReportIT | HTTP GET /api/does-not-exist → 404  # AllureRestTemplateInterceptor
-RestTemplateReportIT | HTTP GET /api/hello/world → 200  # AllureRestTemplateInterceptor
-RestTemplateReportIT | HTTP POST /api/echo → 200  # AllureRestTemplateInterceptor
-RestTemplateReportIT | Конфиги приложения  # AllureConfigurationListener
-SpringAssertionsReportIT | Конфиги приложения  # AllureConfigurationListener
-SpringAssertionsReportIT | Проверка: имя продукта — ожидалось <V> = <V>  # AllureSpringAssertionsInstrumentation
-SpringAssertionsReportIT | Проверка: количество положительно — верно  # AllureSpringAssertionsInstrumentation
-SpringAssertionsReportIT | Проверка: у заказа есть id — значение <V> не null  # AllureSpringAssertionsInstrumentation
-WebTestClientReportIT | HTTP GET /api/hello/statusonly → 200  # AllureWebTestClientLogger
-WebTestClientReportIT | HTTP GET /api/hello/world → 200  # AllureWebTestClientLogger
-WebTestClientReportIT | HTTP POST /api/echo → 200  # AllureWebTestClientLogger
-WebTestClientReportIT | Конфиги приложения  # AllureConfigurationListener
-WebTestClientReportIT | Проверка: JSON path "$.greeting" — ожидалось <V> = <V>  # AllureSpringAssertionsInstrumentation
-WebTestClientReportIT | Проверка: JSON path "$.productName" — ожидалось <V> = <V>  # AllureSpringAssertionsInstrumentation
-WebTestClientReportIT | Проверка: Status — ожидалось <V> = <V>  # AllureSpringAssertionsInstrumentation
-WireMockReportIT | Near-miss: GET /api/does-not-exist ≉ заглушка GET /api/flaky  # AllureWireMockSteps (near-miss)
-WireMockReportIT | Near-miss: GET /api/does-not-exist ≉ заглушка GET /api/prices  # AllureWireMockSteps (near-miss)
-WireMockReportIT | WireMock сценарий «retry»: состояние recovered  # AllureWireMockSteps (сценарии)
-WireMockReportIT | WireMock: сброс заглушек (:<PORT>)  # AllureWireMockVerifyInstrumentation (reset-advice)
-WireMockReportIT | WireMock: сервер поднят (:<PORT>)  # AllureWireMockTestListener.serverUp
-WireMockReportIT | Запрос к заглушке: GET /api/does-not-exist → 404  # AllureWireMockSteps
-WireMockReportIT | Запрос к заглушке: GET /api/ext → 200  # AllureWireMockSteps (сервер из @RegisterExtension)
-WireMockReportIT | Запрос к заглушке: GET /api/flaky → 200  # AllureWireMockSteps
-WireMockReportIT | Запрос к заглушке: GET /api/flaky → 503  # AllureWireMockSteps
-WireMockReportIT | Запрос к заглушке: GET /api/prices → 200  # AllureWireMockSteps
-WireMockReportIT | Запрос к заглушке: POST /api/orders → 201  # AllureWireMockSteps
-WireMockReportIT | Конфиги приложения  # AllureConfigurationListener
-WireMockReportIT | Проверка обращений к заглушке  # AllureWireMockVerifyInstrumentation (verify)
-WireMockReportIT | Проверка обращений к заглушке (×<N>)  # AllureWireMockVerifyInstrumentation (verify)
-WireMockReportIT | Создана заглушка: GET /api/ext → 200  # AllureWireMockVerifyInstrumentation (stubFor у extension)
-WireMockReportIT | Создана заглушка: GET /api/flaky → 200  # AllureWireMockVerifyInstrumentation (stubFor)
-WireMockReportIT | Создана заглушка: GET /api/flaky → 503  # AllureWireMockVerifyInstrumentation (stubFor)
-WireMockReportIT | Создана заглушка: GET /api/prices → 200  # AllureWireMockVerifyInstrumentation (stubFor)
-WireMockReportIT | Создана заглушка: POST /api/orders → 201  # AllureWireMockVerifyInstrumentation (stubFor)
+DataJpaReportIT | DB WidgetRepository.save ▸ SQL INSERT widget  ×1  # AllureDataSourceListener (вложен в «DB WidgetRepository.save»)
+DataJpaReportIT | DB WidgetRepository.save ▸ SQL SELECT widget  ×1  # AllureDataSourceListener (вложен в «DB WidgetRepository.save»)
+DataJpaReportIT | DB WidgetRepository.save ▸ SQL UPDATE widget  ×1  # AllureDataSourceListener (вложен в «DB WidgetRepository.save»)
+DataJpaReportIT | Конфиги приложения  ×1  # AllureConfigurationListener
+DataJpaReportIT | Проверка: значение <V> — contains <V>  ×1  # AllureAssertJInstrumentation
+DataJpaReportIT | Проверка: значение <V> — isEmpty  ×1  # AllureAssertJInstrumentation
+DataJpaReportIT | Проверка: значение <V> — isEqualTo <V>  ×1  # AllureAssertJInstrumentation
+DataJpaReportIT | Проверка: значение <V> — isInstanceOf <V>  ×1  # AllureAssertJInstrumentation
+DataJpaReportIT | Проверка: значение <V> — isPresent  ×1  # AllureAssertJInstrumentation
+HamcrestReportIT | Конфиги приложения  ×1  # AllureConfigurationListener
+HamcrestReportIT | Проверка: <REASON>: значение <V>, ожидалось <MATCHER>  ×2  # AllureHamcrestInstrumentation
+HamcrestReportIT | Проверка: значение <V>, ожидалось <MATCHER>  ×2  # AllureHamcrestInstrumentation
+JUnitJupiterAssertionsReportIT | Конфиги приложения  ×1  # AllureConfigurationListener
+JUnitJupiterAssertionsReportIT | Проверка: брошено <TYPE>  ×1  # AllureJUnitJupiterAssertionsInstrumentation
+JUnitJupiterAssertionsReportIT | Проверка: значение <V> не null  ×1  # AllureJUnitJupiterAssertionsInstrumentation
+JUnitJupiterAssertionsReportIT | Проверка: значение <V> — экземпляр <V>  ×1  # AllureJUnitJupiterAssertionsInstrumentation
+JUnitJupiterAssertionsReportIT | Проверка: количество положительно — верно  ×1  # AllureJUnitJupiterAssertionsInstrumentation
+JUnitJupiterAssertionsReportIT | Проверка: ожидалось <V> = <V>  ×1  # AllureJUnitJupiterAssertionsInstrumentation
+JdbcReportIT | DB JdbcTemplate.batchUpdate  ×1  # AllureJdbcInstrumentation
+JdbcReportIT | DB JdbcTemplate.batchUpdate ▸ SQL INSERT widget  ×1  # AllureDataSourceListener (шаг на каждый запрос пакета)
+JdbcReportIT | DB JdbcTemplate.batchUpdate ▸ SQL UPDATE widget  ×1  # AllureDataSourceListener (шаг на каждый запрос пакета)
+JdbcReportIT | DB JdbcTemplate.queryForObject  ×1  # AllureJdbcInstrumentation
+JdbcReportIT | DB JdbcTemplate.queryForObject ▸ SQL SELECT widget  ×1  # AllureDataSourceListener (вложен в «DB JdbcTemplate.queryForObject»)
+JdbcReportIT | DB JdbcTemplate.update  ×1  # AllureJdbcInstrumentation
+JdbcReportIT | DB JdbcTemplate.update ▸ SQL INSERT widget  ×1  # AllureDataSourceListener (вложен в «DB JdbcTemplate.update»)
+JdbcReportIT | DB NamedParameterJdbcTemplate.update  ×1  # AllureJdbcInstrumentation
+JdbcReportIT | DB NamedParameterJdbcTemplate.update ▸ SQL INSERT widget  ×1  # AllureDataSourceListener (вложен в «DB NamedParameterJdbcTemplate.update»)
+JdbcReportIT | Конфиги приложения  ×1  # AllureConfigurationListener
+JdbcReportIT | Проверка: значение <V> — isEqualTo <V>  ×1  # AllureAssertJInstrumentation
+KafkaListenerReportIT | Kafka: отправлено → listener-events [<KEY>]  ×1  # AllureKafkaProducerInstrumentation
+KafkaListenerReportIT | Kafka: получено <N> сообщ.  ×1  # AllureKafkaConsumerInstrumentation
+KafkaListenerReportIT | Конфиги приложения  ×1  # AllureConfigurationListener
+KafkaReportIT | Kafka: отправлено → order-events [<KEY>]  ×1  # AllureKafkaProducerInstrumentation
+KafkaReportIT | Kafka: получено <N> сообщ.  ×1  # AllureKafkaConsumerInstrumentation
+KafkaReportIT | Конфиги приложения  ×1  # AllureConfigurationListener
+LiquibaseReportIT | Liquibase: changeset create-live-account (allure)  ×1  # AllureLiquibaseInstrumentation
+LiquibaseReportIT | SQL CREATE  ×1  # AllureDataSourceListener
+LiquibaseReportIT | SQL INSERT PUBLIC.DATABASECHANGELOG  ×1  # AllureDataSourceListener
+LiquibaseReportIT | SQL SELECT  ×1  # AllureDataSourceListener
+LiquibaseReportIT | SQL SELECT PUBLIC.DATABASECHANGELOG  ×6  # AllureDataSourceListener
+LiquibaseReportIT | SQL SELECT PUBLIC.DATABASECHANGELOGLOCK  ×5  # AllureDataSourceListener
+LiquibaseReportIT | SQL UPDATE PUBLIC.DATABASECHANGELOGLOCK  ×2  # AllureDataSourceListener
+LiquibaseReportIT | Конфиги приложения  ×1  # AllureConfigurationListener
+LiquibaseReportIT | 🛢️ Liquibase: схема БД (<N> changeset)  ×1  # AllureLiquibaseListener (снимок стартовой схемы)
+MockMvcReportIT | HTTP GET /api/does-not-exist → 404  ×1  # AllureMockMvcResultHandler
+MockMvcReportIT | HTTP GET /api/hello/world → 200  ×1  # AllureMockMvcResultHandler
+MockMvcReportIT | HTTP GET /api/search?<QUERY> → 200  ×1  # AllureMockMvcResultHandler
+MockMvcReportIT | HTTP POST /api/echo → 200  ×1  # AllureMockMvcResultHandler
+MockMvcReportIT | Конфиги приложения  ×1  # AllureConfigurationListener
+MockMvcReportIT | Проверка: Status — ожидалось <V> = <V>  ×4  # AllureSpringAssertionsInstrumentation
+MockMvcStandaloneReportIT | HTTP GET /api/hello/world → 200  ×1  # AllureMockMvcInstrumentation
+MockMvcStandaloneReportIT | Конфиги приложения  ×1  # AllureConfigurationListener
+MockMvcStandaloneReportIT | Проверка: Status — ожидалось <V> = <V>  ×1  # AllureSpringAssertionsInstrumentation
+ReportSmokeIT | Конфиги приложения  ×1  # AllureConfigurationListener
+RestAssuredReportIT | HTTP GET /api/does-not-exist → 404  ×1  # AllureRestAssuredFilter
+RestAssuredReportIT | HTTP GET /api/hello/world → 200  ×3  # AllureRestAssuredFilter
+RestAssuredReportIT | HTTP GET /api/search?<QUERY> → 200  ×1  # AllureRestAssuredFilter
+RestAssuredReportIT | HTTP POST /api/echo → 200  ×1  # AllureRestAssuredFilter
+RestAssuredReportIT | Конфиги приложения  ×1  # AllureConfigurationListener
+RestAssuredReportIT | Проверка ответа: время ответа <V>  ×1  # AllureRestAssuredValidationInstrumentation
+RestAssuredReportIT | Проверка ответа: статус <V>  ×3  # AllureRestAssuredValidationInstrumentation
+RestAssuredReportIT | Проверка ответа: тело <V>  ×2  # AllureRestAssuredValidationInstrumentation
+RestAssuredReportIT | Проверка ответа: тип содержимого <V>  ×1  # AllureRestAssuredValidationInstrumentation
+RestClientReportIT | HTTP GET /api/hello/dup → 200  ×1  # AllureRestClientInstrumentation
+RestClientReportIT | HTTP GET /api/hello/world → 200  ×1  # AllureRestClientInstrumentation
+RestClientReportIT | HTTP POST /api/echo → 200  ×1  # AllureRestClientInstrumentation
+RestClientReportIT | Конфиги приложения  ×1  # AllureConfigurationListener
+RestTemplateReportIT | HTTP GET /api/does-not-exist → 404  ×1  # AllureRestTemplateInterceptor
+RestTemplateReportIT | HTTP GET /api/hello/world → 200  ×1  # AllureRestTemplateInterceptor
+RestTemplateReportIT | HTTP POST /api/echo → 200  ×1  # AllureRestTemplateInterceptor
+RestTemplateReportIT | Конфиги приложения  ×1  # AllureConfigurationListener
+SpringAssertionsReportIT | Конфиги приложения  ×1  # AllureConfigurationListener
+SpringAssertionsReportIT | Проверка: имя продукта — ожидалось <V> = <V>  ×1  # AllureSpringAssertionsInstrumentation
+SpringAssertionsReportIT | Проверка: количество положительно — верно  ×1  # AllureSpringAssertionsInstrumentation
+SpringAssertionsReportIT | Проверка: у заказа есть id — значение <V> не null  ×1  # AllureSpringAssertionsInstrumentation
+WebTestClientReportIT | HTTP GET /api/hello/statusonly → 200  ×1  # AllureWebTestClientLogger
+WebTestClientReportIT | HTTP GET /api/hello/world → 200  ×1  # AllureWebTestClientLogger
+WebTestClientReportIT | HTTP POST /api/echo → 200  ×1  # AllureWebTestClientLogger
+WebTestClientReportIT | Конфиги приложения  ×1  # AllureConfigurationListener
+WebTestClientReportIT | Проверка: JSON path "$.greeting" — ожидалось <V> = <V>  ×1  # AllureSpringAssertionsInstrumentation
+WebTestClientReportIT | Проверка: JSON path "$.productName" — ожидалось <V> = <V>  ×1  # AllureSpringAssertionsInstrumentation
+WebTestClientReportIT | Проверка: Status — ожидалось <V> = <V>  ×1  # AllureSpringAssertionsInstrumentation
+WireMockReportIT | Near-miss: GET /api/does-not-exist ≉ заглушка GET /api/flaky  ×2  # AllureWireMockSteps (near-miss)
+WireMockReportIT | Near-miss: GET /api/does-not-exist ≉ заглушка GET /api/prices  ×1  # AllureWireMockSteps (near-miss)
+WireMockReportIT | WireMock сценарий «retry»: состояние recovered  ×1  # AllureWireMockSteps (сценарии)
+WireMockReportIT | WireMock: сброс заглушек (:<PORT>)  ×1  # AllureWireMockVerifyInstrumentation (reset-advice)
+WireMockReportIT | WireMock: сервер поднят (:<PORT>)  ×2  # AllureWireMockTestListener.serverUp
+WireMockReportIT | Запрос к заглушке: GET /api/does-not-exist → 404  ×1  # AllureWireMockSteps
+WireMockReportIT | Запрос к заглушке: GET /api/ext → 200  ×1  # AllureWireMockSteps (сервер из @RegisterExtension)
+WireMockReportIT | Запрос к заглушке: GET /api/flaky → 200  ×1  # AllureWireMockSteps
+WireMockReportIT | Запрос к заглушке: GET /api/flaky → 503  ×1  # AllureWireMockSteps
+WireMockReportIT | Запрос к заглушке: GET /api/prices → 200  ×1  # AllureWireMockSteps
+WireMockReportIT | Запрос к заглушке: POST /api/orders → 201  ×1  # AllureWireMockSteps
+WireMockReportIT | Конфиги приложения  ×1  # AllureConfigurationListener
+WireMockReportIT | Проверка обращений к заглушке  ×1  # AllureWireMockVerifyInstrumentation (verify)
+WireMockReportIT | Проверка обращений к заглушке (×<N>)  ×1  # AllureWireMockVerifyInstrumentation (verify)
+WireMockReportIT | Создана заглушка: GET /api/ext → 200  ×1  # AllureWireMockVerifyInstrumentation (stubFor у extension)
+WireMockReportIT | Создана заглушка: GET /api/flaky → 200  ×1  # AllureWireMockVerifyInstrumentation (stubFor)
+WireMockReportIT | Создана заглушка: GET /api/flaky → 503  ×1  # AllureWireMockVerifyInstrumentation (stubFor)
+WireMockReportIT | Создана заглушка: GET /api/prices → 200  ×1  # AllureWireMockVerifyInstrumentation (stubFor)
+WireMockReportIT | Создана заглушка: POST /api/orders → 201  ×1  # AllureWireMockVerifyInstrumentation (stubFor)
 
 [attachments]
-AllureMockitoReportIT | Application Logs | text/plain  # AllureApplicationLogsListener
+AllureMockitoReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
 AllureMockitoReportIT | Mock Call | text/plain  # AllureMockitoHandler
 AllureMockitoReportIT | Mock Result | text/plain  # AllureMockitoHandler
-AllureMockitoReportIT | Свойства | text/plain  # AllureConfigurationListener
-AssertJReportIT | Application Logs | text/plain  # AllureApplicationLogsListener
-AssertJReportIT | Свойства | text/plain  # AllureConfigurationListener
-AwaitilityReportIT | Application Logs | text/plain  # AllureApplicationLogsListener
-AwaitilityReportIT | Свойства | text/plain  # AllureConfigurationListener
-AwaitilityReportIT | Условие ожидания | text/plain  # AllureAwaitilityConditionListener
-DataJpaReportIT | Application Logs | text/plain  # AllureApplicationLogsListener
+AllureMockitoReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
+AssertJReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
+AssertJReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
+AwaitilityReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
+AwaitilityReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
+AwaitilityReportIT | Условие ожидания | text/plain  ×1  # AllureAwaitilityConditionListener
+DataJpaReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
 DataJpaReportIT | DB Call | text/plain  # AllureRepositoryAspect
 DataJpaReportIT | DB Result | text/plain  # AllureRepositoryAspect
 DataJpaReportIT | SQL Query | text/plain  # AllureDataSourceListener
-DataJpaReportIT | Свойства | text/plain  # AllureConfigurationListener
-HamcrestReportIT | Application Logs | text/plain  # AllureApplicationLogsListener
-HamcrestReportIT | Свойства | text/plain  # AllureConfigurationListener
-JUnitJupiterAssertionsReportIT | Application Logs | text/plain  # AllureApplicationLogsListener
-JUnitJupiterAssertionsReportIT | Свойства | text/plain  # AllureConfigurationListener
-JdbcReportIT | Application Logs | text/plain  # AllureApplicationLogsListener
+DataJpaReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
+HamcrestReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
+HamcrestReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
+JUnitJupiterAssertionsReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
+JUnitJupiterAssertionsReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
+JdbcReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
 JdbcReportIT | DB Result | text/plain  # AllureRepositoryAspect
 JdbcReportIT | SQL (шаблон) | text/plain  # AllureJdbcInstrumentation
 JdbcReportIT | SQL Query | text/plain  # AllureDataSourceListener
-JdbcReportIT | Свойства | text/plain  # AllureConfigurationListener
-KafkaListenerReportIT | Application Logs | text/plain  # AllureApplicationLogsListener
-KafkaListenerReportIT | Значение сообщения | application/json  # AllureKafkaSteps (притти-JSON value)
-KafkaListenerReportIT | Отправленное сообщение | text/plain  # AllureKafkaProducerInstrumentation
-KafkaListenerReportIT | Принятые сообщения | text/plain  # AllureKafkaConsumerInstrumentation
-KafkaListenerReportIT | Свойства | text/plain  # AllureConfigurationListener
-KafkaReportIT | Application Logs | text/plain  # AllureApplicationLogsListener
-KafkaReportIT | Значение сообщения | application/json  # AllureKafkaSteps (притти-JSON value)
-KafkaReportIT | Отправленное сообщение | text/plain  # AllureKafkaProducerInstrumentation
-KafkaReportIT | Принятые сообщения | text/plain  # AllureKafkaConsumerInstrumentation
-KafkaReportIT | Свойства | text/plain  # AllureConfigurationListener
-LiquibaseReportIT | Application Logs | text/plain  # AllureApplicationLogsListener
-LiquibaseReportIT | Changeset | text/plain  # AllureLiquibaseInstrumentation
-LiquibaseReportIT | SQL Query | text/plain  # AllureDataSourceListener
-LiquibaseReportIT | Применённые миграции | text/plain  # AllureLiquibaseInstrumentation
-LiquibaseReportIT | Свойства | text/plain  # AllureConfigurationListener
-MockMvcReportIT | Application Logs | text/plain  # AllureApplicationLogsListener
-MockMvcReportIT | HTTP Exception | text/plain  # AllureMockMvcResultHandler
-MockMvcReportIT | HTTP Request Body | application/json  # AllureMockMvcResultHandler
-MockMvcReportIT | HTTP Request | text/plain  # AllureMockMvcResultHandler
-MockMvcReportIT | HTTP Response Body | application/json  # AllureMockMvcResultHandler
-MockMvcReportIT | HTTP Response | text/plain  # AllureMockMvcResultHandler
-MockMvcReportIT | Свойства | text/plain  # AllureConfigurationListener
-MockMvcStandaloneReportIT | Application Logs | text/plain  # AllureApplicationLogsListener
-MockMvcStandaloneReportIT | HTTP Request | text/plain  # AllureMockMvcInstrumentation
-MockMvcStandaloneReportIT | HTTP Response Body | application/json  # AllureMockMvcInstrumentation
-MockMvcStandaloneReportIT | HTTP Response | text/plain  # AllureMockMvcInstrumentation
-MockMvcStandaloneReportIT | Свойства | text/plain  # AllureConfigurationListener
-ReportSmokeIT | Application Logs | text/plain  # AllureApplicationLogsListener
-ReportSmokeIT | Свойства | text/plain  # AllureConfigurationListener
-RestAssuredReportIT | Application Logs | text/plain  # AllureApplicationLogsListener
-RestAssuredReportIT | HTTP Request Body | application/json  # AllureRestAssuredFilter
-RestAssuredReportIT | HTTP Request | text/plain  # AllureRestAssuredFilter
-RestAssuredReportIT | HTTP Response Body | application/json  # AllureRestAssuredFilter
-RestAssuredReportIT | HTTP Response | text/plain  # AllureRestAssuredFilter
-RestAssuredReportIT | Свойства | text/plain  # AllureConfigurationListener
-RestClientReportIT | Application Logs | text/plain  # AllureApplicationLogsListener
-RestClientReportIT | HTTP Request Body | application/json  # AllureRestClientInstrumentation
-RestClientReportIT | HTTP Request | text/plain  # AllureRestClientInstrumentation
-RestClientReportIT | HTTP Response Body | application/json  # AllureRestClientInstrumentation
-RestClientReportIT | HTTP Response | text/plain  # AllureRestClientInstrumentation
-RestClientReportIT | Свойства | text/plain  # AllureConfigurationListener
-RestTemplateReportIT | Application Logs | text/plain  # AllureApplicationLogsListener
-RestTemplateReportIT | HTTP Request Body | application/json  # AllureRestTemplateInterceptor
-RestTemplateReportIT | HTTP Request | text/plain  # AllureRestTemplateInterceptor
-RestTemplateReportIT | HTTP Response Body | application/json  # AllureRestTemplateInterceptor
-RestTemplateReportIT | HTTP Response | text/plain  # AllureRestTemplateInterceptor
-RestTemplateReportIT | Свойства | text/plain  # AllureConfigurationListener
-SpringAssertionsReportIT | Application Logs | text/plain  # AllureApplicationLogsListener
-SpringAssertionsReportIT | Свойства | text/plain  # AllureConfigurationListener
-WebTestClientReportIT | Application Logs | text/plain  # AllureApplicationLogsListener
-WebTestClientReportIT | HTTP Request Body | application/json  # AllureWebTestClientLogger
-WebTestClientReportIT | HTTP Request | text/plain  # AllureWebTestClientLogger
-WebTestClientReportIT | HTTP Response Body | application/json  # AllureWebTestClientLogger
-WebTestClientReportIT | HTTP Response | text/plain  # AllureWebTestClientLogger
-WebTestClientReportIT | Свойства | text/plain  # AllureConfigurationListener
-WireMockReportIT | Application Logs | text/plain  # AllureApplicationLogsListener
-WireMockReportIT | Near miss (почему не сматчилось) | text/plain  # AllureWireMockSteps (near-miss)
-WireMockReportIT | WireMock Request Body | application/json  # AllureWireMockSteps
+JdbcReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
+KafkaListenerReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
+KafkaListenerReportIT | Значение сообщения | application/json  ×2  # AllureKafkaSteps (притти-JSON value)
+KafkaListenerReportIT | Отправленное сообщение | text/plain  ×1  # AllureKafkaProducerInstrumentation
+KafkaListenerReportIT | Принятые сообщения | text/plain  ×1  # AllureKafkaConsumerInstrumentation
+KafkaListenerReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
+KafkaReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
+KafkaReportIT | Значение сообщения | application/json  ×2  # AllureKafkaSteps (притти-JSON value)
+KafkaReportIT | Отправленное сообщение | text/plain  ×1  # AllureKafkaProducerInstrumentation
+KafkaReportIT | Принятые сообщения | text/plain  ×1  # AllureKafkaConsumerInstrumentation
+KafkaReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
+LiquibaseReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
+LiquibaseReportIT | Changeset | text/plain  ×1  # AllureLiquibaseInstrumentation
+LiquibaseReportIT | SQL Query | text/plain  ×16  # AllureDataSourceListener
+LiquibaseReportIT | Применённые миграции | text/plain  ×1  # AllureLiquibaseInstrumentation
+LiquibaseReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
+MockMvcReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
+MockMvcReportIT | HTTP Exception | text/plain  ×1  # AllureMockMvcResultHandler
+MockMvcReportIT | HTTP Request Body | application/json  ×1  # AllureMockMvcResultHandler
+MockMvcReportIT | HTTP Request | text/plain  ×4  # AllureMockMvcResultHandler
+MockMvcReportIT | HTTP Response Body | application/json  ×3  # AllureMockMvcResultHandler
+MockMvcReportIT | HTTP Response | text/plain  ×4  # AllureMockMvcResultHandler
+MockMvcReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
+MockMvcStandaloneReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
+MockMvcStandaloneReportIT | HTTP Request | text/plain  ×1  # AllureMockMvcInstrumentation
+MockMvcStandaloneReportIT | HTTP Response Body | application/json  ×1  # AllureMockMvcInstrumentation
+MockMvcStandaloneReportIT | HTTP Response | text/plain  ×1  # AllureMockMvcInstrumentation
+MockMvcStandaloneReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
+ReportSmokeIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
+ReportSmokeIT | Свойства | text/plain  ×1  # AllureConfigurationListener
+RestAssuredReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
+RestAssuredReportIT | HTTP Request Body | application/json  ×1  # AllureRestAssuredFilter
+RestAssuredReportIT | HTTP Request | text/plain  ×6  # AllureRestAssuredFilter
+RestAssuredReportIT | HTTP Response Body | application/json  ×6  # AllureRestAssuredFilter
+RestAssuredReportIT | HTTP Response | text/plain  ×6  # AllureRestAssuredFilter
+RestAssuredReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
+RestClientReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
+RestClientReportIT | HTTP Request Body | application/json  ×1  # AllureRestClientInstrumentation
+RestClientReportIT | HTTP Request | text/plain  ×1  # AllureRestClientInstrumentation
+RestClientReportIT | HTTP Response Body | application/json  ×1  # AllureRestClientInstrumentation
+RestClientReportIT | HTTP Response | text/plain  ×1  # AllureRestClientInstrumentation
+RestClientReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
+RestTemplateReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
+RestTemplateReportIT | HTTP Request Body | application/json  ×1  # AllureRestTemplateInterceptor
+RestTemplateReportIT | HTTP Request | text/plain  ×1  # AllureRestTemplateInterceptor
+RestTemplateReportIT | HTTP Response Body | application/json  ×1  # AllureRestTemplateInterceptor
+RestTemplateReportIT | HTTP Response | text/plain  ×1  # AllureRestTemplateInterceptor
+RestTemplateReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
+SpringAssertionsReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
+SpringAssertionsReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
+WebTestClientReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
+WebTestClientReportIT | HTTP Request Body | application/json  ×1  # AllureWebTestClientLogger
+WebTestClientReportIT | HTTP Request | text/plain  ×1  # AllureWebTestClientLogger
+WebTestClientReportIT | HTTP Response Body | application/json  ×1  # AllureWebTestClientLogger
+WebTestClientReportIT | HTTP Response | text/plain  ×1  # AllureWebTestClientLogger
+WebTestClientReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
+WireMockReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
+WireMockReportIT | Near miss (почему не сматчилось) | text/plain  ×3  # AllureWireMockSteps (near-miss)
+WireMockReportIT | WireMock Request Body | application/json  ×1  # AllureWireMockSteps
 WireMockReportIT | WireMock Request | text/plain  # AllureWireMockSteps
 WireMockReportIT | WireMock Response Body | application/json  # AllureWireMockSteps
 WireMockReportIT | WireMock Response | text/plain  # AllureWireMockSteps
 WireMockReportIT | WireMock Stub | application/json  # AllureWireMockSteps
-WireMockReportIT | Свойства | text/plain  # AllureConfigurationListener
-WireMockReportIT | Условие проверки | text/plain  # AllureWireMockSteps
+WireMockReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
+WireMockReportIT | Условие проверки | text/plain  ×2  # AllureWireMockSteps
