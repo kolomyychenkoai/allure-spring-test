@@ -54,7 +54,7 @@ DataJpaReportIT | Проверка: значение <V> — isInstanceOf <V>  �
 DataJpaReportIT | Проверка: значение <V> — isPresent  ×1  # AllureAssertJInstrumentation
 HamcrestReportIT | Конфиги приложения  ×1  # AllureConfigurationListener
 HamcrestReportIT | Проверка: <REASON>: значение <V>, ожидалось <MATCHER>  ×2  # AllureHamcrestInstrumentation
-HamcrestReportIT | Проверка: значение <V>, ожидалось <MATCHER>  ×2  # AllureHamcrestInstrumentation
+HamcrestReportIT | Проверка: значение <V>, ожидалось <MATCHER>  # AllureHamcrestInstrumentation
 JUnitJupiterAssertionsReportIT | Конфиги приложения  ×1  # AllureConfigurationListener
 JUnitJupiterAssertionsReportIT | Проверка: laptop ≠ phone  ×1  # AllureJUnitJupiterAssertionsInstrumentation
 JUnitJupiterAssertionsReportIT | Проверка: без исключения  ×1  # AllureJUnitJupiterAssertionsInstrumentation

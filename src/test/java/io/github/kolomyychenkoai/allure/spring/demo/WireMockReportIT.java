@@ -130,8 +130,10 @@ class WireMockReportIT {
         // здесь, чтобы не плодить отдельный пустой тест-кейс в отчёте
         CurrentReport.check(CurrentReport.anyResultFileContains("Запрос к заглушке: GET /api/prices"),
                 () -> "нет шага запроса GET /api/prices (request-листенер не сработал?)");
-        CurrentReport.check(CurrentReport.anyResultFileContains("WireMock Request"),
-                () -> "нет вложения WireMock Request");
+        // Ищем ТОЧНОЕ поле JSON, а не подстроку: «WireMock Request» как подстрока матчится
+        // и на «WireMock Request Body», поэтому пропажа мета-вложения проходила незамеченной.
+        CurrentReport.check(CurrentReport.anyResultFileContains("\"name\":\"WireMock Request\""),
+                () -> "нет мета-вложения WireMock Request (тело Body его больше не прикрывает)");
     }
 
     @Test
