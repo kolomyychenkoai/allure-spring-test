@@ -27,6 +27,16 @@ class AllureMockMvcAutoConfigurationTest {
     }
 
     @Test
+    @DisplayName("СЦЕНАРИЙ BOOT 4: нет MockMvcBuilderCustomizer → кастомайзер не регистрируется")
+    void customizerAbsentWithoutBootTestModule() {
+        // В Boot 4 этот класс уехал в отдельный артефакт (spring-boot-webmvc-test). Потребитель,
+        // не добавивший его, получит МОЛЧА выключенный автоконфиг. FilteredClassLoader
+        // воспроизводит будущую реальность точно и УЖЕ СЕЙЧАС, на Boot 3.5.8.
+        runner.withClassLoader(new FilteredClassLoader(MockMvcBuilderCustomizer.class))
+                .run(ctx -> assertThat(ctx).doesNotHaveBean(MockMvcBuilderCustomizer.class));
+    }
+
+    @Test
     @DisplayName("без MockMvc (ResultHandler) на classpath: кастомайзер НЕ регистрируется")
     void customizerAbsentWithoutResultHandler() {
         // потребитель без spring-test MockMvc не должен получить бин (иначе NoClassDefFoundError).

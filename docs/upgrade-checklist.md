@@ -1,0 +1,86 @@
+# Чек-лист апгрейда: Java 21 → 25, Spring Boot 3.5.8 → 4.1.0
+
+Сетка сигналов построена ДО апгрейда (см. `docs/acceptance-report-standard.md`, «Уровень C»).
+Этот файл — порядок действий в самой ветке апгрейда и список того, что заведомо придётся
+править руками.
+
+## Правило: одна переменная за раз
+
+Boot 4.1 собран под JDK 17, поэтому оси разделимы. Разделяй — иначе на любое расхождение будет
+два подозреваемых, и разбор подорожает вдвое.
+
+| Фаза | Что меняем | Что доказывает |
+|---|---|---|
+| 1 | Java 21 → 25, Boot остаётся 3.5.8 | риски JDK: формат классов vs byte-buddy, self-attach (JEP 451), `sun.misc.Unsafe`, работа RestAssured (Groovy) и WireMock, `@EmbeddedKafka` |
+| 2 | Boot 3.5.8 → 4.1.0, Java остаётся 21 | риски Spring: переезд кастомайзеров, Hibernate 7, Liquibase 5, Kafka 4, JUnit 6 |
+| 3 | обе оси вместе | взаимодействия (RestAssured 6 + Groovy 5 на JDK 25) |
+
+Каждая фаза заканчивается полным `mvn clean test` — включая второй прогон инвентаря.
+
+## Заведомо ручные правки фазы 2
+
+Это НЕ поломки, а известные переезды. Проверено по реальным BOM и jar-ам Boot 4.1.0:
+
+- **`pom.xml`:**
+  - `rest-assured` → **6.0.1** (пин уже есть; 5.5.6 собран на Groovy 4, а Boot 4.1 тянет
+    groovy-bom 5 → транзитивный Groovy будет переуправлен). Внутренние классы, за которые
+    держится наш перехват (`ValidatableResponseOptionsImpl`, `ResponseAwareMatcher`),
+    в 6.0.1 на месте — проверено по jar;
+  - `spring-boot-starter-aop` → **`spring-boot-starter-aspectj`** (артефакт переименован);
+  - добавить `spring-boot-webmvc-test` и `spring-boot-webtestclient` (scope `provided`);
+  - `spring-boot-test-autoconfigure` в 4.1 — почти пустой артефакт, нужных нам классов там
+    больше нет; зависимость можно убрать.
+- **Два импорта в main:**
+  - `rest/AllureMockMvcAutoConfiguration` → `org.springframework.boot.webmvc.test.autoconfigure.MockMvcBuilderCustomizer`;
+  - `rest/AllureWebTestClientAutoConfiguration` → `org.springframework.boot.webtestclient.autoconfigure.WebTestClientBuilderCustomizer`;
+  - те же импорты — в тестах `autoconfig/*`.
+- **Канарейку править НЕ нужно** — `InstrumentationApiCanaryTest` знает оба имени и на Boot 4
+  зеленеет по новому. Если её всё же пришлось править — значит появилось ТРЕТЬЕ имя, добавь
+  его в список.
+- **Surefire** поднять под JUnit Platform 6 и проверить, что `junit-platform.properties`
+  (случайный порядок методов) всё ещё действует — иначе рандомизация тихо отключится.
+
+## Порядок чтения сигналов
+
+Сигналы срабатывают в этом порядке, и разбирать их надо так же — сверху вниз:
+
+1. **Модель Maven / компиляция.** Падает первой, чинится механически (см. список выше).
+2. **Канарейки** (`InstrumentationApiCanaryTest`) — «API чужой библиотеки уехал», точечно,
+   с именем матчера и артефакта.
+3. **`target/instrumentation-diagnostics/jvm-*.txt`** — `installed=false` (self-attach!) или
+   ненулевые сбои трансформации. Проверяется автоматически, вторым прогоном.
+4. **WARNING «[Allure Spring] модуль не активирован: …»** — фича у потребителя есть, крючка нет.
+5. **Инвентарь** (`ReportInventoryCheck`) — «шаг исчез, а ошибок не было». Самый частый исход
+   апгрейда: матчер просто перестал совпадать.
+
+## Эталон инвентаря придётся обновлять — и это нормально
+
+Заранее известные источники законных расхождений:
+
+- **Hibernate 7.4** может изменить форму генерируемого SQL (кавычки и квалификация схемой в
+  именах таблиц). Кавычки наш `tableName()` съедает, схему — нет: виды `SQL SELECT widget`
+  могут стать `SQL SELECT public.widget`.
+- **Liquibase 5** меняет служебный SQL (`DATABASECHANGELOG`/`LOCK`) — это отдельные виды.
+- **Kafka 4.x** — KRaft-only, проверить `@EmbeddedKafka` в `KafkaTestApp`/`KafkaListenerTestApp`.
+- **Кратность** видов у JPA может поехать вместе с формой SQL — маркеры `×N` пересеваются
+  `-Dinventory.counts=true`.
+
+Правило прежнее: сначала глазами, потом `-Dinventory.update=true`. Удаление видов требует ещё и
+`-Dinventory.remove=true` — красную сборку нельзя «чинить» сокращением сетки.
+
+## Чего проверить нельзя было заранее
+
+Форма SQL Hibernate 7.4 и служебного SQL Liquibase 5; работа RestAssured (Groovy) и
+WireMock 3.13.2 на JDK 25; `@EmbeddedKafka` на Kafka 4.x; реальная бинарная совместимость
+Allure с JUnit Platform 6. Всё это проверяется только запуском в соответствующей фазе.
+
+## Хвосты, решение по которым принимается в ветке апгрейда
+
+- `RestTemplate` объявлен deprecated в Spring Framework 7 (не удалён) — нужна политика по
+  предупреждениям для `rest/AllureRestTemplate*`.
+- `RestTestClient` (новый сервлетный клиент SF 7) — модуля под него нет. Это ОТДЕЛЬНАЯ фича
+  после апгрейда, а не его часть.
+- `sun.misc.Unsafe`: на JDK 25 — предупреждение, на JDK 26 — запрет. Локально стоит 26 —
+  не соблазняться проверить «заодно».
+- Координата `allure-junit5` с 2.35 переименована в `allure-jupiter` (старая — pom-relocation).
+  Переезд механический, но делать его лучше ОТДЕЛЬНЫМ коммитом до апгрейда: одна переменная за раз.

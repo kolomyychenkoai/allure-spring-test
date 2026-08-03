@@ -1,5 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.config;
 
+import io.github.kolomyychenkoai.allure.spring.internal.ActivationDiagnostics;
 import io.qameta.allure.Allure;
 import org.springframework.core.Ordered;
 import org.springframework.core.env.ConfigurableEnvironment;
@@ -31,6 +32,14 @@ public class AllureConfigurationListener implements TestExecutionListener, Order
     @Override
     public int getOrder() {
         return Ordered.HIGHEST_PRECEDENCE;
+    }
+
+    @Override
+    public void beforeTestClass(TestContext testContext) {
+        // Этот листенер регистрируется ВСЕГДА и не линкует опциональных типов — единственное
+        // место, откуда можно пожаловаться на модуль, который молча не активировался
+        // (автоконфиг в этом случае не выполняется и сказать ничего не может).
+        ActivationDiagnostics.reportOnce();
     }
 
     @Override

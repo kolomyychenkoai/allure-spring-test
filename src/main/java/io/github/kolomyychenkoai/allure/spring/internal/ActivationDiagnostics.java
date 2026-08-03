@@ -1,0 +1,76 @@
+package io.github.kolomyychenkoai.allure.spring.internal;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Predicate;
+
+/**
+ * Жалуется, когда модуль МОЛЧА не активировался: технология у потребителя есть, а нашего крючка
+ * нет. Типичная причина — переезд класса между мажорами Spring Boot: {@code @ConditionalOnClass}
+ * читается ASM-ом без загрузки класса, поэтому условие просто становится ложным и автоконфиг
+ * не применяется. Тесты при этом зелёные, а отчёт беднеет.
+ * <p>
+ * <b>Почему не в автоконфиге.</b> В этом сценарии автоконфиг НЕ ВЫПОЛНЯЕТСЯ по определению —
+ * пожаловаться он физически не может. Проверка живёт в {@code TestExecutionListener}, который
+ * регистрируется всегда и не линкует ни одного опционального типа (только строки через
+ * {@link ClassPresence}).
+ * <p>
+ * <b>Правило узкое:</b> «фичи нет вовсе» (например, тесты без MockMvc) — молчим, иначе WARNING
+ * будут в каждой сборке и их перестанут читать. Жалуемся только когда человек ОЖИДАЕТ шаги
+ * и не получит их. Один раз на JVM, с выключателем {@code -Dallure.spring.diagnostics=off}.
+ * Прогон не роняем никогда: библиотека диагностическая.
+ */
+public final class ActivationDiagnostics {
+
+    private static final String SWITCH = "allure.spring.diagnostics";
+    private static final AtomicBoolean REPORTED = new AtomicBoolean();
+
+    private ActivationDiagnostics() {
+    }
+
+    /**
+     * Проблемы активации. Чистая функция от «есть ли класс» — тестируется без classloader-фокусов.
+     *
+     * @param present          есть ли класс на classpath
+     * @param byteBuddyPresent доступен ли байткод-перехват (для MockMvc это второй канал)
+     */
+    public static List<String> problems(Predicate<String> present, boolean byteBuddyPresent) {
+        List<String> problems = new ArrayList<>();
+
+        boolean mockMvc = present.test("org.springframework.test.web.servlet.MockMvc");
+        boolean mockMvcHook = present.test("org.springframework.boot.test.autoconfigure.web.servlet.MockMvcBuilderCustomizer")
+                || present.test("org.springframework.boot.webmvc.test.autoconfigure.MockMvcBuilderCustomizer");
+        if (mockMvc && !mockMvcHook) {
+            problems.add("MockMvc есть на classpath, но MockMvcBuilderCustomizer не найден ни под одним "
+                    + "известным именем — авто-кастомайзер не зарегистрирован. "
+                    + (byteBuddyPresent
+                    ? "Пока держит байткод-перехват MockMvc.perform. "
+                    : "И байткод-перехват НЕДОСТУПЕН → HTTP-шаги MockMvc в отчёт НЕ ПОПАДУТ. ")
+                    + "Добавь в test-scope: spring-boot-webmvc-test (Boot 4.x) "
+                    + "или spring-boot-test-autoconfigure (Boot 3.x).");
+        }
+
+        boolean webTestClient = present.test("org.springframework.test.web.reactive.server.WebTestClient");
+        boolean webTestClientHook = present.test("org.springframework.boot.test.web.reactive.server.WebTestClientBuilderCustomizer")
+                || present.test("org.springframework.boot.webtestclient.autoconfigure.WebTestClientBuilderCustomizer");
+        if (webTestClient && !webTestClientHook) {
+            problems.add("WebTestClient есть на classpath, но WebTestClientBuilderCustomizer не найден "
+                    + "ни под одним известным именем — обмены WebTestClient в отчёт НЕ ПОПАДУТ "
+                    + "(байткод-фолбэка у этого модуля нет). Добавь в test-scope: "
+                    + "spring-boot-webtestclient (Boot 4.x).");
+        }
+        return problems;
+    }
+
+    /** Один раз на JVM, WARNING в логгер библиотеки; прогон не роняем. */
+    public static void reportOnce() {
+        if ("off".equalsIgnoreCase(System.getProperty(SWITCH)) || !REPORTED.compareAndSet(false, true)) {
+            return;
+        }
+        problems(ClassPresence::isPresent, ByteBuddyPresence.available()).forEach(problem ->
+                AllureInstrumentationLogger.logger().warning(
+                        "[Allure Spring] модуль не активирован: " + problem
+                                + " (заглушить: -D" + SWITCH + "=off)"));
+    }
+}

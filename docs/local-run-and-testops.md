@@ -259,3 +259,6 @@ git diff src/test/inventory/report-inventory.txt
 
 Библиотека собирается под Java 21. **Java 25 локально не установлена** (есть 17, 21 и 26) —
 для ветки апгрейда сначала `brew install openjdk@25`, затем `jenv add`.
+
+Порядок действий самой ветки апгрейда, известные ручные правки и то, что заведомо придётся
+пересевать в эталоне — в [`docs/upgrade-checklist.md`](upgrade-checklist.md).

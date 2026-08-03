@@ -41,10 +41,25 @@
         <spring-boot.version>3.5.8</spring-boot.version>
         <allure.version>2.25.0</allure.version>
         <allure-maven.version>2.12.0</allure-maven.version>
+        <!-- Версия ЯВНАЯ, не из Boot BOM: в spring-boot-dependencies 4.1 rest-assured больше
+             НЕ УПРАВЛЯЕТСЯ (в 3.5.8 был 5.5.6). Без пина ветка апгрейда падает на построении
+             модели Maven («version is missing») ЕЩЁ ДО компиляции — то есть раньше всех наших
+             сигналов, и разбираться будет не с чем. Значение равно тому, что даёт BOM 3.5.8,
+             поэтому здесь это no-op. ⚠️ В ветке апгрейда пина МАЛО: Boot 4.1 тянет groovy-bom 5,
+             а RA 5.5.6 собран на Groovy 4 → там нужна rest-assured 6.x. См. docs/upgrade-checklist.md. -->
+        <rest-assured.version>5.5.6</rest-assured.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <!-- НАШИ пины идут ПЕРВЫМИ: dependencyManagement разрешается сверху вниз, и первое
+                 совпадение побеждает. Переопределить версию из импортируемого BOM одноимённым
+                 свойством нельзя — свойства BOM вычисляются в его собственном контексте. -->
+            <dependency>
+                <groupId>io.rest-assured</groupId>
+                <artifactId>rest-assured</artifactId>
+                <version>${rest-assured.version}</version>
+            </dependency>
             <!-- Версии Spring/Logback/JUnit/AssertJ берём из Spring Boot BOM,
                  чтобы совпадать с тем, что уже есть у потребителя. -->
             <dependency>
@@ -246,6 +261,9 @@
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
+            <!-- ⚠️ В Boot 4.x этот артефакт ПЕРЕИМЕНОВАН в spring-boot-starter-aspectj: в ветке
+                 апгрейда будет второй «version is missing». Пинить версию бессмысленно (артефакта
+                 с таким именем там нет) — правка принадлежит ветке апгрейда. -->
             <artifactId>spring-boot-starter-aop</artifactId>
             <scope>test</scope>
         </dependency>

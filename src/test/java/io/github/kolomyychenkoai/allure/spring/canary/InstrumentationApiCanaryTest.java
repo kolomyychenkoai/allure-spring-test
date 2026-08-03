@@ -309,19 +309,57 @@ class InstrumentationApiCanaryTest {
                 "AbstractAssert.actual уехал → обнови @Advice.FieldValue в AllureAssertJInstrumentation");
     }
 
+    /** Известные имена MockMvcBuilderCustomizer: Boot 3.x → Boot 4.x. Порядок = порядок поиска. */
+    private static final String[] MOCKMVC_CUSTOMIZER = {
+            // Boot 3.x, артефакт spring-boot-test-autoconfigure
+            "org.springframework.boot.test.autoconfigure.web.servlet.MockMvcBuilderCustomizer",
+            // Boot 4.x, артефакт org.springframework.boot:spring-boot-webmvc-test
+            "org.springframework.boot.webmvc.test.autoconfigure.MockMvcBuilderCustomizer"};
+
+    private static final String[] WEBTESTCLIENT_CUSTOMIZER = {
+            // Boot 3.x, артефакт spring-boot-test-autoconfigure
+            "org.springframework.boot.test.web.reactive.server.WebTestClientBuilderCustomizer",
+            // Boot 4.x, артефакт org.springframework.boot:spring-boot-webtestclient
+            "org.springframework.boot.webtestclient.autoconfigure.WebTestClientBuilderCustomizer"};
+
     @Test
-    @DisplayName("Spring Boot test-autoconfigure: кастомайзеры MockMvc и WebTestClient (@ConditionalOnClass)")
+    @DisplayName("Spring Boot: кастомайзеры MockMvc/WebTestClient есть под СТАРЫМ или НОВЫМ именем")
     void springBootTestCustomizers() {
-        // Гейты @ConditionalOnClass читаются ASM-ом БЕЗ загрузки класса: если класс уехал, условие
-        // просто false — автоконфиг молча не применяется, HTTP-шаги исчезают без единого сообщения.
-        // Spring Boot 4 разбивает spring-boot-test-autoconfigure на модули по технологиям — это
-        // первый кандидат на переезд при апгрейде.
-        require(classPresent("org.springframework.boot.test.autoconfigure.web.servlet.MockMvcBuilderCustomizer"),
-                "MockMvcBuilderCustomizer уехал → обнови @ConditionalOnClass в AllureMockMvcAutoConfiguration");
-        require(classPresent("org.springframework.boot.test.web.reactive.server.WebTestClientBuilderCustomizer"),
-                "WebTestClientBuilderCustomizer уехал → обнови @ConditionalOnClass в AllureWebTestClientAutoConfiguration");
+        // Гейт @ConditionalOnClass читается ASM-ом БЕЗ загрузки класса: класс уехал → условие
+        // просто false → автоконфиг молча не применяется. Канарейка обязана быть полезной и ДО,
+        // и ПОСЛЕ апгрейда, поэтому проверяет НАБОР известных имён, а не одно.
+        require(anyPresent(MOCKMVC_CUSTOMIZER),
+                "MockMvcBuilderCustomizer не найден НИ ПОД ОДНИМ известным именем — @ConditionalOnClass "
+                        + "в AllureMockMvcAutoConfiguration ложен, кастомайзер МОЛЧА не регистрируется "
+                        + "(остаётся только байткод-канал MockMvc.perform).\n  Boot 3.x: " + MOCKMVC_CUSTOMIZER[0]
+                        + "\n  Boot 4.x: " + MOCKMVC_CUSTOMIZER[1] + "  [spring-boot-webmvc-test]");
+        require(anyPresent(WEBTESTCLIENT_CUSTOMIZER),
+                "WebTestClientBuilderCustomizer не найден НИ ПОД ОДНИМ известным именем — у WebTestClient "
+                        + "байткод-фолбэка НЕТ, шаги исчезнут ПОЛНОСТЬЮ.\n  Boot 3.x: " + WEBTESTCLIENT_CUSTOMIZER[0]
+                        + "\n  Boot 4.x: " + WEBTESTCLIENT_CUSTOMIZER[1] + "  [spring-boot-webtestclient]");
+
+        // Список имён — СТРОКИ, компилятор их не проверяет. Сверяем со ЗНАЧЕНИЕМ типа, против
+        // которого реально скомпилирован main: если main переедет на имя вне списка — красный
+        // здесь, а не «странно зелёная канарейка при мёртвом модуле».
+        require(java.util.List.of(MOCKMVC_CUSTOMIZER).contains(
+                        org.springframework.boot.test.autoconfigure.web.servlet.MockMvcBuilderCustomizer.class.getName()),
+                "AllureMockMvcAutoConfiguration скомпилирован против имени вне списка — обнови MOCKMVC_CUSTOMIZER");
+        require(java.util.List.of(WEBTESTCLIENT_CUSTOMIZER).contains(
+                        org.springframework.boot.test.web.reactive.server.WebTestClientBuilderCustomizer.class.getName()),
+                "AllureWebTestClientAutoConfiguration скомпилирован против имени вне списка — обнови WEBTESTCLIENT_CUSTOMIZER");
+
         require(classPresent("org.springframework.test.web.servlet.ResultHandler"),
                 "ResultHandler уехал → AllureMockMvcAutoConfiguration вешает AllureMockMvcResultHandler через него");
+    }
+
+    /** Есть ли класс хотя бы под одним из известных имён (класс переезжает между мажорами). */
+    private static boolean anyPresent(String... classNames) {
+        for (String name : classNames) {
+            if (classPresent(name)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Test
