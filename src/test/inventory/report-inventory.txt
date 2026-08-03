@@ -60,6 +60,9 @@ JUnitJupiterAssertionsReportIT | Проверка: значение <V> не nul
 JUnitJupiterAssertionsReportIT | Проверка: значение <V> — экземпляр <V>  # AllureJUnitJupiterAssertionsInstrumentation
 JUnitJupiterAssertionsReportIT | Проверка: количество положительно — верно  # AllureJUnitJupiterAssertionsInstrumentation
 JUnitJupiterAssertionsReportIT | Проверка: ожидалось <V> = <V>  # AllureJUnitJupiterAssertionsInstrumentation
+JdbcReportIT | DB JdbcTemplate.batchUpdate  # AllureJdbcInstrumentation
+JdbcReportIT | DB JdbcTemplate.batchUpdate ▸ SQL INSERT widget  # AllureDataSourceListener (шаг на каждый запрос пакета)
+JdbcReportIT | DB JdbcTemplate.batchUpdate ▸ SQL UPDATE widget  # AllureDataSourceListener (шаг на каждый запрос пакета)
 JdbcReportIT | DB JdbcTemplate.queryForObject  # AllureJdbcInstrumentation
 JdbcReportIT | DB JdbcTemplate.queryForObject ▸ SQL SELECT widget  # AllureDataSourceListener (вложен в «DB JdbcTemplate.queryForObject»)
 JdbcReportIT | DB JdbcTemplate.update  # AllureJdbcInstrumentation

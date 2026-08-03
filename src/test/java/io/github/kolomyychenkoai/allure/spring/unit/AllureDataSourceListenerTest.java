@@ -85,6 +85,51 @@ class AllureDataSourceListenerTest {
     }
 
     @Test
+    @DisplayName("пакет из НЕСКОЛЬКИХ запросов даёт шаг НА КАЖДЫЙ, а не только на первый")
+    void logsEveryQueryOfBatch() {
+        // JdbcTemplate.batchUpdate(String...) и multi-statement execute отдают несколько QueryInfo;
+        // раньше брался queryInfoList.get(0), остальные молча исчезали из отчёта
+        TestResult result = allure.run("sql-batch", () -> listener.afterQuery(exec(), List.of(
+                query("insert into widget (name) values ('b1')"),
+                query("update widget set name='b2' where name='b1'"),
+                query("delete from widget where name='b2'"))));
+
+        assertThat(allure.hasStep(result, "SQL INSERT widget")).isTrue();
+        assertThat(allure.hasStep(result, "SQL UPDATE widget")).isTrue();
+        assertThat(allure.hasStep(result, "SQL DELETE widget")).isTrue();
+    }
+
+    @Test
+    @DisplayName("у каждого шага пакета СВОЙ текст запроса и номер в пакете")
+    void eachBatchStepCarriesItsOwnQuery() {
+        TestResult result = allure.run("sql-batch-bodies", () -> listener.afterQuery(exec(), List.of(
+                query("insert into widget (name) values ('b1')"),
+                query("delete from widget where name='b1'"))));
+
+        List<String> bodies = result.getSteps().stream()
+                .flatMap(step -> step.getAttachments().stream())
+                .map(att -> allure.attachmentContent(att).orElse(""))
+                .toList();
+        assertThat(bodies).anyMatch(body -> body.contains("insert into widget") && body.contains("запрос 1 из 2"));
+        assertThat(bodies).anyMatch(body -> body.contains("delete from widget") && body.contains("запрос 2 из 2"));
+    }
+
+    @Test
+    @DisplayName("огромный пакет не раздувает отчёт: шагов не больше потолка, остаток назван")
+    void hugeBatchIsCapped() {
+        List<QueryInfo> huge = java.util.stream.IntStream.range(0, 120)
+                .mapToObj(i -> query("insert into widget (name) values ('n" + i + "')"))
+                .toList();
+
+        TestResult result = allure.run("sql-batch-huge", () -> listener.afterQuery(exec(), huge));
+
+        assertThat(result.getSteps()).hasSizeLessThanOrEqualTo(50);
+        assertThat(result.getSteps().stream().flatMap(s -> s.getAttachments().stream())
+                .map(att -> allure.attachmentContent(att).orElse(""))
+                .anyMatch(body -> body.contains("из 120"))).isTrue();
+    }
+
+    @Test
     @DisplayName("SELECT: в имени шага операция и таблица")
     void logsSelect() {
         TestResult result = allure.run("sql-select", () ->

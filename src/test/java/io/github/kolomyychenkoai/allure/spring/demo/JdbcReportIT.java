@@ -81,6 +81,22 @@ class JdbcReportIT {
                 () -> "в шаге NamedParameter должен быть именованный SQL (:n): " + CurrentReport.attachmentContent("SQL (шаблон)"));
     }
 
+    @Test
+    @DisplayName("batchUpdate: КАЖДЫЙ запрос пакета даёт свой шаг SQL, а не только первый")
+    void batchUpdateLogsEveryStatement() {
+        jdbc.batchUpdate("insert into widget(name) values ('batch-1')",
+                "update widget set name='batch-2' where name='batch-1'");
+
+        List<String> steps = CurrentReport.stepNames();
+        CurrentReport.check(steps.stream().anyMatch("DB JdbcTemplate.batchUpdate"::equals),
+                () -> "нет шага DB JdbcTemplate.batchUpdate: " + steps);
+        CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("SQL INSERT") && n.contains("widget")),
+                () -> "нет SQL INSERT из пакета: " + steps);
+        // второй запрос пакета раньше молча терялся: брался queryInfoList.get(0)
+        CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("SQL UPDATE") && n.contains("widget")),
+                () -> "второй запрос пакета потерян: " + steps);
+    }
+
     /** Содержимое вложения «DB Result» КОНКРЕТНОГО шага (общий хелпер берёт первый по имени). */
     private static Optional<String> dbResultOfStep(String stepName) {
         return CurrentReport.steps().stream()

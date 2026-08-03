@@ -41,6 +41,13 @@ import java.util.regex.Pattern;
  */
 public class AllureDataSourceListener implements QueryExecutionListener {
 
+    /**
+     * Потолок шагов на один пакет. Батч Hibernate может содержать тысячи запросов — без
+     * ограничителя отчёт у потребителя раздувался бы до нечитаемого. Остаток назван в тексте
+     * вложения, а не отброшен молча.
+     */
+    private static final int MAX_BATCH_STEPS = 50;
+
     /** Предкомпилированные шаблоны имени таблицы по операции (компиляция — один раз, не на запрос). */
     private static final Map<String, Pattern> TABLE_PATTERNS = Map.of(
             "INSERT", Pattern.compile("(?i)insert\\s+into\\s+([\\w.\"`]+)"),
@@ -61,27 +68,48 @@ public class AllureDataSourceListener implements QueryExecutionListener {
                     || !Allure.getLifecycle().getCurrentTestCase().isPresent()) {
                 return;
             }
-            QueryInfo first = queryInfoList.get(0);
-            String body = renderQuery(first, execInfo);
-            Allure.step(stepName(first.getQuery()), step -> {
-                Allure.addAttachment("SQL Query", "text/plain", body);
-            });
+            // Шаг НА КАЖДЫЙ запрос пакета: batchUpdate(String...) и multi-statement execute отдают
+            // несколько QueryInfo, и раньше все, кроме первого, молча исчезали из отчёта.
+            // Шаг на запрос (а не один общий) — потому что имя «SQL <OP> <таблица>» и есть
+            // единица, по которой человек читает отчёт, а инвентарь стережёт виды.
+            int total = queryInfoList.size();
+            int shown = Math.min(total, MAX_BATCH_STEPS);
+            for (int i = 0; i < shown; i++) {
+                QueryInfo query = queryInfoList.get(i);
+                String body = renderQuery(query, execInfo, i, total, shown < total);
+                Allure.step(stepName(query.getQuery()), step -> {
+                    Allure.addAttachment("SQL Query", "text/plain", body);
+                });
+            }
         } catch (Throwable t) {
             AllureInstrumentationLogger.warn("DbSqlListener", t); // не роняем тест, сбой видно на WARNING
         }
     }
 
-    /** Текст запроса с подставленными значениями + короткая строка «успех · время». */
-    private static String renderQuery(QueryInfo query, ExecutionInfo exec) {
+    /**
+     * Текст запроса с подставленными значениями + место в пакете + строка «успех · время».
+     * <p>
+     * Про время честная оговорка: {@code getElapsedTime()} измерен на ВЕСЬ пакет, а не на этот
+     * запрос — иначе отчёт врал бы числом (п. «достоверность значений» стандарта приёмки).
+     */
+    private static String renderQuery(QueryInfo query, ExecutionInfo exec, int index, int total, boolean capped) {
         List<List<ParameterSetOperation>> rows = query.getParametersList();
         StringBuilder sb = new StringBuilder(inlineParams(query.getQuery(), firstRow(rows)));
         if (rows != null && rows.size() > 1) {
             sb.append("\n(показан первый ряд из ").append(rows.size()).append(" — пакетная вставка)");
         }
+        if (total > 1) {
+            sb.append("\nзапрос ").append(index + 1).append(" из ").append(total).append(" в пакете");
+            if (capped) {
+                sb.append("\n(в отчёт попали первые ").append(MAX_BATCH_STEPS).append(" из ").append(total)
+                        .append(" — остальные не показаны, чтобы не раздувать отчёт)");
+            }
+        }
         sb.append("\n\n");
         sb.append(exec != null && exec.isSuccess() ? "✓ успешно" : "✗ ошибка");
         if (exec != null) {
-            sb.append(" · ").append(exec.getElapsedTime()).append(" мс");
+            sb.append(" · ").append(exec.getElapsedTime()).append(" мс")
+                    .append(total > 1 ? " (на весь пакет)" : "");
         }
         return sb.toString();
     }
