@@ -133,6 +133,21 @@ class InstrumentationFailuresTest {
     }
 
     @Test
+    @DisplayName("подавленных сбоев стало на порядок больше — красный (шумовой пол тоже сигнал)")
+    void suppressionCeilingIsGuarded(@TempDir Path dir) throws Exception {
+        // подавление узкое, но если ту же причину начнут давать и абстрактные предки AssertJ
+        // (сейчас они вплетаются успешно), картина изменится принципиально при зелёном гейте
+        StringBuilder dump = new StringBuilder("installed=true\n");
+        for (int i = 0; i < 200; i++) {
+            dump.append("failure: org.assertj.core.api.Type").append(i)
+                    .append(" → IllegalStateException: Cannot catch exception during constructor call\n");
+        }
+        dump(dir, "jvm-1.txt", dump.toString());
+
+        assertThat(report(dir)).contains("подавленных сбоев 200").contains("ADR 0001");
+    }
+
+    @Test
     @DisplayName("несколько JVM: агент установлен хотя бы в одной, сбои — объединением")
     void mergesDumpsFromSeveralJvms(@TempDir Path dir) throws Exception {
         // JVM инвентаря и форки surefire пишут свои дампы; «последний закрывшийся» не должен

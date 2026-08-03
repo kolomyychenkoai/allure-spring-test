@@ -52,6 +52,15 @@ final class InstrumentationFailures {
     private static final String ASSERTJ_TYPES = "org.assertj.core.api.";
     private static final String CONSTRUCTOR_ADVICE = "Cannot catch exception during constructor call";
 
+    /**
+     * Потолок ожидаемого шума. Сейчас подавляется ~47 сбоев (по числу листовых ассертов, что
+     * успевают загрузиться). Само подавление узкое, но КОЛИЧЕСТВО тоже сигнал: если после
+     * апгрейда ту же причину начнут давать и абстрактные предки (которые сегодня вплетаются
+     * успешно), гейт остался бы зелёным на принципиально другой картине. Потолок щедрый —
+     * ловит порядковый скачок, а не дрожание порядка загрузки классов.
+     */
+    private static final int SUPPRESSED_CEILING = 120;
+
     private static final String ARROW = " → ";
 
     private InstrumentationFailures() {
@@ -67,6 +76,7 @@ final class InstrumentationFailures {
                     + "  Проверь SPI META-INF/services/org.junit.platform.launcher.LauncherSessionListener.\n";
         }
         boolean installed = false;
+        int suppressed = 0;
         Set<String> failures = new LinkedHashSet<>();
         for (Path dump : dumps) {
             List<String> lines;
@@ -76,19 +86,25 @@ final class InstrumentationFailures {
                 return "СБОИ ПЕРЕХВАТА: дамп " + dump + " не читается — " + unreadable + "\n";
             }
             installed |= lines.contains("installed=true");
-            lines.stream()
+            List<String> all = lines.stream()
                     .filter(line -> line.startsWith("failure: "))
                     .map(line -> line.substring("failure: ".length()))
-                    .filter(InstrumentationFailures::ours)
-                    .forEach(failures::add);
+                    .toList();
+            all.stream().filter(InstrumentationFailures::ours).forEach(failures::add);
+            suppressed += (int) all.stream().filter(failure -> !ours(failure)).count();
         }
-        if (installed && failures.isEmpty()) {
+        if (installed && failures.isEmpty() && suppressed <= SUPPRESSED_CEILING) {
             return null;
         }
         StringBuilder out = new StringBuilder("СБОИ ПЕРЕХВАТА (байткод-агент):\n");
         if (!installed) {
             out.append("  ✗ агент НЕ установлен НИ В ОДНОЙ JVM — весь байткод-слой мёртв.\n")
                     .append("    Обычно это запрет self-attach: нужен -XX:+EnableDynamicAgentLoading (JEP 451).\n");
+        }
+        if (suppressed > SUPPRESSED_CEILING) {
+            out.append("  ✗ ожидаемых-подавленных сбоев ").append(suppressed)
+                    .append(", а потолок ").append(SUPPRESSED_CEILING).append(" — картина изменилась.\n")
+                    .append("    Перечитай ADR 0001: компромисс с конструкторами мог перестать быть узким.\n");
         }
         failures.forEach(failure -> out.append("  ✗ ").append(failure).append('\n'));
         if (!failures.isEmpty()) {
