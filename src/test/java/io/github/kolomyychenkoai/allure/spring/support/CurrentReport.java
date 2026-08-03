@@ -127,6 +127,33 @@ public final class CurrentReport {
         }
     }
 
+    /**
+     * Содержимое вложения, ВЛОЖЕННОГО В КОНКРЕТНЫЙ шаг. Нужно, когда одноимённых вложений
+     * несколько ({@code DB Result} у каждого DB-шага, {@code SQL Query} у каждого запроса пакета):
+     * общий {@link #attachmentContent(String)} берёт первое по имени и отвечает не на тот вопрос.
+     * Заодно доказывает ПРИВЯЗКУ вложения к шагу, а не соседство в одном файле.
+     */
+    public static Optional<String> attachmentOfStep(String stepName, String attachmentName) {
+        return steps().stream()
+                .filter(step -> stepName.equals(step.getName()))
+                .flatMap(step -> step.getAttachments().stream())
+                .filter(att -> attachmentName.equals(att.getName()))
+                .map(Attachment::getSource)
+                .filter(source -> source != null && !source.isBlank())
+                .findFirst()
+                .flatMap(CurrentReport::readAttachment);
+    }
+
+    private static Optional<String> readAttachment(String source) {
+        try {
+            return Optional.of(Files.readString(
+                    Paths.get(System.getProperty("allure.results.directory", "allure-results"), source),
+                    StandardCharsets.UTF_8));
+        } catch (IOException unreadable) {
+            return Optional.empty();
+        }
+    }
+
     /** Content-type вложения по имени (для проверки, что тело — отдельное {@code application/json}). */
     public static Optional<String> attachmentType(String name) {
         return steps().stream()

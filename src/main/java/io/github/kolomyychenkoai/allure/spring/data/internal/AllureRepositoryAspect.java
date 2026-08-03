@@ -20,6 +20,7 @@ import java.util.Optional;
 import java.util.StringJoiner;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.BaseStream;
 import java.util.stream.Collectors;
 
 /**
@@ -174,6 +175,9 @@ public class AllureRepositoryAspect {
         return sb.toString();
     }
 
+    /** Не раздуваем отчёт на больших выборках. */
+    private static final int ITEMS_CAP = 20;
+
     private String formatResponse(Object result) {
         if (result == null) {
             return "void";
@@ -181,13 +185,65 @@ public class AllureRepositoryAspect {
         if (result instanceof Optional<?> opt) {
             return opt.map(this::describe).orElse("Optional.empty");
         }
+        // ⚠️ Поток ОДНОРАЗОВЫЙ (@Query + Stream): прочитать его ради отчёта — сломать вызывающего
+        // («stream has already been operated upon»). Показываем только маркер.
+        if (result instanceof BaseStream<?, ?>) {
+            return result.getClass().getSimpleName() + " (поток; не читаем — одноразовый)";
+        }
         if (result instanceof Collection<?> col) {
-            int cap = 20; // не раздуваем отчёт на больших выборках
-            String items = col.stream().limit(cap).map(this::describe).collect(Collectors.joining("\n"));
-            String more = col.size() > cap ? "\n… и ещё " + (col.size() - cap) : "";
+            String items = col.stream().limit(ITEMS_CAP).map(this::describe).collect(Collectors.joining("\n"));
+            String more = col.size() > ITEMS_CAP ? "\n… и ещё " + (col.size() - ITEMS_CAP) : "";
             return "Collection size: " + col.size() + "\n\n" + items + more;
         }
+        // Page / Slice / Window / Streamable — ВСЕ они Iterable, поэтому одна ветка закрывает
+        // семейство, и тянуть spring-data в compile-classpath не нужно (её там нет намеренно:
+        // поинткат аспекта задан строкой). Без этой ветки Page уходил в toString и давал
+        // «Page 1 of 5 containing …Widget instances» вместо самих сущностей.
+        if (result instanceof Iterable<?> iterable) {
+            List<Object> items = new ArrayList<>();
+            int total = 0;
+            for (Object item : iterable) {
+                total++;
+                if (items.size() < ITEMS_CAP) {
+                    items.add(item);
+                }
+            }
+            String body = items.stream().map(this::describe).collect(Collectors.joining("\n"));
+            String more = total > items.size() ? "\n… и ещё " + (total - items.size()) : "";
+            return paging(result, total) + "\n\n" + body + more;
+        }
         return describe(result);
+    }
+
+    /**
+     * Заголовок для страничного результата: «Страница 1 из 3, всего: 25». Тип определяем
+     * УТИНОЙ типизацией (геттеры по имени) — чтобы не тащить spring-data в compile-classpath.
+     * Нет таких геттеров (обычный Iterable/Streamable) — просто размер.
+     */
+    private String paging(Object result, int shown) {
+        StringBuilder head = new StringBuilder("Iterable size: " + shown);
+        try {
+            Object number = invokeIfPresent(result, "getNumber");
+            Object totalPages = invokeIfPresent(result, "getTotalPages");
+            Object totalElements = invokeIfPresent(result, "getTotalElements");
+            if (number != null && totalPages != null) {
+                head = new StringBuilder("Страница " + (((Number) number).intValue() + 1) + " из " + totalPages);
+            }
+            if (totalElements != null) {
+                head.append(", всего: ").append(totalElements);
+            }
+        } catch (Throwable notPaged) {
+            // не страница — заголовка про страницы просто не будет
+        }
+        return head.toString();
+    }
+
+    private static Object invokeIfPresent(Object target, String getter) {
+        try {
+            return target.getClass().getMethod(getter).invoke(target);
+        } catch (Throwable absent) {
+            return null;
+        }
     }
 
     private String describe(Object obj) {
