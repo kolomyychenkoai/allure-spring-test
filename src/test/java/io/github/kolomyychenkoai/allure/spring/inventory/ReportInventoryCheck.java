@@ -108,6 +108,15 @@ class ReportInventoryCheck {
             throw new AssertionError(out.toString());
         }
         ReportInventory.write(ReportInventory.BASELINE, scan, baseline);
+        // Колонка «кто отвечает» — весь смысл формата: она печатается при пропаже вида как
+        // указатель, куда идти. Новые виды приходят голыми, поэтому напоминаем сразу.
+        long unsigned = java.util.stream.Stream.concat(scan.steps().stream(), scan.attachments().stream())
+                .filter(kind -> !baseline.comments().containsKey(kind))
+                .count();
+        if (unsigned > 0) {
+            System.out.println("ИНВЕНТАРЬ: у " + unsigned + " видов нет подписи «# кто отвечает» — "
+                    + "допиши их в эталоне, иначе при пропаже он не скажет, куда идти.");
+        }
         throw new AssertionError("""
                 ИНВЕНТАРЬ ОТЧЁТА: эталон перезаписан (%d видов шагов, %d вложений; удалено %d).
                 Прогон намеренно помечен упавшим: проверь `git diff %s` и закоммить осознанно."""

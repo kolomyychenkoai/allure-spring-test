@@ -34,7 +34,10 @@ public class InstrumentationDiagnosticsDump implements LauncherSessionListener {
 
     @Override
     public void launcherSessionClosed(LauncherSession session) {
+        // роль JVM — для ЧЕЛОВЕКА: в каталоге лежат файлы с противоположным installed, и когда
+        // гейт покраснеет по-настоящему, не надо гадать, какой из них «правильный»
         StringBuilder out = new StringBuilder()
+                .append("jvm=").append(InstrumentationDiagnostics.installed() ? "main" : "inventory-or-idle").append('\n')
                 .append("installed=").append(InstrumentationDiagnostics.installed()).append('\n')
                 .append("transformed=").append(InstrumentationDiagnostics.transformedCount()).append('\n')
                 .append("failures=").append(InstrumentationDiagnostics.failureCount()).append('\n')

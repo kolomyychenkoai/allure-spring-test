@@ -1,7 +1,9 @@
 package io.github.kolomyychenkoai.allure.spring.internal;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -26,7 +28,11 @@ import java.util.logging.Level;
  */
 public final class InstrumentationDiagnostics {
 
-    /** Сколько сбоев храним для показа; счётчик при этом остаётся точным. */
+    /**
+     * Потолок РАЗНООБРАЗИЯ выборки: столько УНИКАЛЬНЫХ записей «тип → причина» храним для показа.
+     * Общее число сбоев ({@link #failureCount()}) при этом точное и может быть кратно больше;
+     * переполнение выборки поднимает {@link #sampleTruncated()}.
+     */
     private static final int MAX_SAMPLE = 50;
     /** Сколько сбоев печатаем на WARNING, дальше — сводка + FINE (не заливать stderr). */
     private static final int MAX_LOGGED = 5;
@@ -36,6 +42,9 @@ public final class InstrumentationDiagnostics {
     private static final AtomicInteger FAILURES = new AtomicInteger();
     private static final AtomicInteger TRANSFORMED = new AtomicInteger();
     private static final Queue<String> SAMPLE = new ConcurrentLinkedQueue<>();
+    /** Множество уже увиденных записей: putIfAbsent даёт атомарное «я первый». */
+    private static final Map<String, Boolean> SEEN = new ConcurrentHashMap<>();
+    private static final AtomicInteger UNIQUE = new AtomicInteger();
 
     private InstrumentationDiagnostics() {
     }
@@ -63,7 +72,7 @@ public final class InstrumentationDiagnostics {
         return SAMPLE_TRUNCATED.get();
     }
 
-    /** Выборка сбоев «тип → причина» (до {@value #MAX_SAMPLE}); копия, наружу мутабельное не отдаём. */
+    /** Выборка УНИКАЛЬНЫХ сбоев «тип → причина» (до {@value #MAX_SAMPLE}); копия, не мутабельная. */
     public static List<String> failures() {
         return List.copyOf(SAMPLE);
     }
@@ -82,8 +91,12 @@ public final class InstrumentationDiagnostics {
         // Выборка ограничена, поэтому храним УНИКАЛЬНЫЕ записи: иначе полсотни одинаковых
         // артефактов одного апгрейда вытеснили бы из неё настоящую поломку — а она приходит
         // позже (артефакты установки регистрируются первыми).
-        if (!SAMPLE.contains(brief)) {
-            if (SAMPLE.size() < MAX_SAMPLE) {
+        //
+        // «Я первый» решается ОДНОЙ атомарной операцией: onError дёргается на потоках загрузки
+        // классов (в Spring/surefire они параллельны), и пара «contains → add» пропустила бы
+        // и дубли, и переполнение мимо флага.
+        if (SEEN.putIfAbsent(brief, Boolean.TRUE) == null) {
+            if (UNIQUE.incrementAndGet() <= MAX_SAMPLE) {
                 SAMPLE.add(brief);
             } else {
                 // выборка переполнена УНИКАЛЬНЫМИ записями: дальше гейт видит не всё,
