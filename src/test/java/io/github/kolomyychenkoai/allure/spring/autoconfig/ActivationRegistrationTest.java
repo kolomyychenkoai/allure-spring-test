@@ -11,8 +11,6 @@ import org.springframework.test.context.TestExecutionListener;
 
 import java.util.List;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 /**
  * Тесты АКТИВАЦИИ библиотеки. Вся её ценность держится на двух файлах-регистраторах:
  * {@code META-INF/spring.factories} (13 {@code TestExecutionListener}) и
@@ -72,10 +70,9 @@ class ActivationRegistrationTest {
                 .filter(name -> name.startsWith("io.github.kolomyychenkoai"))
                 .toList();
 
-        assertThat(found)
-                .as("если механизм discovery TestExecutionListener через spring.factories уедет, "
-                        + "вся библиотека выключится молча — отчёт станет пустым при зелёных тестах")
-                .containsExactlyInAnyOrderElementsOf(EXPECTED_LISTENERS);
+        requireSame(EXPECTED_LISTENERS, found,
+                "если механизм discovery TestExecutionListener через spring.factories уедет, "
+                        + "вся библиотека выключится МОЛЧА — отчёт станет пустым при зелёных тестах");
     }
 
     @Test
@@ -87,7 +84,7 @@ class ActivationRegistrationTest {
                 .filter(name -> name.startsWith("io.github.kolomyychenkoai"))
                 .toList();
 
-        assertThat(ours).containsExactlyInAnyOrderElementsOf(EXPECTED_LISTENERS);
+        requireSame(EXPECTED_LISTENERS, ours, "листенеры не дошли до цепочки Spring Test");
     }
 
     @Test
@@ -100,18 +97,40 @@ class ActivationRegistrationTest {
         ImportCandidates.load(org.springframework.boot.autoconfigure.AutoConfiguration.class,
                 getClass().getClassLoader()).forEach(candidates::add);
 
-        assertThat(candidates).containsAll(EXPECTED_AUTOCONFIGS);
+        List<String> missing = EXPECTED_AUTOCONFIGS.stream().filter(name -> !candidates.contains(name)).toList();
+        require(missing.isEmpty(), "Boot не видит автоконфиги " + missing
+                + " — файл imports не читается (переехала аннотация AutoConfiguration?)");
     }
 
     @Test
     @DisplayName("все зарегистрированные классы действительно грузятся (файлы не разъехались с кодом)")
     void registeredClassesLoad() {
         for (String name : EXPECTED_LISTENERS) {
-            assertThat(loadable(name)).as("листенер " + name + " указан в spring.factories, но не грузится").isTrue();
+            require(loadable(name), "листенер " + name + " указан в spring.factories, но не грузится");
         }
         for (String name : EXPECTED_AUTOCONFIGS) {
-            assertThat(loadable(name)).as("автоконфиг " + name + " указан в imports, но не грузится").isTrue();
+            require(loadable(name), "автоконфиг " + name + " указан в imports, но не грузится");
         }
+    }
+
+    /**
+     * Немой ассерт: голый throw вместо JUnit/AssertJ-ассерта. Оба перехвачены модулями библиотеки,
+     * и обычный assertThat сам стал бы шагом «Проверка: …» в отчёте, который принимают ручные
+     * тестировщики (плюс недетерминированно: перехват встаёт только после первого Spring-теста,
+     * а порядок случайный). То же правило, что для *ReportIT и канареек.
+     */
+    private static void require(boolean condition, String message) {
+        if (!condition) {
+            throw new AssertionError(message);
+        }
+    }
+
+    /** Совпадают ли множества имён; в сообщении — чего не хватает и что лишнее. */
+    private static void requireSame(List<String> expected, List<String> actual, String why) {
+        List<String> missing = expected.stream().filter(name -> !actual.contains(name)).toList();
+        List<String> extra = actual.stream().filter(name -> !expected.contains(name)).toList();
+        require(missing.isEmpty() && extra.isEmpty(),
+                why + "\n  не найдены: " + missing + "\n  лишние: " + extra);
     }
 
     private static boolean loadable(String className) {

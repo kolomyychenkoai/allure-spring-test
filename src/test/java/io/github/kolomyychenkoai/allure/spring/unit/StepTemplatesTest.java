@@ -20,6 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class StepTemplatesTest {
 
     @Nested
+    @Epic("Внутренние проверки библиотеки")
     @DisplayName("маскирует рантайм-мусор (одинаковые прогоны дают один вид)")
     class MasksRuntimeNoise {
 
@@ -78,6 +79,7 @@ class StepTemplatesTest {
     }
 
     @Nested
+    @Epic("Внутренние проверки библиотеки")
     @DisplayName("АНТИ-правила: не схлопывает то, по чему видно, что модуль жив")
     class KeepsDiscriminatingPower {
 
@@ -180,6 +182,7 @@ class StepTemplatesTest {
     }
 
     @Nested
+    @Epic("Внутренние проверки библиотеки")
     @DisplayName("вложения")
     class Attachments {
 
@@ -206,6 +209,7 @@ class StepTemplatesTest {
     }
 
     @Nested
+    @Epic("Внутренние проверки библиотеки")
     @DisplayName("fallback для непокрытых имён")
     class Fallback {
 
@@ -224,13 +228,18 @@ class StepTemplatesTest {
 
         @Test
         void длинноеИмяОбрезается() {
-            String out = StepTemplates.step("x".repeat(400));
-            assertThat(out).hasSize(161).endsWith("…");
+            assertThat(StepTemplates.step("x".repeat(400))).contains("…#").hasSizeLessThan(180);
         }
 
         @Test
-        @DisplayName("два разных длинных имени не схлопываются обрезкой в один вид")
+        @DisplayName("длинные имена с ОБЩИМ ПРЕФИКСОМ не схлопываются обрезкой в один вид")
         void длинныеИменаОстаютсяРазными() {
+            // главный риск обрезки: имена одного модуля различаются в ХВОСТЕ, а не в начале —
+            // без хвоста-хэша пропажа одного из них была бы невидима
+            String prefix = "Шаг " + "x".repeat(400);
+            assertThat(StepTemplates.step(prefix + " первый"))
+                    .isNotEqualTo(StepTemplates.step(prefix + " второй"));
+            // и различие в начале, разумеется, тоже сохраняется
             assertThat(StepTemplates.step("Шаг A " + "x".repeat(400)))
                     .isNotEqualTo(StepTemplates.step("Шаг B " + "x".repeat(400)));
         }

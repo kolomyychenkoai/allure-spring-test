@@ -34,12 +34,12 @@ class ByteBuddyPresenceTest {
         return new URLClassLoader("без-byte-buddy", new URL[]{classes}, ClassLoader.getPlatformClassLoader());
     }
 
-    private static Object call(ClassLoader loader, String className) throws Exception {
+    private static Object call(ClassLoader loader, String className) throws Throwable {
         Class<?> type = Class.forName(className, true, loader);
         try {
             return type.getMethod("available").invoke(null);
         } catch (InvocationTargetException e) {
-            throw (Exception) e.getCause();
+            throw e.getCause(); // не приводим к Exception: Error спрятал бы настоящую причину
         }
     }
 

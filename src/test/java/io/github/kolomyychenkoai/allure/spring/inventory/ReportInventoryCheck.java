@@ -38,7 +38,8 @@ class ReportInventoryCheck {
     private static final String UPDATE_FLAG = "inventory.update";
     private static final String REMOVE_FLAG = "inventory.remove";
     private static final String STRICT_FLAG = "inventory.strict";
-    private static final String DIAGNOSTICS_FILE = "target/instrumentation-diagnostics.txt";
+    /** Каталог дампов — одна константа на двоих с {@link InstrumentationDiagnosticsDump}. */
+    private static final Path DIAGNOSTICS_DIR = InstrumentationDiagnosticsDump.DIR;
 
     @Test
     @DisplayName("инвентарь видов шагов и вложений совпадает с эталоном (ни один модуль не отвалился молча)")
@@ -65,10 +66,14 @@ class ReportInventoryCheck {
                     + " пуст или отсутствует. Создай: mvn clean test -D" + UPDATE_FLAG + "=true");
         }
 
+        if (!scan.unreadable().isEmpty()) {
+            System.out.println("ИНВЕНТАРЬ: нечитаемые файлы результатов (пропущены, диагноз мог поехать):\n  "
+                    + String.join("\n  ", scan.unreadable()));
+        }
         if (!verdict.extras().isEmpty()) {
             System.out.println(renderExtra(verdict));
         }
-        String instrumentation = InstrumentationFailures.report(Path.of(DIAGNOSTICS_FILE));
+        String instrumentation = InstrumentationFailures.report(DIAGNOSTICS_DIR);
         if (verdict.failed(Boolean.getBoolean(STRICT_FLAG)) || instrumentation != null) {
             throw new AssertionError(render(verdict, scan, baseline, instrumentation));
         }
@@ -165,7 +170,7 @@ class ReportInventoryCheck {
 
                 Что делать:
                   1) канарейка InstrumentationApiCanaryTest — уехал ли API чужой библиотеки;
-                  2) сбои перехвата — раздел выше (файл target/instrumentation-diagnostics.txt);
+                  2) сбои перехвата — раздел выше (каталог target/instrumentation-diagnostics/);
                   3) если сбоев нет — матчер просто перестал совпадать (типичный апгрейд).
                 Если пропажа ОСОЗНАННА: mvn clean test -D""")
                 .append(UPDATE_FLAG).append("=true -D").append(REMOVE_FLAG).append("=true, затем закоммить эталон.\n");

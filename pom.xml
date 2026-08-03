@@ -339,6 +339,12 @@
                                 <fileset>
                                     <directory>${project.build.directory}/allure-results</directory>
                                 </fileset>
+                                <!-- дампы диагностики перехвата — та же болезнь: если основная JVM
+                                     умрёт до закрытия сессии (симптом сломанного агента!), гейт
+                                     прочитал бы файл ПРОШЛОГО прогона и промолчал -->
+                                <fileset>
+                                    <directory>${project.build.directory}/instrumentation-diagnostics</directory>
+                                </fileset>
                             </filesets>
                         </configuration>
                     </execution>

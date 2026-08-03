@@ -40,7 +40,8 @@ class ReportInventoryTest {
         Set<String> owners = new TreeSet<>();
         steps.forEach(k -> owners.add(k.owner()));
         attachments.forEach(k -> owners.add(k.owner()));
-        return new Scan(new TreeSet<>(steps), new TreeSet<>(attachments), owners, steps.size() + attachments.size());
+        return new Scan(new TreeSet<>(steps), new TreeSet<>(attachments), owners,
+                steps.size() + attachments.size(), List.of());
     }
 
     private static Baseline baselineOf(Set<Kind> steps, Set<Kind> attachments) {
@@ -48,6 +49,7 @@ class ReportInventoryTest {
     }
 
     @Nested
+    @Epic("Внутренние проверки библиотеки")
     @DisplayName("гейты вердикта (сломанный гейт = вечно-зелёный детектор)")
     class Gates {
 
@@ -69,6 +71,23 @@ class ReportInventoryTest {
                     baselineOf(Set.of(kind("KafkaReportIT", "Kafka: отправлено"),
                             kind("WireMockReportIT", "Создана заглушка")), Set.of()));
 
+            assertThat(verdict.silentOwners()).containsExactly("WireMockReportIT");
+            assertThat(verdict.failed(false)).isTrue();
+        }
+
+        @Test
+        @DisplayName("класс исчез, а все его виды помечены «?» — всё равно падаем")
+        void silentOwnerFailsEvenWhenAllKindsOptional() {
+            // «?» ставят против флаки; без отдельного гейта на silentOwners класс-витрина мог бы
+            // пропасть целиком при ЗЕЛЁНОЙ сборке — пропавших видов ведь нет
+            Kind optional = kind("WireMockReportIT", "Создана заглушка");
+            Baseline baseline = new Baseline(Set.of(kind("KafkaReportIT", "Kafka: отправлено"), optional),
+                    Set.of(), Set.of(optional), Map.of());
+
+            Verdict verdict = ReportInventory.verdict(
+                    scanOf(Set.of(kind("KafkaReportIT", "Kafka: отправлено")), Set.of()), baseline);
+
+            assertThat(verdict.missingSteps()).as("необязательный вид пропажей не считается").isEmpty();
             assertThat(verdict.silentOwners()).containsExactly("WireMockReportIT");
             assertThat(verdict.failed(false)).isTrue();
         }
@@ -124,6 +143,7 @@ class ReportInventoryTest {
     }
 
     @Nested
+    @Epic("Внутренние проверки библиотеки")
     @DisplayName("сверка видов")
     class Diff {
 
@@ -190,6 +210,7 @@ class ReportInventoryTest {
     }
 
     @Nested
+    @Epic("Внутренние проверки библиотеки")
     @DisplayName("скан результатов")
     class Scanning {
 
@@ -269,6 +290,7 @@ class ReportInventoryTest {
     }
 
     @Nested
+    @Epic("Внутренние проверки библиотеки")
     @DisplayName("эталон: чтение и запись")
     class BaselineFile {
 

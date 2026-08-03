@@ -5,7 +5,6 @@ import org.junit.platform.launcher.LauncherSession;
 import org.junit.platform.launcher.LauncherSessionListener;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -18,13 +17,20 @@ import java.nio.file.Path;
  * последней установки). Инвентарь же гоняется во ВТОРОЙ JVM и оттуда до статики не дотянуться.
  * Файл решает обе проблемы: пишем в самом конце основного прогона, читаем из второго.
  * <p>
- * Сам SPI-листенер уронить сборку не может (исключение отсюда не станет падением теста) —
- * поэтому он только ПИШЕТ, а краснеет настоящий тест {@link ReportInventoryCheck}.
- * Регистрация — {@code src/test/resources/META-INF/services/org.junit.platform.launcher.LauncherSessionListener}.
+ * <b>Файл — на КАЖДУЮ JVM.</b> Листенер зарегистрирован на весь test-classpath, поэтому
+ * срабатывает и в JVM инвентаря — той самой, что читает дамп; с общим именем она затирала бы
+ * его своим пустым срезом («агент не установлен» после зелёной сборки). А при {@code forkCount>1}
+ * последний закрывшийся форк становился бы молчаливым арбитром правды. Имя по номеру форка
+ * (или PID) + слияние при чтении — как устроены сами {@code surefire-reports}.
+ * <p>
+ * Сам SPI-листенер уронить сборку не может и не должен: {@code launcherSessionClosed} вызывается
+ * БЕЗ try/catch внутри junit-platform, поэтому исключение отсюда оборвало бы прогон уже ПОСЛЕ
+ * всех тестов, ошибкой, не связанной ни с одним из них. Здесь только пишем и жалуемся в stderr;
+ * краснеет настоящий тест {@link ReportInventoryCheck} (нет дампа — «сигнал не работает»).
  */
 public class InstrumentationDiagnosticsDump implements LauncherSessionListener {
 
-    static final Path FILE = Path.of("target/instrumentation-diagnostics.txt");
+    static final Path DIR = Path.of("target/instrumentation-diagnostics");
 
     @Override
     public void launcherSessionClosed(LauncherSession session) {
@@ -34,10 +40,16 @@ public class InstrumentationDiagnosticsDump implements LauncherSessionListener {
                 .append("failures=").append(InstrumentationDiagnostics.failureCount()).append('\n');
         InstrumentationDiagnostics.failures().forEach(failure -> out.append("failure: ").append(failure).append('\n'));
         try {
-            Files.createDirectories(FILE.getParent());
-            Files.writeString(FILE, out.toString(), StandardCharsets.UTF_8);
+            Files.createDirectories(DIR);
+            Files.writeString(DIR.resolve("jvm-" + jvmId() + ".txt"), out.toString(), StandardCharsets.UTF_8);
         } catch (IOException e) {
-            throw new UncheckedIOException(e);
+            System.err.println("ДИАГНОСТИКА ПЕРЕХВАТА: не удалось записать дамп в " + DIR + " — " + e);
         }
+    }
+
+    /** Номер форка surefire, если есть; иначе PID — лишь бы JVM не делили один файл. */
+    private static String jvmId() {
+        String fork = System.getProperty("surefire.forkNumber");
+        return fork == null || fork.isBlank() ? String.valueOf(ProcessHandle.current().pid()) : fork;
     }
 }

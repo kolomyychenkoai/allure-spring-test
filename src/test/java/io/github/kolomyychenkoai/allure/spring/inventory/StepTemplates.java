@@ -155,7 +155,12 @@ public final class StepTemplates {
         return out;
     }
 
+    /**
+     * Обрезка с хвостом-хэшем: без него два длинных имени с ОБЩИМ ПРЕФИКСОМ (а именно так
+     * выглядят имена одного модуля) слились бы в один вид, и пропажа одного из них стала бы
+     * невидимой — детектор молча ослеп бы ровно на самых громоздких шагах.
+     */
     private static String truncate(String s) {
-        return s.length() <= MAX_LEN ? s : s.substring(0, MAX_LEN) + "…";
+        return s.length() <= MAX_LEN ? s : s.substring(0, MAX_LEN) + "…#" + Integer.toHexString(s.hashCode());
     }
 }

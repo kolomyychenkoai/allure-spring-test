@@ -71,7 +71,8 @@ public final class ReportInventory {
     }
 
     /** Что реально произвёл прогон. */
-    public record Scan(Set<Kind> steps, Set<Kind> attachments, Set<String> owners, int resultFiles) {
+    public record Scan(Set<Kind> steps, Set<Kind> attachments, Set<String> owners, int resultFiles,
+                       List<String> unreadable) {
     }
 
     /** Что записано в эталоне. */
@@ -98,8 +99,11 @@ public final class ReportInventory {
                           List<String> silentOwners, List<String> unknownOwners) {
 
         public boolean failed(boolean strict) {
+            // silentOwners — самостоятельная причина падения, а не «следствие пропавших видов»:
+            // если ВСЕ виды класса помечены «?» (а «?» ставят как раз против флаки), класс мог бы
+            // исчезнуть целиком при зелёной сборке.
             return noData || !missingSteps.isEmpty() || !missingAttachments.isEmpty()
-                    || !unknownOwners.isEmpty()
+                    || !unknownOwners.isEmpty() || !silentOwners.isEmpty()
                     || (strict && (!extraSteps.isEmpty() || !extraAttachments.isEmpty()));
         }
 
@@ -129,12 +133,13 @@ public final class ReportInventory {
         Set<String> owners = new TreeSet<>();
         int files = 0;
         if (!Files.isDirectory(resultsDir)) {
-            return new Scan(steps, attachments, owners, 0);
+            return new Scan(steps, attachments, owners, 0, List.of());
         }
+        List<String> unreadable = new ArrayList<>();
         try (Stream<Path> list = Files.list(resultsDir)) {
             List<Path> results = list.filter(p -> p.getFileName().toString().endsWith("-result.json")).toList();
             for (Path file : results) {
-                JsonNode root = readTree(file);
+                JsonNode root = readTree(file, unreadable);
                 if (root == null) {
                     continue;
                 }
@@ -151,7 +156,7 @@ public final class ReportInventory {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        return new Scan(steps, attachments, owners, files);
+        return new Scan(steps, attachments, owners, files, unreadable);
     }
 
     /** {@code parent} — шаблон НЕПОСРЕДСТВЕННОГО родителя (null для верхнего уровня). */
@@ -190,13 +195,15 @@ public final class ReportInventory {
         }
     }
 
-    private static JsonNode readTree(Path file) {
+    private static JsonNode readTree(Path file, List<String> unreadable) {
         try {
             return MAPPER.readTree(file.toFile());
         } catch (IOException broken) {
-            // Диагноз называем вслух: молча пропущенный файл выглядел бы как «отвалился модуль»,
-            // и человек пошёл бы искать поломку инструментации вместо недописанного файла.
-            System.err.println("ИНВЕНТАРЬ: пропускаю нечитаемый " + file + " — " + broken);
+            // Диагноз копим и отдаём наружу (печатает вызывающий): молча пропущенный файл выглядел
+            // бы как «отвалился модуль», и человек пошёл бы искать поломку инструментации вместо
+            // недописанного файла. В stderr отсюда не пишем — юнит-тесты скана не должны сорить
+            // в лог основного прогона жалобами на свои временные каталоги.
+            unreadable.add(file + " — " + broken);
             return null;
         }
     }
@@ -232,14 +239,23 @@ public final class ReportInventory {
                 silent, unknown);
     }
 
-    /** Что произойдёт при обновлении эталона этим прогоном. */
+    /**
+     * Что произойдёт при обновлении эталона этим прогоном.
+     * <p>
+     * «Что БУДЕТ удалено» считается ровно тем же {@link #merge}, которым потом пишется файл:
+     * два независимых вычисления одного факта — это дублирование не кода, а ИСТИНЫ, и их
+     * рассинхрон тих. Иначе {@code ?}-вид, не пришедший в этом прогоне, попадал бы в «удаляемые»,
+     * хотя {@code write} его сохраняет — флаг требовался бы ради удаления, которого не будет.
+     */
     public static UpdateVerdict updateVerdict(Scan scan, Baseline baseline) {
         List<String> lost = baseline.owners().stream()
                 .filter(owner -> !scan.owners().contains(owner))
                 .toList();
+        Set<Kind> keptSteps = merge(scan.steps(), baseline.steps(), baseline);
+        Set<Kind> keptAttachments = merge(scan.attachments(), baseline.attachments(), baseline);
         List<Kind> removed = new ArrayList<>();
-        removed.addAll(missing(baseline.steps(), Set.of(), scan.steps()));
-        removed.addAll(missing(baseline.attachments(), Set.of(), scan.attachments()));
+        baseline.steps().stream().filter(kind -> !keptSteps.contains(kind)).forEach(removed::add);
+        baseline.attachments().stream().filter(kind -> !keptAttachments.contains(kind)).forEach(removed::add);
         return new UpdateVerdict(lost, removed);
     }
 

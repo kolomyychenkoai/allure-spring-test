@@ -52,6 +52,26 @@
   - `e2e/AssertJReportIT` — end-to-end полнота (строковые/коллекционные/comparable шаги есть);
   - `assertion/AllureAssertJTest#successfulAssertSingleStep` — дедуп (ровно один шаг);
   - `internal/InstrumentationApiCanaryTest#assertjHierarchy` — иерархия/методы на местах.
-- Диагностика хрупкого байткода: повесить `AgentBuilder.Listener` (лог transform/ignore/error
-  по типам) в `internal/AllureInstrumentation`; для дедупа — временная трасса enter/exit в
-  advice. См. грабли в `docs/java-code-standard.md`.
+- Диагностика хрупкого байткода: `AgentBuilder.Listener` уже стоит постоянно
+  (`internal/AllureInstrumentation` → `internal/InstrumentationDiagnostics`), сбои трансформации
+  копятся и проверяются гейтом; для дедупа — временная трасса enter/exit в advice.
+  См. грабли в `docs/java-code-standard.md`.
+
+## Дополнение (2026-08-03): компромисс с конструкторами теперь ВИДЕН
+
+Раньше ошибки трансформации уходили в `AgentBuilder.Listener.NoOp` — компромисс из раздела
+«Осознанные компромиссы» существовал только на бумаге. Теперь они попадают в
+`InstrumentationDiagnostics` и проверяются гейтом `inventory/InstrumentationFailures`.
+
+Чтобы гейт не краснел на ожидаемом, в нём заведено УЗКОЕ исключение: причина
+«Cannot catch exception during constructor call» у типов `org.assertj.core.api.*`. Любой другой
+сбой у тех же типов считается настоящим (есть тест `otherAssertJFailuresAreOurs`).
+
+При первом взгляде эти 36 сбоев легко принять за находку и «починить» их через
+`not(isConstructor())` — не делать: см. отвергнутые альтернативы выше. Наша демо-витрина
+comparable-ассертов (`isBetween`) не покрывает, поэтому зелёный прогон такую регрессию
+НЕ докажет.
+
+Bridge-методы дженериков (`isSynthetic`) отдельно исключать не нужно: их гасит тот же счётчик
+глубины — имя (`#m`) у моста и реального метода совпадает, дубли в отчёт не попадают
+(проверено на расширенном наборе вплетённых типов).

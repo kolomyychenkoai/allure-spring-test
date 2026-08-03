@@ -5,19 +5,14 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import static net.bytebuddy.matcher.ElementMatchers.named;
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
-/** Уровень A: контракт общей байткод-базы (на ней стоят все модули). */
+/**
+ * Уровень A: контракт общей байткод-базы (на ней стоят все модули).
+ * Гард наличия byte-buddy проверяет {@code ByteBuddyPresenceTest} — звать
+ * {@code AllureInstrumentation.available()} неоткуда: без библиотеки класс не линкуется.
+ */
 class AllureInstrumentationTest {
-
-    @Test
-    @DisplayName("available(): true, когда byte-buddy на classpath (канарейка на имя класса)")
-    void availableTrue() {
-        // в тестовом classpath byte-buddy есть (mockito/spring-test). Если строка-имя
-        // 'net.bytebuddy.agent.ByteBuddyAgent' уедет при апгрейде — упадёт осмысленно.
-        assertThat(AllureInstrumentation.available()).isTrue();
-    }
 
     @Test
     @DisplayName("retransform(): сбой/отсутствие совпадений НЕ роняет вызывающего (контракт)")
