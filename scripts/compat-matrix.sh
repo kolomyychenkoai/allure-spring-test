@@ -13,7 +13,10 @@
 #
 set -u
 cd "$(dirname "$0")/.." || exit 2
-mkdir -p target
+
+# Логи НЕ в target/: каждая следующая точка делает `mvn clean` и стёрла бы предыдущие.
+LOGS=.compat-logs
+mkdir -p "$LOGS"
 fail=0
 
 run() {
@@ -21,20 +24,20 @@ run() {
     shift
     local started status
     started=$(date +%s)
-    if mvn -B clean test "$@" > "target/compat-$id.log" 2>&1; then
+    if mvn -B clean test "$@" > "$LOGS/$id.log" 2>&1; then
         status="OK  "
     else
         status="FAIL"
         fail=1
     fi
-    printf '%s  %-12s %4ss  → target/compat-%s.log\n' \
-        "$status" "$id" "$(( $(date +%s) - started ))" "$id"
+    printf '%s  %-12s %4ss  → %s/%s.log\n' \
+        "$status" "$id" "$(( $(date +%s) - started ))" "$LOGS" "$id"
 
     # На неродной версии сверка с эталоном выключена, и расхождения печатаются
     # человеку. Показываем их объём здесь же: пропажа десятков видов сразу видна.
-    if grep -q 'СВЕРКА С ЭТАЛОНОМ ВЫКЛЮЧЕНА' "target/compat-$id.log"; then
+    if grep -q 'СВЕРКА С ЭТАЛОНОМ ВЫКЛЮЧЕНА' "$LOGS/$id.log"; then
         printf '      видов разошлось: %s (подробности в логе)\n' \
-            "$(grep -c '✗ шаг\|✗ вложение' "target/compat-$id.log")"
+            "$(grep -c '✗ шаг\|✗ вложение' "$LOGS/$id.log")"
     fi
 }
 

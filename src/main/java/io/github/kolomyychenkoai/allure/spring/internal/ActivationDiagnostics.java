@@ -36,7 +36,30 @@ public final class ActivationDiagnostics {
      * @param byteBuddyPresent доступен ли байткод-перехват (для MockMvc это второй канал)
      */
     public static List<String> problems(Predicate<String> present, boolean byteBuddyPresent) {
+        return problems(present, byteBuddyPresent, false, "?");
+    }
+
+    /**
+     * То же плюс ось byte-buddy.
+     *
+     * @param byteBuddyTooOld  byte-buddy не знает формат классов этой JVM
+     * @param byteBuddyVersion версия byte-buddy для сообщения
+     */
+    public static List<String> problems(Predicate<String> present, boolean byteBuddyPresent,
+                                        boolean byteBuddyTooOld, String byteBuddyVersion) {
         List<String> problems = new ArrayList<>();
+
+        // Самая тихая из всех поломок: агент ставится, а трансформация падает на КАЖДОМ типе.
+        // Версию byte-buddy потребитель обычно не выбирает — она приходит из BOM Spring Boot,
+        // поэтому «Boot 3.4 на Java 25» выглядит рабочей комбинацией с мёртвым перехватом.
+        if (byteBuddyPresent && byteBuddyTooOld) {
+            problems.add("byte-buddy " + byteBuddyVersion + " не знает формат классов Java "
+                    + Runtime.version().feature() + " → байткод-перехват (ассерты, JDBC, Kafka, "
+                    + "WireMock, Liquibase, Mockito) МОЛЧА выключен, в отчёт попадут только шаги "
+                    + "из Spring-каналов. Подними byte-buddy до версии, знающей эту JVM "
+                    + "(обычно вместе со Spring Boot), либо включи -Dnet.bytebuddy.experimental=true "
+                    + "ОСОЗНАННО.");
+        }
 
         boolean mockMvc = present.test("org.springframework.test.web.servlet.MockMvc");
         boolean mockMvcHook = present.test("org.springframework.boot.test.autoconfigure.web.servlet.MockMvcBuilderCustomizer")
@@ -68,7 +91,12 @@ public final class ActivationDiagnostics {
         if ("off".equalsIgnoreCase(System.getProperty(SWITCH)) || !REPORTED.compareAndSet(false, true)) {
             return;
         }
-        problems(ClassPresence::isPresent, ByteBuddyPresence.available()).forEach(problem ->
+        // ByteBuddyClassFormat трогаем ТОЛЬКО за гардом: он линкует типы byte-buddy, и без
+        // библиотеки обращение к нему уронило бы сам диагност.
+        boolean byteBuddy = ByteBuddyPresence.available();
+        boolean tooOld = byteBuddy && ByteBuddyClassFormat.tooNewForByteBuddy();
+        String version = byteBuddy ? ByteBuddyClassFormat.byteBuddyVersion() : "?";
+        problems(ClassPresence::isPresent, byteBuddy, tooOld, version).forEach(problem ->
                 AllureInstrumentationLogger.logger().warning(
                         "[Allure Spring] модуль не активирован: " + problem
                                 + " (заглушить: -D" + SWITCH + "=off)"));

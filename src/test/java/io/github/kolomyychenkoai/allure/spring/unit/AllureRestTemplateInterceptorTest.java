@@ -62,7 +62,11 @@ class AllureRestTemplateInterceptorTest {
                 return new HttpHeaders();
             }
 
-            @Override
+            // БЕЗ @Override намеренно: HttpRequest.getAttributes появился в Spring Framework 6.2,
+            // а нижняя объявленная граница — Boot 3.2 (SF 6.1), где такого метода нет и аннотация
+            // ломает компиляцию. Без неё класс собирается на обеих версиях: на 6.2 это реализация
+            // абстрактного метода, на 6.1 — просто лишний метод фикстуры.
+            // Найдено прогоном mvn -Pcompat-boot-min (это была ЕДИНСТВЕННАЯ поломка на 3.2).
             public java.util.Map<String, Object> getAttributes() {
                 return new java.util.HashMap<>();
             }

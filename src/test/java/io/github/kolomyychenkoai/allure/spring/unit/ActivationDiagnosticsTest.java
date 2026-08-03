@@ -63,6 +63,26 @@ class ActivationDiagnosticsTest {
     }
 
     @Test
+    @DisplayName("byte-buddy не знает формат классов JVM → жалоба про МОЛЧА выключенный перехват")
+    void warnsOnTooOldByteBuddy() {
+        // Сценарий «Boot 3.4 на Java 25»: комбинация выглядит рабочей, но весь байткод-слой мёртв.
+        // Это и есть та поломка, ради которой в README объявлен минимум Boot 3.5 для Java 25.
+        List<String> problems = ActivationDiagnostics.problems(
+                name -> false, true, true, "1.15.11");
+
+        assertThat(problems).singleElement().asString()
+                .contains("byte-buddy 1.15.11")
+                .contains("МОЛЧА выключен")
+                .contains("Kafka");
+    }
+
+    @Test
+    @DisplayName("byte-buddy нет вовсе → про формат классов не жалуемся (нечему быть старым)")
+    void quietAboutFormatWhenByteBuddyAbsent() {
+        assertThat(ActivationDiagnostics.problems(name -> false, false, true, "1.15.11")).isEmpty();
+    }
+
+    @Test
     @DisplayName("на нашем classpath (всё на месте) жалоб нет — гейт заводится в зелёном")
     void quietOnCurrentClasspath() {
         assertThat(ActivationDiagnostics.problems(

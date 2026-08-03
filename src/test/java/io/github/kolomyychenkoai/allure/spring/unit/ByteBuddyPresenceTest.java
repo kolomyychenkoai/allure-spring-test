@@ -68,6 +68,21 @@ class ByteBuddyPresenceTest {
     }
 
     @Test
+    @DisplayName("диагност активации работает без byte-buddy (иначе умрёт там, где должен предупредить)")
+    void diagnosticsSurviveWithoutByteBuddy() throws Exception {
+        // Диагност жалуется в т.ч. НА byte-buddy (старый не знает формат классов новой JVM).
+        // Если он сам без библиотеки не загрузится, предупреждения не будет ровно тогда, когда
+        // оно нужнее всего. Проверяем не загрузку класса, а ВЫЗОВ: ссылки в телах методов JVM
+        // разрешает лениво, поэтому «класс загрузился» ещё ничего не доказывает.
+        try (URLClassLoader loader = withoutByteBuddy()) {
+            Class<?> diagnostics = Class.forName(
+                    "io.github.kolomyychenkoai.allure.spring.internal.ActivationDiagnostics", true, loader);
+            assertThatCode(() -> diagnostics.getMethod("reportOnce").invoke(null))
+                    .doesNotThrowAnyException();
+        }
+    }
+
+    @Test
     @DisplayName("на обычном classpath (byte-buddy есть) гард отдаёт true")
     void gateTrueWhenPresent() {
         assertThat(ByteBuddyPresence.available()).isTrue();
