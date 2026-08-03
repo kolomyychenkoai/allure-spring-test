@@ -1,5 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
 
+import io.qameta.allure.Epic;
+
 import io.github.kolomyychenkoai.allure.spring.wiremock.internal.AllureWireMockSteps;
 import io.github.kolomyychenkoai.allure.spring.wiremock.internal.AllureWireMockVerifyInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
@@ -33,6 +35,7 @@ import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** Уровень A: проверка содержимого отчёта для WireMock verify/reset (без брокера). */
+@Epic("Внутренние проверки библиотеки")
 class AllureWireMockVerifyTest {
 
     private InMemoryAllure allure;

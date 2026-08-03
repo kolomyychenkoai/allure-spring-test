@@ -1,5 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.inventory;
 
+import io.qameta.allure.Epic;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -39,6 +41,7 @@ import java.util.stream.Stream;
  * <b>Сканируем только пакет {@code demo}.</b> Юнит-тесты дают шаги НЕДЕТЕРМИНИРОВАННО: перехват
  * мог встать от ранее прошедшего Spring-теста, а порядок классов случайный.
  */
+@Epic("Внутренние проверки библиотеки")
 public final class ReportInventory {
 
     /** Эталон лежит вне resources: одна копия, читается по пути от корня проекта. */

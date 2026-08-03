@@ -1,5 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
 
+import io.qameta.allure.Epic;
+
 import io.github.kolomyychenkoai.allure.spring.assertion.internal.AllureJUnitJupiterAssertionsInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.qameta.allure.model.StepResult;
@@ -21,6 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * активного кейса (гейт активного кейса не даёт verify-ассертам засорять). InMemoryAllure не
  * восстанавливаем через new — {@link InMemoryAllure#uninstall} возвращает прежний lifecycle.
  */
+@Epic("Внутренние проверки библиотеки")
 class AllureJUnitJupiterAssertionsTest {
 
     @BeforeAll

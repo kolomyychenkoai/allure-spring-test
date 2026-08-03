@@ -1,5 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
 
+import io.qameta.allure.Epic;
+
 import io.github.kolomyychenkoai.allure.spring.rest.internal.AllureRestAssuredValidationInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.qameta.allure.model.StepResult;
@@ -15,6 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 
 /** Уровень A: логика шага «Проверка ответа: …» для RestAssured-валидации (без реального HTTP). */
+@Epic("Внутренние проверки библиотеки")
 class AllureRestAssuredValidationTest {
 
     private InMemoryAllure allure;

@@ -1,4 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
+
+import io.qameta.allure.Epic;
 import io.github.kolomyychenkoai.allure.spring.internal.ClassPresence;
 
 import org.junit.jupiter.api.DisplayName;
@@ -11,6 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * WireMock/RestAssured от {@link NoClassDefFoundError}, когда опциональной библиотеки
  * нет на classpath у потребителя.
  */
+@Epic("Внутренние проверки библиотеки")
 class ClassPresenceTest {
 
     @Test

@@ -1,5 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.wiremock;
 
+import io.qameta.allure.Epic;
+
 import com.github.tomakehurst.wiremock.WireMockServer;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import org.junit.jupiter.api.AfterEach;
@@ -26,6 +28,7 @@ import static org.mockito.Mockito.mock;
  * активного кейса — иначе наш MockMaker залогировал бы шаг с рандомным hashCode мока
  * (недетерминизм в отчёте).
  */
+@Epic("Внутренние проверки библиотеки")
 class AllureWireMockTestListenerTest {
 
     private final AllureWireMockTestListener listener = new AllureWireMockTestListener();

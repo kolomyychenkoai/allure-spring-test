@@ -1,5 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
 
+import io.qameta.allure.Epic;
+
 import io.github.kolomyychenkoai.allure.spring.awaitility.internal.AllureAwaitilityConditionListener;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.qameta.allure.model.StepResult;
@@ -20,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Spring. Дополняет уровень B ({@code AwaitilityReportIT}) детерминированной проверкой шага и
  * гейта активного кейса.
  */
+@Epic("Внутренние проверки библиотеки")
 class AllureAwaitilityConditionListenerTest {
 
     @BeforeAll

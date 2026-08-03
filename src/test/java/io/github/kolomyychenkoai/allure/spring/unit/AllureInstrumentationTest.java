@@ -1,4 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
+
+import io.qameta.allure.Epic;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
 
 import org.junit.jupiter.api.DisplayName;
@@ -12,6 +14,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
  * Гард наличия byte-buddy проверяет {@code ByteBuddyPresenceTest} — звать
  * {@code AllureInstrumentation.available()} неоткуда: без библиотеки класс не линкуется.
  */
+@Epic("Внутренние проверки библиотеки")
 class AllureInstrumentationTest {
 
     @Test

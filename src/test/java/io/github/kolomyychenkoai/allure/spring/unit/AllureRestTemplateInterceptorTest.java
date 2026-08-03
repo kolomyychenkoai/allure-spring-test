@@ -1,5 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
 
+import io.qameta.allure.Epic;
+
 import io.github.kolomyychenkoai.allure.spring.rest.internal.AllureRestTemplateInterceptor;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.qameta.allure.model.TestResult;
@@ -27,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * зовём {@code intercept(...)} напрямую с фейковым execution. Дополняет уровень B
  * ({@code RestTemplateReportIT}) детерминированной проверкой шага/вложений и гейта активного кейса.
  */
+@Epic("Внутренние проверки библиотеки")
 class AllureRestTemplateInterceptorTest {
 
     private InMemoryAllure allure;

@@ -1,5 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.liquibase;
 
+import io.qameta.allure.Epic;
+
 import io.github.kolomyychenkoai.allure.spring.liquibase.internal.AllureLiquibaseInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.qameta.allure.model.TestResult;
@@ -36,6 +38,7 @@ import static org.mockito.Mockito.when;
  * </ul>
  * Статику модуля (буфер старта + накопленный снимок) сбрасываем рефлексией вокруг каждого теста.
  */
+@Epic("Внутренние проверки библиотеки")
 class AllureLiquibaseListenerTest {
 
     private final AllureLiquibaseListener listener = new AllureLiquibaseListener();

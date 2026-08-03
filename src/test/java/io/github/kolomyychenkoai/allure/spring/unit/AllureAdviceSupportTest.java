@@ -1,4 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
+
+import io.qameta.allure.Epic;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
@@ -15,6 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * ({@code safe}) и выбор статуса шага ({@code step}) — ветки, на которые опираются все
  * инструментирующие модули.
  */
+@Epic("Внутренние проверки библиотеки")
 class AllureAdviceSupportTest {
 
     @Test
@@ -98,6 +101,21 @@ class AllureAdviceSupportTest {
             }
         };
         assertThat(AllureAdviceSupport.safe(boom)).isEqualTo("<?>");
+    }
+
+    @Test
+    @DisplayName("safe: имя шага — ОДНА строка (многострочное значение рвало бы вёрстку отчёта)")
+    void safeCollapsesWhitespace() {
+        assertThat(AllureAdviceSupport.safe("{\n  \"a\": 1\n}")).isEqualTo("{ \"a\": 1 }");
+        assertThat(AllureAdviceSupport.safe("строка\tс\tтабами")).isEqualTo("строка с табами");
+    }
+
+    @Test
+    @DisplayName("safe: обрезка не рвёт суррогатную пару пополам")
+    void safeKeepsSurrogatePairs() {
+        String emoji = "x".repeat(499) + "🚀" + "y".repeat(100);
+        String rendered = AllureAdviceSupport.safe(emoji);
+        assertThat(rendered).doesNotContain("\uD83D").endsWith("…");
     }
 
     @Test

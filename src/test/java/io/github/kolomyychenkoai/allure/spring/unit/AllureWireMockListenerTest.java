@@ -1,5 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
 
+import io.qameta.allure.Epic;
+
 import io.github.kolomyychenkoai.allure.spring.wiremock.internal.AllureWireMockListener;
 import com.github.tomakehurst.wiremock.http.HttpHeaders;
 import com.github.tomakehurst.wiremock.http.Request;
@@ -17,6 +19,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /** Уровень A: детерминированная проверка содержимого отчёта для WireMock-листенера. */
+@Epic("Внутренние проверки библиотеки")
 class AllureWireMockListenerTest {
 
     private InMemoryAllure allure;

@@ -1,5 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
 
+import io.qameta.allure.Epic;
+
 import io.github.kolomyychenkoai.allure.spring.data.internal.AllureRepositoryAspect;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.github.kolomyychenkoai.allure.spring.support.jpa.Widget;
@@ -25,6 +27,7 @@ import static org.mockito.Mockito.when;
  * Уровень A: детерминированная проверка содержимого отчёта для аспекта репозиториев.
  * Аспект вызывается напрямую с замоканным ProceedingJoinPoint — без Spring/БД.
  */
+@Epic("Внутренние проверки библиотеки")
 class AllureRepositoryAspectTest {
 
     interface FakeRepo {

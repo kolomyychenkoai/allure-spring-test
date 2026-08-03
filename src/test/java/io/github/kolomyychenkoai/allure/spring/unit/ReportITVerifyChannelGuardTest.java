@@ -1,5 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
 
+import io.qameta.allure.Epic;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -23,6 +25,7 @@ import java.util.stream.Stream;
  * ДРАЙВЕРЫ поведения (заставить бросить), их шаг «Проверка: брошено …» — законная витрина.
  * Исключён {@code JUnitJupiterAssertionsReportIT} — там JUnit-ассерты это САМ предмет показа.
  */
+@Epic("Внутренние проверки библиотеки")
 class ReportITVerifyChannelGuardTest {
 
     private static final Path DEMO_DIR =

@@ -1,4 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
+
+import io.qameta.allure.Epic;
 import io.github.kolomyychenkoai.allure.spring.logs.AllureApplicationLogsListener;
 
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
@@ -16,6 +18,7 @@ import org.springframework.test.context.TestContext;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** Уровень A: детерминированная проверка содержимого отчёта для захвата логов. */
+@Epic("Внутренние проверки библиотеки")
 class AllureApplicationLogsListenerTest {
 
     private static final Logger log = LoggerFactory.getLogger(AllureApplicationLogsListenerTest.class);

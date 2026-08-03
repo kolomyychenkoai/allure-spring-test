@@ -62,14 +62,26 @@ public final class AllureAdviceSupport {
         } catch (Throwable t) {
             s = "<?>";
         }
-        if (s != null && s.length() > MAX_LEN) {
-            s = s.substring(0, MAX_LEN) + "…";
+        if (s == null) {
+            return "<?>";
+        }
+        // Имя шага — ОДНА строка: многострочное значение (JSON-тело, стек, SQL) разрывает вёрстку
+        // отчёта, который читают вручную. Схлопываем пробельное ДО обрезки, иначе в лимит попадут
+        // переносы вместо содержимого.
+        s = WHITESPACE.matcher(s).replaceAll(" ").trim();
+        if (s.length() > MAX_LEN) {
+            int cut = MAX_LEN;
+            if (Character.isHighSurrogate(s.charAt(cut - 1))) {
+                cut--; // не рвём суррогатную пару пополам — иначе в отчёте «кракозябра»
+            }
+            s = s.substring(0, cut) + "…";
         }
         return s;
     }
 
     /** Предел вложенности массивов: у рукописного обхода нет детекта циклов, как у deepToString. */
     private static final int MAX_DEPTH = 4;
+    private static final java.util.regex.Pattern WHITESPACE = java.util.regex.Pattern.compile("\\s+");
 
     private static String renderForName(Object value) {
         return renderForName(value, 0);

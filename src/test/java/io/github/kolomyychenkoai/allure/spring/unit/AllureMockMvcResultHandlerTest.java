@@ -1,5 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
 
+import io.qameta.allure.Epic;
+
 import io.github.kolomyychenkoai.allure.spring.rest.internal.AllureMockMvcResultHandler;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.github.kolomyychenkoai.allure.spring.support.WebTestApp;
@@ -22,6 +24,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * Гоняем обработчик через реальный путь MockMvc (standaloneSetup + alwaysDo), но без
  * Spring-контекста — быстро и надёжно.
  */
+@Epic("Внутренние проверки библиотеки")
 class AllureMockMvcResultHandlerTest {
 
     private InMemoryAllure allure;

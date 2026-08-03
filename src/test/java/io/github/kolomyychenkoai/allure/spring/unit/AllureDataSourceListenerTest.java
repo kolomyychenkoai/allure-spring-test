@@ -1,5 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
 
+import io.qameta.allure.Epic;
+
 import io.github.kolomyychenkoai.allure.spring.data.internal.AllureDataSourceListener;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.qameta.allure.model.TestResult;
@@ -18,6 +20,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** Уровень A: детерминированная проверка содержимого отчёта для SQL-листенера. */
+@Epic("Внутренние проверки библиотеки")
 class AllureDataSourceListenerTest {
 
     private final AllureDataSourceListener listener = new AllureDataSourceListener();

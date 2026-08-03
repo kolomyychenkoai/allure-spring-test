@@ -1,5 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
 
+import io.qameta.allure.Epic;
+
 import io.github.kolomyychenkoai.allure.spring.rest.internal.AllureWebTestClientLogger;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.qameta.allure.model.StepResult;
@@ -26,6 +28,7 @@ import static org.mockito.Mockito.mock;
  * зовём {@code log(result)} напрямую. Дополняет уровень B ({@code WebTestClientReportIT})
  * детерминированной проверкой шага/вложений и гейта активного кейса.
  */
+@Epic("Внутренние проверки библиотеки")
 class AllureWebTestClientLoggerTest {
 
     private InMemoryAllure allure;

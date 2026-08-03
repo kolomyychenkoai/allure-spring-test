@@ -1,4 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.autoconfig;
+
+import io.qameta.allure.Epic;
 import io.github.kolomyychenkoai.allure.spring.rest.AllureMockMvcAutoConfiguration;
 
 import org.junit.jupiter.api.DisplayName;
@@ -15,6 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Уровень A: авто-активация HTTP-модуля. Падает, если кастомайзер MockMvc перестанет
  * регистрироваться по умолчанию (когда MockMvc есть на classpath).
  */
+@Epic("Внутренние проверки библиотеки")
 class AllureMockMvcAutoConfigurationTest {
 
     private final ApplicationContextRunner runner = new ApplicationContextRunner()

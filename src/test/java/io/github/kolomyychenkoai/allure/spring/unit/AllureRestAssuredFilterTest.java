@@ -1,5 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
 
+import io.qameta.allure.Epic;
+
 import io.github.kolomyychenkoai.allure.spring.rest.internal.AllureRestAssuredFilter;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -25,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Поднимаем лёгкий in-process HttpServer (JDK) и применяем фильтр per-request —
  * без Spring и без глобального состояния RestAssured.
  */
+@Epic("Внутренние проверки библиотеки")
 class AllureRestAssuredFilterTest {
 
     private InMemoryAllure allure;
