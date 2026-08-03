@@ -40,6 +40,20 @@ class ReportInventoryCheck {
     private static final String STRICT_FLAG = "inventory.strict";
     /** Пересев маркеров кратности «×N» по замеру прогона. */
     private static final String COUNTS_FLAG = "inventory.counts";
+    /**
+     * Сверка с эталоном: {@code on} (умолчание) или {@code off}.
+     * <p>
+     * {@code off} нужен только compat-профилям — прогонам на ЧУЖОЙ версии библиотеки, где эталон
+     * (он принадлежит нашей комбинации версий) краснел бы законно: Hibernate меняет форму SQL,
+     * Liquibase — служебные запросы. Выключить детектор целиком там нельзя — пропал бы самый
+     * ценный сигнал «модуль отвалился молча», поэтому дельта ПЕЧАТАЕТСЯ человеку.
+     * <p>
+     * ⚠️ Это единственный флаг проекта, который делает детектор зеленее. Остальные
+     * ({@code update}, {@code remove}) наоборот — всегда роняют сборку. Поэтому за ним следит
+     * внешний страж {@code unit/PomCompatibilityTest}: {@code off} разрешён ТОЛЬКО внутри
+     * профилей {@code compat-*}, в проектных свойствах он обязан быть {@code on}.
+     */
+    private static final String COMPARE_FLAG = "inventory.compare";
     /** Каталог дампов — одна константа на двоих с {@link InstrumentationDiagnosticsDump}. */
     private static final Path DIAGNOSTICS_DIR = InstrumentationDiagnosticsDump.DIR;
 
@@ -92,7 +106,20 @@ class ReportInventoryCheck {
             System.out.println(renderExtra(verdict));
         }
         String instrumentation = InstrumentationFailures.report(DIAGNOSTICS_DIR);
-        if (verdict.failed(Boolean.getBoolean(STRICT_FLAG)) || instrumentation != null) {
+        boolean compare = !"off".equalsIgnoreCase(System.getProperty(COMPARE_FLAG, "on"));
+        if (!compare) {
+            System.out.println("""
+                    ИНВЕНТАРЬ: СВЕРКА С ЭТАЛОНОМ ВЫКЛЮЧЕНА (-D%s=off) — прогон на НЕРОДНОЙ версии
+                    библиотеки. Эталон принадлежит нашей комбинации версий, поэтому расхождения ниже
+                    законны; читает их ЧЕЛОВЕК, а не гейт. Жёсткими остаются: вложение без файла,
+                    мусор в именах, сбои перехвата и новый не-PASSED вид.
+                    """.formatted(COMPARE_FLAG));
+            System.out.println(render(verdict, scan, baseline, null));
+        }
+        // newFailures вынесен из-под compare намеренно: «библиотека начала фабриковать сбои» —
+        // это не «отчёт стал другим», а поломка, и на чужой версии тоже.
+        boolean baselineFailure = compare && verdict.failed(Boolean.getBoolean(STRICT_FLAG));
+        if (baselineFailure || instrumentation != null || verdict.newFailures()) {
             throw new AssertionError(render(verdict, scan, baseline, instrumentation));
         }
     }
