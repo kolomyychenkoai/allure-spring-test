@@ -48,6 +48,24 @@
              поэтому здесь это no-op. ⚠️ В ветке апгрейда пина МАЛО: Boot 4.1 тянет groovy-bom 5,
              а RA 5.5.6 собран на Groovy 4 → там нужна rest-assured 6.x. См. docs/upgrade-checklist.md. -->
         <rest-assured.version>5.5.6</rest-assured.version>
+
+        <!-- ОБЪЯВЛЕННЫЕ ГРАНИЦЫ СОВМЕСТИМОСТИ — здесь и только здесь.
+             README и AllureApiCanaryTest читают ЭТИ числа (канарейка — через
+             systemPropertyVariables ниже), поэтому разъехаться они не могут.
+             Меняешь число → обязан прогнать соответствующий compat-профиль. -->
+        <compat.allure.min>2.20.0</compat.allure.min>
+        <compat.allure.max>2.35.4</compat.allure.max>
+        <compat.boot.min>3.2.12</compat.boot.min>
+
+        <!-- Версия CLI-генератора отчёта РАСЦЕПЛЕНА с версией библиотеки: матрица меняет
+             allure.version, и без расцепления она заодно меняла бы генератор — а это разные
+             вещи (одна про наш байткод, другая про дистрибутив, который качается из сети). -->
+        <allure-report.version>2.25.0</allure-report.version>
+
+        <!-- Сверка инвентаря с эталоном. `off` допустим ТОЛЬКО внутри compat-профилей —
+             стережёт unit/PomCompatibilityTest. Эталон принадлежит нашей комбинации версий,
+             на чужой он краснел бы законно, поэтому там печатаем дельту человеку. -->
+        <inventory.compare>on</inventory.compare>
     </properties>
 
     <dependencyManagement>
@@ -314,6 +332,10 @@
                     <runOrder>random</runOrder>
                     <systemPropertyVariables>
                         <allure.results.directory>${project.build.directory}/allure-results</allure.results.directory>
+                        <!-- границы из <properties>: единственный источник правды -->
+                        <allure.compat.min>${compat.allure.min}</allure.compat.min>
+                        <allure.compat.max>${compat.allure.max}</allure.compat.max>
+                        <inventory.compare>${inventory.compare}</inventory.compare>
                     </systemPropertyVariables>
                     <!-- Self-attach byte-buddy-агента (ByteBuddyAgent.install) на JDK 21+ печатает
                          предупреждение, а в будущих JDK может быть запрещён по умолчанию (JEP 451).
@@ -375,7 +397,10 @@
                 <artifactId>allure-maven</artifactId>
                 <version>${allure-maven.version}</version>
                 <configuration>
-                    <reportVersion>${allure.version}</reportVersion>
+                    <!-- НЕ ${allure.version}: матрица меняет версию БИБЛИОТЕКИ, а не генератора
+                         отчёта. Связка заставляла бы compat-профиль качать чужой дистрибутив CLI
+                         и давала бы ложный сигнал «сломалось на старом Allure». -->
+                    <reportVersion>${allure-report.version}</reportVersion>
                     <resultsDirectory>${project.build.directory}/allure-results</resultsDirectory>
                 </configuration>
             </plugin>
@@ -476,6 +501,64 @@
                     </plugin>
                 </plugins>
             </build>
+        </profile>
+
+        <!-- ══════════════ МАТРИЦА СОВМЕСТИМОСТИ ══════════════
+             Все профили ниже НЕ активны по умолчанию: ежедневный `mvn clean test` не меняется.
+             Гоняются перед релизом и при любой правке compat.* — одной командой
+             scripts/compat-matrix.sh. Подробности: docs/compat-matrix.md. -->
+
+        <!-- Java 25 на нашей комбинации библиотек. Форкаем ТОЛЬКО тесты, компиляция остаётся
+             release=21: проверяем ровно то, что получит потребитель — jar под 21 на JVM 25.
+             Maven и его плагины остаются на 21, поэтому при поломке подозреваемый один.
+             <jvm> стоит в общей <configuration> → наследуется и прогоном инвентаря. -->
+        <profile>
+            <id>java25</id>
+            <properties>
+                <!-- brew install openjdk@25. Перебить: -Djava25.home=$(jenv prefix 25) -->
+                <java25.home>/opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk/Contents/Home</java25.home>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <jvm>${java25.home}/bin/java</jvm>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!-- Нижняя граница Allure. Пересобирает main против неё → компилятор первая линия,
+             AllureApiCanaryTest вторая, а его проверка рантайм-версии убеждается, что
+             объявленная граница не соврала. Инвентарь сверяем: версия Allure не меняет ни
+             одного нашего шага (мы их формируем сами), значит расхождение = настоящий сигнал. -->
+        <profile>
+            <id>compat-allure-min</id>
+            <properties>
+                <allure.version>${compat.allure.min}</allure.version>
+            </properties>
+        </profile>
+
+        <profile>
+            <id>compat-allure-max</id>
+            <properties>
+                <allure.version>${compat.allure.max}</allure.version>
+            </properties>
+        </profile>
+
+        <!-- Нижняя граница Spring Boot: меняется ВЕСЬ BOM (Spring 6.1, Hibernate 6.4,
+             Liquibase 4.2x, Kafka 3.6, byte-buddy 1.14.x, JUnit 5.10, AssertJ 3.24).
+             Форма SQL Hibernate и служебный SQL Liquibase поедут ЗАКОННО → сверку с эталоном
+             выключаем, дельту печатаем человеку. Безусловные гейты остаются жёсткими. -->
+        <profile>
+            <id>compat-boot-min</id>
+            <properties>
+                <spring-boot.version>${compat.boot.min}</spring-boot.version>
+                <inventory.compare>off</inventory.compare>
+            </properties>
         </profile>
     </profiles>
 </project>
