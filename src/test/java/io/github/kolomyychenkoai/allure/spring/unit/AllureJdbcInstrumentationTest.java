@@ -44,7 +44,7 @@ class AllureJdbcInstrumentationTest {
         });
 
         assertThat(allure.hasStep(result, "DB JdbcTemplate.query")).isTrue();
-        assertThat(allure.attachment(result, "SQL").orElseThrow()).contains("select name from widget");
+        assertThat(allure.attachment(result, "SQL (шаблон)").orElseThrow()).contains("select name from widget");
         assertThat(allure.attachment(result, "DB Result").orElseThrow()).contains("Collection size: 2");
     }
 
@@ -66,7 +66,7 @@ class AllureJdbcInstrumentationTest {
         assertThat(dbSteps).isEqualTo(1);
         assertThat(allure.hasStep(result, "DB NamedParameterJdbcTemplate.update")).isTrue();
         // в шаге NamedParameter виден ИМЕНОВАННЫЙ SQL (а не ?-делегат)
-        assertThat(allure.attachment(result, "SQL").orElseThrow()).contains(":n");
+        assertThat(allure.attachment(result, "SQL (шаблон)").orElseThrow()).contains(":n");
     }
 
     @Test
@@ -135,7 +135,7 @@ class AllureJdbcInstrumentationTest {
         });
         assertThat(allure.attachment(batch, "DB Result").orElseThrow()).contains("batch rows: 2");
         // firstSql для String[] склеивает запросы через ;\n
-        assertThat(allure.attachment(batch, "SQL").orElseThrow()).contains("insert into widget(name) values('a')")
+        assertThat(allure.attachment(batch, "SQL (шаблон)").orElseThrow()).contains("insert into widget(name) values('a')")
                 .contains("insert into widget(name) values('b')");
 
         TestResult voidCall = allure.run("jdbc-exec-void", () -> {
@@ -153,7 +153,7 @@ class AllureJdbcInstrumentationTest {
             String uuid = AllureJdbcInstrumentation.enter(JDBC, "execute", new Object[]{new Object()});
             AllureJdbcInstrumentation.exit(uuid, "ok", null);
         });
-        assertThat(allure.attachment(result, "SQL").orElseThrow()).isEqualTo("—");
+        assertThat(allure.attachment(result, "SQL (шаблон)").orElseThrow()).isEqualTo("—");
     }
 
     @Test

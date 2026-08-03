@@ -21,13 +21,16 @@ import static net.bytebuddy.matcher.ElementMatchers.not;
 /**
  * ByteBuddy-инструментирование прямого JDBC: вызовы {@code JdbcTemplate} и
  * {@code NamedParameterJdbcTemplate} (минуя репозитории Spring Data) дают шаг
- * «DB &lt;Тип&gt;.&lt;метод&gt;» с вложениями «SQL» (текст запроса) и «DB Result» (что вернулось).
- * Без кода в тестах. Механизм байткодный (а не AspectJ), т.к. шаблоны часто создаются руками
- * ({@code new JdbcTemplate(ds)}) и не являются Spring-бинами — Spring AOP их не ловит.
+ * «DB &lt;Тип&gt;.&lt;метод&gt;» с вложениями «SQL (шаблон)» (запрос как в коде, с {@code ?}/{@code :name})
+ * и «DB Result» (что вернулось). Без кода в тестах. Механизм байткодный (а не AspectJ), т.к. шаблоны
+ * часто создаются руками ({@code new JdbcTemplate(ds)}) и не являются Spring-бинами — Spring AOP их не ловит.
  * <p>
  * Шаг открывается ДО вызова, поэтому реальный SQL (модуль {@code AllureDataSourceListener},
- * datasource-proxy) вкладывается ВНУТРЬ — видно «вызов шаблона → его SQL», как репозиторий → SQL.
- * Работает и без datasource-proxy: тогда виден шаг с текстом запроса, но без вложенного реального SQL.
+ * datasource-proxy) вкладывается ВНУТРЬ отдельным шагом с вложением «SQL Query» — уже с
+ * ПОДСТАВЛЕННЫМИ значениями. Разные имена («SQL (шаблон)» с {@code ?} vs «SQL Query» со значениями)
+ * намеренно разводят «что написал код» и «что реально выполнилось», чтобы ручной приёмщик не принял
+ * {@code ?} за «значение неизвестно». Работает и без datasource-proxy: тогда виден только шаблон,
+ * без вложенного реального SQL.
  * <p>
  * <b>Дедуп по глубине.</b> Методы делегируют друг другу (queryForObject → query → execute) и
  * {@code NamedParameterJdbcTemplate} внутри зовёт обычный {@code JdbcTemplate} — без защиты
@@ -119,7 +122,7 @@ public final class AllureJdbcInstrumentation {
             Ctx ctx = CURRENT.get();
             CURRENT.remove();
             String sql = ctx != null ? ctx.sql() : null;
-            Allure.addAttachment("SQL", "text/plain", sql != null ? sql : "—");
+            Allure.addAttachment("SQL (шаблон)", "text/plain", sql != null ? sql : "—");
             if (thrown == null) {
                 Allure.addAttachment("DB Result", "text/plain", formatResult(result));
             }
