@@ -1,8 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.awaitility;
 
-import io.github.kolomyychenkoai.allure.spring.awaitility.internal.AllureAwaitilityConditionListener;
+import io.github.kolomyychenkoai.allure.spring.awaitility.internal.AllureAwaitilityRegistrar;
 import io.github.kolomyychenkoai.allure.spring.internal.ClassPresence;
-import org.awaitility.Awaitility;
 import org.springframework.core.Ordered;
 import org.springframework.test.context.TestContext;
 import org.springframework.test.context.TestExecutionListener;
@@ -25,6 +24,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class AllureAwaitilityListener implements TestExecutionListener, Ordered {
 
+    // Работа с типами Awaitility — в AllureAwaitilityRegistrar: держать её прямо здесь нельзя,
+    // иначе верификатор грузит ConditionEvaluationListener при линковке ЭТОГО класса и гейт
+    // ниже не успевает выполниться (гранулярность линковки — класс, а не метод).
     private static final boolean AWAITILITY_PRESENT =
             ClassPresence.isPresent("org.awaitility.Awaitility");
 
@@ -40,6 +42,6 @@ public class AllureAwaitilityListener implements TestExecutionListener, Ordered 
         if (!AWAITILITY_PRESENT || !INSTALLED.compareAndSet(false, true)) {
             return;
         }
-        Awaitility.setDefaultConditionEvaluationListener(new AllureAwaitilityConditionListener());
+        AllureAwaitilityRegistrar.registerConditionListener();
     }
 }

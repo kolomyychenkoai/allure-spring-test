@@ -25,7 +25,27 @@ import java.lang.instrument.Instrumentation;
  */
 public final class AllureInstrumentation {
 
+    /**
+     * Аварийный выключатель байткод-перехвата: {@code -Dallure.spring.instrumentation=off}.
+     * <p>
+     * Нужен потребителю, у которого перехват конфликтует с чужим агентом или ломает сборку:
+     * без выключателя единственный выход — выкинуть библиотеку целиком, хотя Spring-каналы
+     * (MockMvc, WebTestClient, конфиги, логи, Liquibase) работают и без байткода. Читается на
+     * КАЖДОМ вызове, а не один раз: значение должно быть можно менять в пределах JVM.
+     * <p>
+     * Им же пользуется {@code unit/ListenerDegradationTest}: он поднимает листенеры в отдельном
+     * загрузчике, а {@code Instrumentation} — общий на всю JVM, поэтому без выключателя тест
+     * навешивал бы вторую копию advice на уже инструментированные классы и задваивал шаги
+     * в отчёте всего прогона.
+     */
+    public static final String SWITCH = "allure.spring.instrumentation";
+
     private AllureInstrumentation() {
+    }
+
+    /** Выключен ли перехват свойством {@link #SWITCH}. */
+    public static boolean disabled() {
+        return "off".equalsIgnoreCase(System.getProperty(SWITCH));
     }
 
     /**
@@ -60,6 +80,9 @@ public final class AllureInstrumentation {
      */
     public static void retransform(ElementMatcher<? super TypeDescription> typeMatcher,
                                    AgentBuilder.Transformer transformer) {
+        if (disabled()) {
+            return;
+        }
         try {
             Instrumentation instrumentation = ByteBuddyAgent.install();
             // отмечаем СРАЗУ после привязки агента: во-первых, это она и есть по смыслу;

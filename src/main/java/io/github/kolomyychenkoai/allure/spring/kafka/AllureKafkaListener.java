@@ -40,11 +40,21 @@ public class AllureKafkaListener implements TestExecutionListener, Ordered {
 
     @Override
     public void beforeTestMethod(TestContext testContext) {
+        if (!ByteBuddyPresence.available()) {
+            return; // см. комментарий в afterTestMethod
+        }
         AllureKafkaConsumerInstrumentation.clear(); // окно привязки = текущий тест-метод
     }
 
     @Override
     public void afterTestMethod(TestContext testContext) {
+        // Гейт нужен и здесь, а не только на установке: буфер живёт ВНУТРИ класса-инструментатора,
+        // а тот держит типы byte-buddy — без библиотеки обращение к нему даёт NoClassDefFoundError
+        // прямо из хука и роняет тест-класс потребителя. Смысла в вызове всё равно нет: без
+        // инструментации в буфер никто ничего не клал. Закреплено unit/ListenerDegradationTest.
+        if (!ByteBuddyPresence.available()) {
+            return;
+        }
         AllureKafkaConsumerInstrumentation.flush(); // проиграть записи @KafkaListener на тест-потоке
     }
 }
