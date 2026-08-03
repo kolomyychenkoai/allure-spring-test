@@ -41,7 +41,7 @@ class ReportInventoryTest {
         steps.forEach(k -> owners.add(k.owner()));
         attachments.forEach(k -> owners.add(k.owner()));
         return new Scan(new TreeSet<>(steps), new TreeSet<>(attachments), owners,
-                steps.size() + attachments.size(), List.of());
+                steps.size() + attachments.size(), List.of(), List.of(), List.of());
     }
 
     private static Baseline baselineOf(Set<Kind> steps, Set<Kind> attachments) {
@@ -279,6 +279,35 @@ class ReportInventoryTest {
             Scan scan = ReportInventory.scan(dir.resolve("нет-такого"));
             assertThat(scan.owners()).isEmpty();
             assertThat(scan.resultFiles()).isZero();
+        }
+
+        @Test
+        @DisplayName("вложение БЕЗ ФАЙЛА — отдельный диагноз, а не «содержимое есть»")
+        void missingAttachmentFileIsReported(@TempDir Path dir) throws IOException {
+            // худший исход прежней логики: «объявили вложение, байты потеряли» выглядело здоровым
+            Files.writeString(dir.resolve("a-result.json"), """
+                    {"labels":[{"name":"testClass","value":"io.github.kolomyychenkoai.allure.spring.demo.KafkaReportIT"}],
+                     "attachments":[{"name":"DB Result","type":"text/plain","source":"нет-такого.txt"}]}
+                    """, StandardCharsets.UTF_8);
+
+            Scan scan = ReportInventory.scan(dir);
+
+            assertThat(scan.missingFiles()).singleElement().asString()
+                    .contains("DB Result").contains("нет-такого.txt");
+        }
+
+        @Test
+        @DisplayName("технический мусор в имени шага попадает в отдельный список")
+        void dirtyStepNameIsReported(@TempDir Path dir) throws IOException {
+            Files.writeString(dir.resolve("a-result.json"), """
+                    {"labels":[{"name":"testClass","value":"io.github.kolomyychenkoai.allure.spring.demo.AssertJReportIT"}],
+                     "steps":[{"name":"Проверка: значение x — satisfies Demo$$Lambda/0x00007f@1a2b3c"},
+                              {"name":"Проверка: значение [a, b] — contains [a]"}]}
+                    """, StandardCharsets.UTF_8);
+
+            Scan scan = ReportInventory.scan(dir);
+
+            assertThat(scan.dirtyNames()).singleElement().asString().contains("$$Lambda");
         }
 
         @Test

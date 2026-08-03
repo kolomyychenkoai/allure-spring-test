@@ -66,6 +66,22 @@ class ReportInventoryCheck {
                     + " пуст или отсутствует. Создай: mvn clean test -D" + UPDATE_FLAG + "=true");
         }
 
+        // Оба гейта безусловные и НЕ зависят от эталона: это не «отчёт стал другим»,
+        // а «отчёт сломан» — обновлением эталона такое не лечится.
+        if (!scan.missingFiles().isEmpty()) {
+            throw new AssertionError("""
+                    ВЛОЖЕНИЯ БЕЗ ФАЙЛА (%d): вложение объявлено в result.json, а байты не записаны —
+                    в отчёте оно откроется пустым. Инвентарь гоняется вторым прогоном, всё уже
+                    сброшено на диск, так что это дефект, а не гонка.
+                    %s""".formatted(scan.missingFiles().size(), "  " + String.join("\n  ", scan.missingFiles())));
+        }
+        if (!scan.dirtyNames().isEmpty()) {
+            throw new AssertionError("""
+                    ТЕХНИЧЕСКИЙ МУСОР В ИМЕНАХ (%d): отчёт принимают ВРУЧНУЮ, хэши и синтетические
+                    имена в шагах читать невозможно. Чинить рендер значения (AllureAdviceSupport.safe),
+                    а не добавлять исключение в StepNameHygiene.
+                    %s""".formatted(scan.dirtyNames().size(), "  " + String.join("\n  ", scan.dirtyNames())));
+        }
         if (!scan.unreadable().isEmpty()) {
             System.out.println("ИНВЕНТАРЬ: нечитаемые файлы результатов (пропущены, диагноз мог поехать):\n  "
                     + String.join("\n  ", scan.unreadable()));

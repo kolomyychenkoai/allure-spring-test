@@ -36,15 +36,29 @@ public final class AllureAdviceSupport {
         Allure.step(name, Status.PASSED);
     }
 
+    /** Больше — не печатаем поэлементно: имя шага всё равно обрежется по {@link #MAX_LEN}. */
+    private static final int MAX_ARRAY_ITEMS = 50;
+    /** Двоичное содержимое поэлементно нечитаемо — как и в SQL-вложениях, показываем размер. */
+    private static final int MAX_BINARY = 32;
+
     /**
-     * Безопасный рендер значения для имени шага: не бросает ({@code toString()}
-     * пользовательского объекта может кинуть), массивы печатает поэлементно
-     * ({@code deepToString}), длину ограничивает {@link #MAX_LEN}. При сбое — {@code "<?>"}.
+     * Безопасный рендер значения для ИМЕНИ ШАГА: не бросает ({@code toString()} пользовательского
+     * объекта может кинуть), длину ограничивает {@link #MAX_LEN}. При сбое — {@code "<?>"}.
+     * <p>
+     * Имя шага читает ЧЕЛОВЕК (отчёт принимают вручную), поэтому здесь же убирается технический
+     * мусор, который иначе течёт во все модули сразу — это единственная общая точка рендера
+     * значений для AssertJ, Hamcrest, Jupiter, Spring-ассертов, Mockito и WireMock-verify:
+     * <ul>
+     *   <li>массивы — поэлементно, ВКЛЮЧАЯ примитивные (без этого {@code assertThat(bytes)}
+     *       давал {@code [B@4a3f2b1c});</li>
+     *   <li>лямбды и method-reference → {@code <лямбда>} (было {@code Demo$$Lambda/0x…@1a2b});</li>
+     *   <li>объект без своего {@code toString()} → {@code <ПростоеИмя>} (было {@code Класс@хэш}).</li>
+     * </ul>
      */
     public static String safe(Object value) {
         String s;
         try {
-            s = (value instanceof Object[]) ? Arrays.deepToString((Object[]) value) : String.valueOf(value);
+            s = renderForName(value);
         } catch (Throwable t) {
             s = "<?>";
         }
@@ -52,6 +66,43 @@ public final class AllureAdviceSupport {
             s = s.substring(0, MAX_LEN) + "…";
         }
         return s;
+    }
+
+    private static String renderForName(Object value) {
+        if (value == null) {
+            return "null";
+        }
+        Class<?> type = value.getClass();
+        // Проверяем И synthetic, И маркер имени: synthetic бывает у прокси и записей компилятора,
+        // а «$$» без synthetic — у классов пользователя с таким именем. Нужны оба признака.
+        if (type.isSynthetic() && type.getName().contains("$$Lambda")) {
+            return "<лямбда>";
+        }
+        if (type.isArray()) {
+            return array(value);
+        }
+        String text = String.valueOf(value);
+        // toString() не переопределён → Object.toString() = имя класса + '@' + hex(hashCode).
+        // Сравнение ТОЧНОЕ, поэтому легитимные toString с '@' внутри не страдают.
+        // hashCode() зовём только ПОСЛЕ успешного toString — не будим ленивые прокси раньше времени.
+        return text != null && text.equals(type.getName() + "@" + Integer.toHexString(value.hashCode()))
+                ? "<" + type.getSimpleName() + ">"
+                : text;
+    }
+
+    private static String array(Object value) {
+        if (value instanceof Object[] objects) {
+            return Arrays.deepToString(objects);
+        }
+        if (value instanceof byte[] bytes) {
+            return bytes.length > MAX_BINARY ? "<двоичные данные, " + bytes.length + " байт>" : Arrays.toString(bytes);
+        }
+        int length = java.lang.reflect.Array.getLength(value);
+        StringBuilder out = new StringBuilder("[");
+        for (int i = 0; i < Math.min(length, MAX_ARRAY_ITEMS); i++) {
+            out.append(i > 0 ? ", " : "").append(java.lang.reflect.Array.get(value, i));
+        }
+        return out.append(length > MAX_ARRAY_ITEMS ? ", … всего " + length + "]" : "]").toString();
     }
 
     /**

@@ -72,7 +72,17 @@ public final class ReportInventory {
 
     /** Что реально произвёл прогон. */
     public record Scan(Set<Kind> steps, Set<Kind> attachments, Set<String> owners, int resultFiles,
-                       List<String> unreadable) {
+                       List<String> unreadable, List<String> missingFiles, List<String> dirtyNames) {
+    }
+
+    /** Состояние содержимого вложения. */
+    public enum Content {
+        /** Файл на месте и непустой (либо источник не указан — судить не о чем). */
+        PRESENT,
+        /** Файл на месте, но пустой — деградация «пишем, а нечего показать». */
+        EMPTY,
+        /** Файла НЕТ: вложение объявлено, байты не записаны. Отчёт сломан, а не «стал другим». */
+        MISSING
     }
 
     /** Что записано в эталоне. */
@@ -133,9 +143,11 @@ public final class ReportInventory {
         Set<String> owners = new TreeSet<>();
         int files = 0;
         if (!Files.isDirectory(resultsDir)) {
-            return new Scan(steps, attachments, owners, 0, List.of());
+            return new Scan(steps, attachments, owners, 0, List.of(), List.of(), List.of());
         }
         List<String> unreadable = new ArrayList<>();
+        List<String> missingFiles = new ArrayList<>();
+        List<String> dirtyNames = new ArrayList<>();
         try (Stream<Path> list = Files.list(resultsDir)) {
             List<Path> results = list.filter(p -> p.getFileName().toString().endsWith("-result.json")).toList();
             for (Path file : results) {
@@ -150,48 +162,73 @@ public final class ReportInventory {
                 files++;
                 String owner = testClass.substring(testClass.lastIndexOf('.') + 1);
                 owners.add(owner);
-                collectAttachments(root, owner, attachments, resultsDir);
-                collectSteps(root, owner, null, steps, attachments, resultsDir);
+                collectAttachments(root, owner, attachments, resultsDir, missingFiles, dirtyNames);
+                collectSteps(root, owner, null, steps, attachments, resultsDir, missingFiles, dirtyNames);
             }
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        return new Scan(steps, attachments, owners, files, unreadable);
+        return new Scan(steps, attachments, owners, files, unreadable, missingFiles, dirtyNames);
     }
 
     /** {@code parent} — шаблон НЕПОСРЕДСТВЕННОГО родителя (null для верхнего уровня). */
-    private static void collectSteps(JsonNode node, String owner, String parent,
-                                     Set<Kind> steps, Set<Kind> attachments, Path resultsDir) {
+    private static void collectSteps(JsonNode node, String owner, String parent, Set<Kind> steps,
+                                     Set<Kind> attachments, Path resultsDir,
+                                     List<String> missingFiles, List<String> dirtyNames) {
         for (JsonNode step : node.path("steps")) {
-            String template = StepTemplates.step(step.path("name").asText(""));
+            String raw = step.path("name").asText("");
+            hygiene(owner, raw, dirtyNames);
+            String template = StepTemplates.step(raw);
             steps.add(new Kind(owner, parent == null ? template : parent + NESTED + template));
-            collectAttachments(step, owner, attachments, resultsDir);
-            collectSteps(step, owner, template, steps, attachments, resultsDir);
+            collectAttachments(step, owner, attachments, resultsDir, missingFiles, dirtyNames);
+            collectSteps(step, owner, template, steps, attachments, resultsDir, missingFiles, dirtyNames);
         }
     }
 
-    private static void collectAttachments(JsonNode node, String owner, Set<Kind> attachments, Path resultsDir) {
+    /** Гигиена по СЫРОМУ имени: нормализация маскирует хэши, то есть прячет ровно этот мусор. */
+    private static void hygiene(String owner, String rawName, List<String> dirtyNames) {
+        StepNameHygiene.defect(rawName)
+                .ifPresent(diagnosis -> dirtyNames.add(owner + " | " + rawName + "  ← " + diagnosis));
+    }
+
+    private static void collectAttachments(JsonNode node, String owner, Set<Kind> attachments, Path resultsDir,
+                                           List<String> missingFiles, List<String> dirtyNames) {
         for (JsonNode att : node.path("attachments")) {
+            String name = att.path("name").asText("");
+            hygiene(owner, name, dirtyNames);
+            String source = att.path("source").asText(null);
+            Content content = content(resultsDir, source);
+            if (content == Content.MISSING) {
+                // НЕ вид: «вложение объявлено, а байтов нет» — это не «отчёт стал другим», а
+                // «отчёт сломан», и лечится оно не обновлением эталона. Отдельный безусловный гейт.
+                missingFiles.add(owner + " | " + name + " → нет файла " + source);
+            }
             attachments.add(new Kind(owner, StepTemplates.attachment(
-                    att.path("name").asText(""), att.path("type").asText(""),
-                    hasContent(resultsDir, att.path("source").asText(null)))));
+                    name, att.path("type").asText(""), content != Content.EMPTY)));
         }
     }
 
     /**
-     * Есть ли у вложения непустое содержимое. Признак входит в ВИД: типичная тихая деградация —
-     * «вложение пишется, но пустое» (напр. разбор полей сущности отвалился) — иначе прошла бы мимо,
+     * Состояние содержимого вложения. Признак «пусто» входит в ВИД: типичная тихая деградация —
+     * «вложение пишется, но пустое» (напр. отвалился разбор полей сущности) — иначе прошла бы мимо,
      * ведь имя и mime на месте.
+     * <p>
+     * ОТСУТСТВИЕ файла-источника раньше читалось как «содержимое есть» — то есть самая тяжёлая
+     * деградация выглядела здоровой. Инвентарь гоняется ВТОРЫМ прогоном, когда всё уже сброшено
+     * на диск, так что «файла нет» — однозначный дефект, а не гонка.
      */
-    private static boolean hasContent(Path resultsDir, String source) {
+    static Content content(Path resultsDir, String source) {
         if (source == null || source.isBlank()) {
-            return true; // источник не указан — судить не о чем, не выдумываем деградацию
+            return Content.PRESENT; // источник не указан — судить не о чем, не выдумываем деградацию
+        }
+        Path file = resultsDir.resolve(source);
+        if (!Files.isRegularFile(file)) {
+            return Content.MISSING;
         }
         try {
-            Path file = resultsDir.resolve(source);
-            return !Files.isRegularFile(file) || Files.size(file) > 0;
+            return Files.size(file) > 0 ? Content.PRESENT : Content.EMPTY;
         } catch (IOException unreadable) {
-            return true;
+            return Content.MISSING;
         }
     }
 
