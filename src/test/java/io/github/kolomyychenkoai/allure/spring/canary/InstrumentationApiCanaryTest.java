@@ -77,6 +77,13 @@ class InstrumentationApiCanaryTest {
                 "MockMvc.perform уехал → обнови матчер в AllureMockMvcInstrumentation");
         require(hasMethod("org.springframework.web.client.RestTemplate", "getInterceptors", 0, null),
                 "RestTemplate.getInterceptors уехал → AllureRestTemplateInstrumentation вешает интерсептор через него");
+        // Матчер вешает advice на ОБЪЯВИТЕЛЯ setInterceptors. ByteBuddy вплетает только в методы,
+        // ОБЪЯВЛЕННЫЕ в трансформируемом типе, поэтому переезд метода между классами иерархии
+        // превратил бы перехват в тихий no-op — красным это не станет само.
+        require(declaredIn("org.springframework.web.client.RestTemplate", "setInterceptors", java.util.List.class,
+                        "org.springframework.http.client.support.InterceptingHttpAccessor"),
+                "setInterceptors объявлен уже не в InterceptingHttpAccessor → матчер "
+                        + "AllureRestTemplateInstrumentation не сматчит ничего и станет тихим no-op");
     }
 
     @Test
@@ -370,6 +377,16 @@ class InstrumentationApiCanaryTest {
                         .isAtMost(net.bytebuddy.ClassFileVersion.latest()),
                 "byte-buddy не знает формат классов этой JVM → весь байткод-слой мёртв. "
                         + "Подними версию byte-buddy (или включи -Dnet.bytebuddy.experimental=true ОСОЗНАННО)");
+    }
+
+    /** Объявлен ли метод ИМЕННО в этом классе иерархии (ByteBuddy вплетает только в объявителя). */
+    private static boolean declaredIn(String className, String method, Class<?> paramType, String expectedDeclarer) {
+        try {
+            return Class.forName(className).getMethod(method, paramType).getDeclaringClass()
+                    .getName().equals(expectedDeclarer);
+        } catch (ReflectiveOperationException e) {
+            return false;
+        }
     }
 
     /** Есть ли у класса поле (в т.ч. приватное) — для канареек на {@code @Advice.FieldValue}. */
