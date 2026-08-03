@@ -41,6 +41,19 @@ class WireMockReportIT {
 
     static WireMockServer wireMock = new WireMockServer(0);
 
+    /**
+     * Второй способ регистрации, которым пользуется половина потребителей. WireMockExtension
+     * наследует DslWrapper, а НЕ WireMockServer, поэтому поиск по типу поля его не находил:
+     * байткод (stubFor/verify) работал, а «сервер поднят», «Запрос к заглушке» и вложения — нет.
+     * Обязательно static: нестатический @RegisterExtension стартует в beforeEach ПОСЛЕ
+     * SpringExtension, и к моменту beforeTestMethod сервер ещё не поднят.
+     */
+    @org.junit.jupiter.api.extension.RegisterExtension
+    static com.github.tomakehurst.wiremock.junit5.WireMockExtension wireMockExtension =
+            com.github.tomakehurst.wiremock.junit5.WireMockExtension.newInstance()
+                    .options(com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig().dynamicPort())
+                    .build();
+
     @BeforeAll
     static void start() {
         wireMock.start();
@@ -119,6 +132,16 @@ class WireMockReportIT {
                 () -> "нет шага запроса GET /api/prices (request-листенер не сработал?)");
         CurrentReport.check(CurrentReport.anyResultFileContains("WireMock Request"),
                 () -> "нет вложения WireMock Request");
+    }
+
+    @Test
+    @DisplayName("сервер из @RegisterExtension WireMockExtension тоже инструментирован")
+    void wireMockExtensionServerIsInstrumented() throws Exception {
+        wireMockExtension.stubFor(get(urlPathEqualTo("/api/ext")).willReturn(okJson("{\"ext\":true}")));
+        int status = send(HttpClient.newHttpClient(), wireMockExtension.baseUrl() + "/api/ext", null);
+
+        CurrentReport.check(status == 200, () -> "заглушка extension не ответила 200: " + status);
+        CurrentReport.assertStep("WireMock: сервер поднят (:" + wireMockExtension.getPort() + ")");
     }
 
     private static int send(HttpClient client, String url, String body) throws Exception {

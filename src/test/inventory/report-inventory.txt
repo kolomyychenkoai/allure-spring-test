@@ -130,6 +130,7 @@ WireMockReportIT | WireMock сценарий «retry»: состояние recov
 WireMockReportIT | WireMock: сброс заглушек (:<PORT>)  # AllureWireMockVerifyInstrumentation (reset-advice)
 WireMockReportIT | WireMock: сервер поднят (:<PORT>)  # AllureWireMockTestListener.serverUp
 WireMockReportIT | Запрос к заглушке: GET /api/does-not-exist → 404  # AllureWireMockSteps
+WireMockReportIT | Запрос к заглушке: GET /api/ext → 200  # AllureWireMockSteps (сервер из @RegisterExtension)
 WireMockReportIT | Запрос к заглушке: GET /api/flaky → 200  # AllureWireMockSteps
 WireMockReportIT | Запрос к заглушке: GET /api/flaky → 503  # AllureWireMockSteps
 WireMockReportIT | Запрос к заглушке: GET /api/prices → 200  # AllureWireMockSteps
@@ -137,6 +138,7 @@ WireMockReportIT | Запрос к заглушке: POST /api/orders → 201  #
 WireMockReportIT | Конфиги приложения  # AllureConfigurationListener
 WireMockReportIT | Проверка обращений к заглушке  # AllureWireMockVerifyInstrumentation (verify)
 WireMockReportIT | Проверка обращений к заглушке (×<N>)  # AllureWireMockVerifyInstrumentation (verify)
+WireMockReportIT | Создана заглушка: GET /api/ext → 200  # AllureWireMockVerifyInstrumentation (stubFor у extension)
 WireMockReportIT | Создана заглушка: GET /api/flaky → 200  # AllureWireMockVerifyInstrumentation (stubFor)
 WireMockReportIT | Создана заглушка: GET /api/flaky → 503  # AllureWireMockVerifyInstrumentation (stubFor)
 WireMockReportIT | Создана заглушка: GET /api/prices → 200  # AllureWireMockVerifyInstrumentation (stubFor)

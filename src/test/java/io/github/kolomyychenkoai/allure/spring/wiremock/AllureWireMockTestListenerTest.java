@@ -51,6 +51,46 @@ class AllureWireMockTestListenerTest {
         return server;
     }
 
+    @Test
+    @DisplayName("находит сервер ВНУТРИ WireMockExtension (@RegisterExtension), а не только в поле WireMockServer")
+    void findsServerInsideWireMockExtension() throws Exception {
+        // WireMockExtension наследует DslWrapper, а НЕ WireMockServer, поэтому фильтр по типу поля
+        // его пропускал: байткод (stubFor/verify) работал, а «сервер поднят», «Запрос к заглушке»,
+        // вложения Request/Response, near-miss и сценарии молча отсутствовали.
+        WireMockServer server = running();
+        com.github.tomakehurst.wiremock.junit5.WireMockExtension extension =
+                com.github.tomakehurst.wiremock.junit5.WireMockExtension.newInstance().build();
+        java.lang.reflect.Field field =
+                com.github.tomakehurst.wiremock.junit5.WireMockExtension.class.getDeclaredField("wireMockServer");
+        field.setAccessible(true);
+        field.set(extension, server); // так же кладёт сам extension при старте
+
+        WithExtension instance = new WithExtension();
+        instance.wireMock = extension;
+
+        assertThat(listener.findServers(context(WithExtension.class, instance))).containsExactly(server);
+    }
+
+    @Test
+    @DisplayName("находит WireMockServer среди бинов контекста (@AutoConfigureWireMock)")
+    void findsServerAmongBeans() {
+        WireMockServer server = running();
+        org.springframework.context.ApplicationContext ctx =
+                mock(org.springframework.context.ApplicationContext.class);
+        doReturn(java.util.Map.of("wireMockServer", server)).when(ctx).getBeansOfType(WireMockServer.class);
+        TestContext testContext = context(NoFields.class, new NoFields());
+        doReturn(ctx).when(testContext).getApplicationContext();
+
+        assertThat(listener.findServers(testContext)).containsExactly(server);
+    }
+
+    static class WithExtension {
+        com.github.tomakehurst.wiremock.junit5.WireMockExtension wireMock;
+    }
+
+    static class NoFields {
+    }
+
     private TestContext context(Class<?> testClass, Object instance) {
         TestContext ctx = mock(TestContext.class);
         doReturn(testClass).when(ctx).getTestClass();
