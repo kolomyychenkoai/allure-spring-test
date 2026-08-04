@@ -461,6 +461,8 @@ inline mock maker из Mockito 5.x), вручную не задирай.
 
 - `docs/acceptance-report-standard.md` — критерий приёмки по Allure-отчёту (+ эталонные модули).
 - `docs/java-code-standard.md` — кодекс качества кода (идиомы, потокобезопасность, грабли).
+- `docs/review-playbook.md` — процедура ревью: матрица охвата, порядок проходов и правило
+  остановки (кодексы задают критерии, playbook — как не пропустить).
 - `docs/adr/0001-assertj-instrumentation.md` — решение по самому хрупкому узлу (AssertJ).
 - `docs/adr/0002-allure-commons-compile-scope.md` — почему единственная compile-зависимость
   остаётся compile, хотя это навязывает версию потребителю.
