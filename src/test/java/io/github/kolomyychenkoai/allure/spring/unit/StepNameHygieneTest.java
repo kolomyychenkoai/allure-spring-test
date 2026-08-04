@@ -46,6 +46,22 @@ class StepNameHygieneTest {
         }
 
         @Test
+        @DisplayName("тело вложения: структурный мусор ловится, техножаргон имени — нет")
+        void bodyRulesAreNarrower() {
+            // Структурный мусор не в порядке НИГДЕ
+            assertThat(StepNameHygiene.bodyDefect("Arguments:\n  [0]: [B@4a3f2b1c"))
+                    .get().asString().contains("массива");
+            assertThat(StepNameHygiene.bodyDefect("Widget{owner=io.demo.User@7ab1c2d3}")).isPresent();
+
+            // А вот сырое описание Awaitility во ВЛОЖЕНИИ «Условие ожидания» лежит НАМЕРЕННО
+            // (AllureAwaitilityConditionListener кладёт его как источник правды и чистит только
+            // ИМЯ шага). Правило про форму имени не должно роняться на теле.
+            String raw = "Condition with alias результат готов defined as a Lambda expression in Demo returned true";
+            assertThat(StepNameHygiene.defect(raw)).as("в ИМЕНИ шага это мусор").isPresent();
+            assertThat(StepNameHygiene.bodyDefect(raw)).as("в ТЕЛЕ вложения это содержание").isEmpty();
+        }
+
+        @Test
         @DisplayName("динамический прокси и техножаргон Awaitility")
         void proxyAndAwaitility() {
             assertThat(StepNameHygiene.defect("Мок-вызов: $Proxy42.handle()")).isPresent();

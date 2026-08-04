@@ -85,7 +85,15 @@ public final class ReportInventory {
     /** Что реально произвёл прогон. */
     public record Scan(Set<Kind> steps, Set<Kind> attachments, Set<String> owners, int resultFiles,
                        List<String> unreadable, List<String> missingFiles, List<String> dirtyNames,
-                       Map<Kind, Range> perCase) {
+                       Map<Kind, Range> perCase, List<String> dirtyBodies) {
+
+        /** Без {@code dirtyBodies} — для тестов вердикта, которым тела вложений не нужны. */
+        public Scan(Set<Kind> steps, Set<Kind> attachments, Set<String> owners, int resultFiles,
+                    List<String> unreadable, List<String> missingFiles, List<String> dirtyNames,
+                    Map<Kind, Range> perCase) {
+            this(steps, attachments, owners, resultFiles, unreadable, missingFiles, dirtyNames,
+                    perCase, List.of());
+        }
     }
 
     /** Состояние содержимого вложения. */
@@ -212,6 +220,7 @@ public final class ReportInventory {
         List<String> unreadable = new ArrayList<>();
         List<String> missingFiles = new ArrayList<>();
         List<String> dirtyNames = new ArrayList<>();
+        List<String> dirtyBodies = new ArrayList<>();
         Map<Kind, Range> perCase = new TreeMap<>();
         try (Stream<Path> list = Files.list(resultsDir)) {
             List<Path> results = list.filter(p -> p.getFileName().toString().endsWith("-result.json")).toList();
@@ -231,21 +240,22 @@ public final class ReportInventory {
                 // эталон по причине, не связанной с отчётом. Инвариант библиотеки — «один вызов =
                 // один шаг», и он про кейс.
                 Map<Kind, Integer> local = new HashMap<>();
-                collectAttachments(root, owner, attachments, resultsDir, missingFiles, dirtyNames, local);
-                collectSteps(root, owner, null, steps, attachments, resultsDir, missingFiles, dirtyNames, local);
+                collectAttachments(root, owner, attachments, resultsDir, missingFiles, dirtyNames, dirtyBodies, local);
+                collectSteps(root, owner, null, steps, attachments, resultsDir, missingFiles, dirtyNames,
+                        dirtyBodies, local);
                 local.forEach((kind, n) -> perCase.merge(kind, new Range(n, n), Range::with));
             }
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        return new Scan(steps, attachments, owners, files, unreadable, missingFiles, dirtyNames, perCase);
+        return new Scan(steps, attachments, owners, files, unreadable, missingFiles, dirtyNames, perCase, dirtyBodies);
     }
 
     /** {@code parent} — шаблон НЕПОСРЕДСТВЕННОГО родителя (null для верхнего уровня). */
     private static void collectSteps(JsonNode node, String owner, String parent, Set<Kind> steps,
                                      Set<Kind> attachments, Path resultsDir,
                                      List<String> missingFiles, List<String> dirtyNames,
-                                     Map<Kind, Integer> local) {
+                                     List<String> dirtyBodies, Map<Kind, Integer> local) {
         for (JsonNode step : node.path("steps")) {
             String raw = step.path("name").asText("");
             hygiene(owner, raw, dirtyNames);
@@ -256,8 +266,9 @@ public final class ReportInventory {
                     (parent == null ? template : parent + NESTED + template) + statusSuffix(step));
             steps.add(kind);
             local.merge(kind, 1, Integer::sum);
-            collectAttachments(step, owner, attachments, resultsDir, missingFiles, dirtyNames, local);
-            collectSteps(step, owner, template, steps, attachments, resultsDir, missingFiles, dirtyNames, local);
+            collectAttachments(step, owner, attachments, resultsDir, missingFiles, dirtyNames, dirtyBodies, local);
+            collectSteps(step, owner, template, steps, attachments, resultsDir, missingFiles, dirtyNames,
+                    dirtyBodies, local);
         }
     }
 
@@ -277,14 +288,68 @@ public final class ReportInventory {
                 .ifPresent(diagnosis -> dirtyNames.add(owner + " | " + rawName + "  ← " + diagnosis));
     }
 
+    /** Сколько байт тела читаем ради гигиены: мусор рождается в рендере значения и виден сразу. */
+    private static final int BODY_PROBE = 64 * 1024;
+
+    /**
+     * Те же правила гигиены, но по ТЕЛУ вложения.
+     * <p>
+     * Имя стерегли с самого начала, а тело — нет, хотя рождается мусор в одной и той же точке
+     * ({@code AllureAdviceSupport}) и течёт в оба места. Вид вложения знает только «пусто/непусто»,
+     * поэтому {@code [B@4a3f} вместо аргумента, {@code HibernateProxy} вместо сущности или
+     * {@code $$Lambda} в «Mock Call» проходят мимо сетки: имя, mime и непустота на месте.
+     * Типовой исход апгрейда — матчер или имя поля уехали, и рендер выдал внутренности.
+     * <p>
+     * На момент включения нарушителей НОЛЬ (проверено по всем телам прогона) — гейт заводится
+     * «в зелёном», как и гейт по именам. Появился мусор — чинить рендер в {@code src/main}.
+     * <p>
+     * Только текстовые вложения: гонять регулярки по декодированным байтам картинки или архива
+     * значит выдумывать нарушения на ровном месте.
+     */
+    private static void bodyHygiene(String owner, String name, String type, Path resultsDir,
+                                    String source, List<String> dirtyBodies) {
+        if (source == null || source.isBlank() || !isText(type)) {
+            return;
+        }
+        Path file = resultsDir.resolve(source);
+        if (!Files.isRegularFile(file)) {
+            return; // «файла нет» — отдельный гейт missingFiles, второй раз не диагностируем
+        }
+        String body;
+        try (var reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+            char[] probe = new char[BODY_PROBE];
+            int read = reader.read(probe);
+            body = read <= 0 ? "" : new String(probe, 0, read);
+        } catch (IOException | RuntimeException unreadable) {
+            return; // нечитаемое тело — не наша тема, о ней скажет content()/unreadable
+        }
+        StepNameHygiene.bodyDefect(body).ifPresent(diagnosis ->
+                dirtyBodies.add(owner + " | " + name + " → " + diagnosis + "\n      …"
+                        + excerpt(body) + "…"));
+    }
+
+    /** Текстовое ли вложение (регулярки по картинке дали бы выдуманные нарушения). */
+    private static boolean isText(String type) {
+        return type != null && (type.startsWith("text/") || type.contains("json") || type.contains("xml"));
+    }
+
+    /** Кусок тела вокруг первого нарушения — чтобы не листать вложение руками. */
+    private static String excerpt(String body) {
+        String flat = body.replace('\n', '⏎');
+        int at = StepNameHygiene.bodyDefectAt(flat);
+        int from = Math.max(0, at - 50);
+        return flat.substring(from, Math.min(flat.length(), from + 120));
+    }
+
     private static void collectAttachments(JsonNode node, String owner, Set<Kind> attachments, Path resultsDir,
                                            List<String> missingFiles, List<String> dirtyNames,
-                                     Map<Kind, Integer> local) {
+                                           List<String> dirtyBodies, Map<Kind, Integer> local) {
         for (JsonNode att : node.path("attachments")) {
             String name = att.path("name").asText("");
             hygiene(owner, name, dirtyNames);
             String source = att.path("source").asText(null);
             Content content = content(resultsDir, source);
+            bodyHygiene(owner, name, att.path("type").asText(""), resultsDir, source, dirtyBodies);
             if (content == Content.MISSING) {
                 // НЕ вид: «вложение объявлено, а байтов нет» — это не «отчёт стал другим», а
                 // «отчёт сломан», и лечится оно не обновлением эталона. Отдельный безусловный гейт.

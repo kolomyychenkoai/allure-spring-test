@@ -98,6 +98,14 @@ class ReportInventoryCheck {
                     а не добавлять исключение в StepNameHygiene.
                     %s""".formatted(scan.dirtyNames().size(), "  " + String.join("\n  ", scan.dirtyNames())));
         }
+        if (!scan.dirtyBodies().isEmpty()) {
+            throw new AssertionError("""
+                    ТЕХНИЧЕСКИЙ МУСОР В ТЕЛЕ ВЛОЖЕНИЯ (%d): вид вложения знает только «пусто/непусто»,
+                    поэтому выродившееся содержимое сетка иначе не видит — имя, mime и непустота на
+                    месте. Чинить рендер значения (AllureAdviceSupport.safeValue/render), а не
+                    добавлять исключение в StepNameHygiene.
+                    %s""".formatted(scan.dirtyBodies().size(), "  " + String.join("\n  ", scan.dirtyBodies())));
+        }
         if (!scan.unreadable().isEmpty()) {
             System.out.println("ИНВЕНТАРЬ: нечитаемые файлы результатов (пропущены, диагноз мог поехать):\n  "
                     + String.join("\n  ", scan.unreadable()));

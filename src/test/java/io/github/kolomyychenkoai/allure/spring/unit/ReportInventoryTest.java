@@ -383,6 +383,56 @@ class ReportInventoryTest {
         }
 
         @Test
+        @DisplayName("технический мусор в ТЕЛЕ вложения попадает в отдельный список")
+        void dirtyAttachmentBodyIsReported(@TempDir Path dir) throws IOException {
+            // вид вложения знает только «пусто/непусто» — без этого гейта выродившееся тело
+            // (типовой исход апгрейда: рендер выдал внутренности) проходит мимо сетки
+            Files.writeString(dir.resolve("dirty-attachment.txt"),
+                    "Method: WidgetRepo.save\nArguments:\n  [0]: [B@4a3f2b1c", StandardCharsets.UTF_8);
+            Files.writeString(dir.resolve("clean-attachment.txt"),
+                    "Widget{id=1, name=gadget}", StandardCharsets.UTF_8);
+            Files.writeString(dir.resolve("a-result.json"), """
+                    {"labels":[{"name":"testClass","value":"io.github.kolomyychenkoai.allure.spring.demo.AllureMockitoReportIT"}],
+                     "attachments":[{"name":"Mock Call","type":"text/plain","source":"dirty-attachment.txt"},
+                                    {"name":"DB Result","type":"text/plain","source":"clean-attachment.txt"}]}
+                    """, StandardCharsets.UTF_8);
+
+            Scan scan = ReportInventory.scan(dir);
+
+            assertThat(scan.dirtyBodies()).singleElement().asString()
+                    .contains("Mock Call")
+                    .contains("toString массива")
+                    .contains("[B@4a3f2b1c"); // в диагноз попадает кусок тела вокруг находки
+        }
+
+        @Test
+        @DisplayName("АНТИ-правило: по НЕтекстовому вложению гигиена тел не гоняется")
+        void binaryAttachmentBodyNotChecked(@TempDir Path dir) throws IOException {
+            // регулярки по декодированным байтам картинки выдумывали бы нарушения на ровном месте
+            Files.writeString(dir.resolve("shot-attachment.png"), "PNG…[B@4a3f2b1c", StandardCharsets.UTF_8);
+            Files.writeString(dir.resolve("a-result.json"), """
+                    {"labels":[{"name":"testClass","value":"io.github.kolomyychenkoai.allure.spring.demo.MockMvcReportIT"}],
+                     "attachments":[{"name":"Скриншот","type":"image/png","source":"shot-attachment.png"}]}
+                    """, StandardCharsets.UTF_8);
+
+            assertThat(ReportInventory.scan(dir).dirtyBodies()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("вложение без файла в гигиену тел не попадает (об этом говорит missingFiles)")
+        void missingBodyNotDiagnosedTwice(@TempDir Path dir) throws IOException {
+            Files.writeString(dir.resolve("a-result.json"), """
+                    {"labels":[{"name":"testClass","value":"io.github.kolomyychenkoai.allure.spring.demo.KafkaReportIT"}],
+                     "attachments":[{"name":"DB Result","type":"text/plain","source":"нет-такого.txt"}]}
+                    """, StandardCharsets.UTF_8);
+
+            Scan scan = ReportInventory.scan(dir);
+
+            assertThat(scan.missingFiles()).hasSize(1);
+            assertThat(scan.dirtyBodies()).isEmpty();
+        }
+
+        @Test
         @DisplayName("битый result.json не роняет скан")
         void brokenJsonIgnored(@TempDir Path dir) throws IOException {
             Files.writeString(dir.resolve("broken-result.json"), "{не json", StandardCharsets.UTF_8);
