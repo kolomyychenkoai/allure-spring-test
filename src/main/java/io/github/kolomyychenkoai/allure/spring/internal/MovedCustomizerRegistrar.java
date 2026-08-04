@@ -6,6 +6,7 @@ import org.springframework.beans.factory.support.BeanDefinitionRegistry;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -40,8 +41,28 @@ public final class MovedCustomizerRegistrar {
      */
     public static void register(BeanDefinitionRegistry registry, ClassLoader loader, String beanName,
                                 List<String> candidateNames, Consumer<Object> customize) {
-        resolve(loader, candidateNames).ifPresent(customizerType ->
-                registerProxy(registry, loader, beanName, customizerType, customize));
+        // Регистрируем под КАЖДОЕ найденное имя, а не под первое. Если у потребителя на classpath
+        // окажутся ОБА интерфейса (переходное состояние миграции — старый артефакт ещё не выкинут),
+        // «первое найденное» — это лотерея: Spring Boot собирает кастомайзеры строго СВОЕГО типа,
+        // и бин чужого типа он просто не увидит. Модуль выключился бы молча — ровно та беда,
+        // от которой уходили. Лишний бин безвреден: его тип никто не собирает.
+        List<Class<?>> types = resolveAll(loader, candidateNames);
+        for (int i = 0; i < types.size(); i++) {
+            registerProxy(registry, loader, i == 0 ? beanName : beanName + "#" + i, types.get(i), customize);
+        }
+    }
+
+    /** ВСЕ известные типы, которые есть у этого загрузчика (обычно ровно один). */
+    public static List<Class<?>> resolveAll(ClassLoader loader, List<String> candidateNames) {
+        List<Class<?>> found = new ArrayList<>();
+        for (String name : candidateNames) {
+            try {
+                found.add(Class.forName(name, false, loader));
+            } catch (ClassNotFoundException | LinkageError next) {
+                // следующее известное имя
+            }
+        }
+        return found;
     }
 
     /** Отдельный метод ради захвата wildcard: {@code Class<?>} → {@code Class<T>}. */
@@ -56,14 +77,8 @@ public final class MovedCustomizerRegistrar {
 
     /** Первый из известных типов, который реально есть у этого загрузчика. */
     public static Optional<Class<?>> resolve(ClassLoader loader, List<String> candidateNames) {
-        for (String name : candidateNames) {
-            try {
-                return Optional.of(Class.forName(name, false, loader));
-            } catch (ClassNotFoundException | LinkageError next) {
-                // следующее известное имя
-            }
-        }
-        return Optional.empty();
+        List<Class<?>> found = resolveAll(loader, candidateNames);
+        return found.isEmpty() ? Optional.empty() : Optional.of(found.get(0));
     }
 
     /**
@@ -80,13 +95,26 @@ public final class MovedCustomizerRegistrar {
                 case "toString" -> "AllureCustomizer(" + customizerType.getName() + ")";
                 case "hashCode" -> System.identityHashCode(proxy);
                 case "equals" -> proxy == (args == null ? null : args[0]);
-                default -> {
+                // Имя метода проверяем ЯВНО, а не «любой метод с одним аргументом»: интерфейс
+                // чужой, и когда в нём появится второй метод, широкая ветка позвала бы наш
+                // рендер не на то. Всё незнакомое — no-op с безопасным значением по типу
+                // (null для ссылок сломал бы распаковку у примитивного возврата).
+                case "customize" -> {
                     if (args != null && args.length == 1) {
                         customize.accept(args[0]);
                     }
                     yield null; // customize(...) — void у обоих интерфейсов
                 }
+                default -> defaultValue(method.getReturnType());
             };
+        }
+
+        /** Безопасное значение по типу возврата для методов, которых мы не знаем. */
+        private static Object defaultValue(Class<?> returnType) {
+            if (!returnType.isPrimitive() || returnType == void.class) {
+                return null;
+            }
+            return java.lang.reflect.Array.get(java.lang.reflect.Array.newInstance(returnType, 1), 0);
         }
     }
 }

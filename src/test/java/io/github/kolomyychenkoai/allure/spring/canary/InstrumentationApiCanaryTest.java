@@ -332,12 +332,24 @@ class InstrumentationApiCanaryTest {
                         + "байткод-фолбэка НЕТ, шаги исчезнут ПОЛНОСТЬЮ.\n  известные имена: " + WEBTESTCLIENT_CUSTOMIZER);
 
         // Раньше здесь сверялось, что main скомпилирован против имени ИЗ списка. Теперь main не
-        // компилируется ни против одного: интерфейс поднимается по имени (MovedCustomizerRegistrar),
-        // чтобы один jar работал и на Boot 3, и на Boot 4. Стеречь надо другое — что список не
-        // разъехался с реальностью и наши бины реально зарегистрированы (autoconfig/*Test).
-        require(MOCKMVC_CUSTOMIZER.size() >= 2 && WEBTESTCLIENT_CUSTOMIZER.size() >= 2,
-                "в MovedTypeNames должно остаться хотя бы по два известных имени на кастомайзер "
-                        + "(Boot 3.x и Boot 4.x) — иначе кросс-версионность держится на одном имени");
+        // компилируется ни против одного: интерфейс поднимается по имени (MovedCustomizerRegistrar).
+        // Пересчитывать размер списка вместо этого БЕСПОЛЕЗНО: опечатка в имени соседнего мажора
+        // прожила бы до самого апгрейда — то есть до момента, когда сетка обязана предупредить
+        // ЗАРАНЕЕ. Поэтому стережём форму имён и то, что ровно одно из пары живо ЗДЕСЬ.
+        for (List<String> names : List.of(MOCKMVC_CUSTOMIZER, WEBTESTCLIENT_CUSTOMIZER)) {
+            require(names.size() >= 2, "в MovedTypeNames нужно минимум два имени на кастомайзер "
+                    + "(Boot 3.x и Boot 4.x) — иначе кросс-версионность держится на одном: " + names);
+            for (String name : names) {
+                require(name.matches("([a-z][a-zA-Z\\d_]*\\.)+[A-Z][a-zA-Z\\d_$]*"),
+                        "«" + name + "» не похоже на полное имя класса — опечатка в MovedTypeNames "
+                                + "не даст резолва и обнаружится только на апгрейде");
+            }
+            long alive = names.stream().filter(InstrumentationApiCanaryTest::classPresent).count();
+            require(alive == 1, "на текущем стеке должно резолвиться РОВНО ОДНО имя из " + names
+                    + ", а резолвится " + alive + ". Ноль — список разъехался с реальностью; "
+                    + "больше одного — переходное состояние, проверь, что регистрируются оба бина "
+                    + "(MovedCustomizerRegistrar.register), иначе Boot соберёт не наш тип");
+        }
 
         require(classPresent("org.springframework.test.web.servlet.ResultHandler"),
                 "ResultHandler уехал → AllureMockMvcAutoConfiguration вешает AllureMockMvcResultHandler через него");

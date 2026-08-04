@@ -39,14 +39,36 @@ class MovedCustomizerRegistrarTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("knownNames")
-    @DisplayName("каждое известное имя — либо резолвится, либо честно отсутствует (список не мусорный)")
+    @DisplayName("каждое известное имя — полное имя класса (опечатка не доживёт до апгрейда)")
     void everyKnownNameIsWellFormed(String name) {
-        // На текущем стеке есть имена ОДНОГО мажора — второй мажор физически отсутствует.
-        // Проверяем не наличие, а что резолв по каждому имени не бросает и даёт согласованный
-        // ответ: список имён — единственное, на чём держится кросс-версионность.
-        ClassLoader loader = getClass().getClassLoader();
-        assertThatCode(() -> MovedCustomizerRegistrar.resolve(loader, List.of(name)))
-                .doesNotThrowAnyException();
+        // Прежняя версия этого теста проверяла, что резолв «не бросает» — упасть она не могла
+        // ничем, то есть была демонстрацией. Опечатка в имени соседнего мажора молча дожила бы
+        // до апгрейда: резолв просто вернул бы пусто, а модуль выключился бы тихо.
+        assertThat(name)
+                .as("имя из MovedTypeNames должно быть полным именем класса")
+                .matches("([a-z][a-zA-Z\\d_]*\\.)+[A-Z][a-zA-Z\\d_$]*");
+    }
+
+    @Test
+    @DisplayName("ПЕРЕХОДНОЕ СОСТОЯНИЕ: доступны ОБА имени → регистрируются ОБА бина")
+    void registersEveryResolvableType() {
+        // У потребителя в миграции на classpath могут оказаться оба интерфейса. Spring Boot
+        // собирает кастомайзеры СТРОГО своего типа, поэтому «зарегистрируем первый найденный» —
+        // лотерея: бин чужого типа Boot просто не увидит, и модуль выключится молча.
+        DefaultListableBeanFactory registry = new DefaultListableBeanFactory();
+        // Два РАЗНЫХ существующих интерфейса-кастомайзера играют роль «оба мажора рядом».
+        List<String> bothAlive = List.of(
+                MovedCustomizerRegistrar.resolve(getClass().getClassLoader(),
+                        MovedTypeNames.MOCKMVC_CUSTOMIZER).orElseThrow().getName(),
+                MovedCustomizerRegistrar.resolve(getClass().getClassLoader(),
+                        MovedTypeNames.WEBTESTCLIENT_CUSTOMIZER).orElseThrow().getName());
+
+        MovedCustomizerRegistrar.register(registry, getClass().getClassLoader(),
+                "allureCustomizer", bothAlive, builder -> { });
+
+        assertThat(registry.getBeanDefinitionNames())
+                .as("на каждый доступный тип должен быть свой бин, иначе Boot соберёт не тот")
+                .containsExactlyInAnyOrder("allureCustomizer", "allureCustomizer#1");
     }
 
     @Test
