@@ -14,6 +14,13 @@
 set -u
 cd "$(dirname "$0")/.." || exit 2
 
+# Всё, что передали скрипту, уходит в КАЖДУЮ точку матрицы. Нужно, чтобы окружение
+# могло доопределить то, чего скрипт знать не обязан: например путь к JDK 25
+# (-Djava25.home=…) — локально он из brew, на CI из setup-java, и хардкодить его
+# в pom нельзя. Идиома ${EXTRA[@]+…} — ради bash 3.2 (macOS) с set -u: там обращение
+# к пустому массиву иначе падает.
+EXTRA=("$@")
+
 # Логи НЕ в target/: каждая следующая точка делает `mvn clean` и стёрла бы предыдущие.
 LOGS=.compat-logs
 mkdir -p "$LOGS"
@@ -24,7 +31,7 @@ run() {
     shift
     local started status
     started=$(date +%s)
-    if mvn -B clean test "$@" > "$LOGS/$id.log" 2>&1; then
+    if mvn -B clean test "$@" ${EXTRA[@]+"${EXTRA[@]}"} > "$LOGS/$id.log" 2>&1; then
         status="OK  "
     else
         status="FAIL"
