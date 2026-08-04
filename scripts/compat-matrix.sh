@@ -23,6 +23,11 @@ cd "$(dirname "$0")/.." || exit 2
 # (maven.compiler.release=25), версия закреплена файлом .java-version (jenv).
 EXTRA=("$@")
 
+# Maven идёт по JAVA_HOME, а не по `java -version` — без этой проверки неверный JDK
+# даёт «release version 25 not supported» без намёка на причину. См. require-jdk.sh.
+. "$(dirname "$0")/require-jdk.sh"
+require_jdk
+
 # Логи НЕ в target/: каждая следующая точка делает `mvn clean` и стёрла бы предыдущие.
 LOGS=.compat-logs
 mkdir -p "$LOGS"

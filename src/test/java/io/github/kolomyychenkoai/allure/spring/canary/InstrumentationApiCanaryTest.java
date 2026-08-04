@@ -414,10 +414,24 @@ class InstrumentationApiCanaryTest {
         // Версию берём у самой JVM, БЕЗ фолбэка ofThisVm(JAVA_V21): фолбэк отдаётся, когда версию
         // определить не удалось, и канарейка зеленела бы ровно тогда, когда ничего не известно —
         // ветки «не смог проверить → считаю, что всё хорошо» у детектора быть не должно.
-        require(net.bytebuddy.ClassFileVersion.ofJavaVersion(Runtime.version().feature())
-                        .isAtMost(net.bytebuddy.ClassFileVersion.latest()),
-                "byte-buddy не знает формат классов этой JVM → весь байткод-слой мёртв. "
-                        + "Подними версию byte-buddy (или включи -Dnet.bytebuddy.experimental=true ОСОЗНАННО)");
+        // ⚠️ ofJavaVersion БРОСАЕТ IllegalArgumentException («Unknown Java version: 25»), если
+        // byte-buddy СТАРШЕ этой JVM — то есть ровно в том случае, ради которого канарейка и
+        // написана. Замерено: bb 1.14.19 (BOM Boot 3.2) на Java 25 именно бросает, а 1.15.11
+        // (Boot 3.4) уже возвращает false. Без catch потребитель видел бы голое исключение
+        // вместо объяснения, что делать.
+        boolean known;
+        try {
+            known = net.bytebuddy.ClassFileVersion.ofJavaVersion(Runtime.version().feature())
+                    .isAtMost(net.bytebuddy.ClassFileVersion.latest());
+        } catch (IllegalArgumentException tooOld) {
+            known = false;
+        }
+        require(known,
+                "byte-buddy не знает формат классов этой JVM (Java " + Runtime.version().feature()
+                        + ", byte-buddy знает до " + net.bytebuddy.ClassFileVersion.latest() + ") "
+                        + "→ весь байткод-слой мёртв. Подними версию byte-buddy — обычно это версия "
+                        + "Spring Boot BOM (Java 25 требует byte-buddy 1.17+, то есть Boot 3.5+) "
+                        + "— или включи -Dnet.bytebuddy.experimental=true ОСОЗНАННО");
     }
 
     @Test

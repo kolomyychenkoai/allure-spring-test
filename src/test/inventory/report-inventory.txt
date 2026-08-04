@@ -142,7 +142,6 @@ WebTestClientReportIT | Конфиги приложения  ×1  # AllureConfig
 WebTestClientReportIT | Проверка: JSON path "$.greeting" — ожидалось <V> = <V>  ×1  # AllureSpringAssertionsInstrumentation
 WebTestClientReportIT | Проверка: JSON path "$.productName" — ожидалось <V> = <V>  ×1  # AllureSpringAssertionsInstrumentation
 WebTestClientReportIT | Проверка: Status — ожидалось <V> = <V>  ×1  # AllureSpringAssertionsInstrumentation
-WebTestClientReportIT | Проверка: exchangeResult unexpectedly null — значение не null  ×1  # AllureSpringAssertionsInstrumentation (внутренняя проверка Spring 7, не пользовательская — шум в отчёте, см. docs/review-log.md)
 WireMockReportIT | Near-miss: GET /api/does-not-exist ≉ заглушка GET /api/flaky  ×2  # AllureWireMockSteps (near-miss)
 WireMockReportIT | Near-miss: GET /api/does-not-exist ≉ заглушка GET /api/prices  ×1  # AllureWireMockSteps (near-miss)
 WireMockReportIT | WireMock сценарий «retry»: состояние recovered  ×1  # AllureWireMockSteps (сценарии)

@@ -72,6 +72,27 @@ class AllureSpringAssertionsTest {
     }
 
     @Test
+    @DisplayName("внутренний инвариант Spring шага НЕ даёт, а обычная проверка — даёт")
+    void springInternalCheckIsFilteredOut() {
+        // Spring 7 сам зовёт assertNotNull("exchangeResult unexpectedly null", …) внутри
+        // WebTestClient. Для ручного тестировщика это шум: английский жаргон посреди русского
+        // отчёта, стоящий ПЕРВЫМ шагом в каждом WebTestClient-тесте.
+        TestResult result = allure.run("internal", () -> {
+            AssertionErrors.assertNotNull("exchangeResult unexpectedly null", "не важно");
+            AssertionErrors.assertNotNull("у заказа есть id", "id-1");
+        });
+
+        assertThat(result.getSteps().stream()
+                .noneMatch(s -> s.getName().contains("exchangeResult unexpectedly null")))
+                .as("инвариант Spring не должен попадать в отчёт (мутация: убери фильтр → появится)")
+                .isTrue();
+        // АНТИ-правило: фильтр не должен съедать обычные проверки
+        assertThat(allure.hasStep(result, "Проверка: у заказа есть id — значение не null"))
+                .as("отфильтровано лишнее — пользовательская проверка пропала вместе с мусором")
+                .isTrue();
+    }
+
+    @Test
     @DisplayName("null-проверки НЕ зовут toString() значения (иначе отчёт крадёт одноразовое тело ответа)")
     void nullAssertionsDoNotTouchValueToString() {
         // Реальный случай (Spring 7): AbstractStatusAssertions зовёт

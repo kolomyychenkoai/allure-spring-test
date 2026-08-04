@@ -18,6 +18,11 @@ set -u
 cd "$(dirname "$0")/.." || exit 2
 
 RUNS=${1:-10}
+# Maven идёт по JAVA_HOME, а не по `java -version` — без этой проверки неверный JDK
+# даёт «release version 25 not supported» без намёка на причину. См. require-jdk.sh.
+. "$(dirname "$0")/require-jdk.sh"
+require_jdk
+
 LOGS=.repeat-logs
 mkdir -p "$LOGS"
 fail=0
