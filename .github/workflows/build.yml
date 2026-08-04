@@ -1,0 +1,54 @@
+# Единственный настоящий триггер сетки сигналов.
+#
+# До этого файла ВСЕ гарантии проекта — второй прогон инвентаря, гейт сбоев перехвата,
+# канарейки, 17 гейтов в тестах — запускались только когда человек набрал `mvn`.
+# Проверки были, а того, что их дёргает, не было.
+#
+# `mvn clean test` тут не «прогнать тесты»: он же поднимает второй прогон surefire
+# (профиль report-inventory) и вместе с ним сверку с эталоном, гейт сбоев трансформации
+# и гигиену имён/тел. То есть одна команда включает всю сетку.
+name: build
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+# Новый пуш в ту же ветку отменяет предыдущий прогон: сигнал нужен по ПОСЛЕДНЕМУ коду.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Java 21 — та же, что и локально (maven.compiler.release=21).
+      # Кэш Maven обязателен: без него каждый прогон тянет BOM Spring Boot заново.
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: mvn clean test
+        run: mvn -B clean test
+
+      # Артефакты — только при падении, и именно те, по которым разбирают:
+      # отчёты surefire, дампы диагностики перехвата и сами allure-results
+      # (в них лежат тела вложений, а по ним и читают деградацию отчёта).
+      - name: Отчёты при падении
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-and-allure
+          path: |
+            target/surefire-reports/
+            target/instrumentation-diagnostics/
+            target/allure-results/
+          retention-days: 7
+          if-no-files-found: ignore
