@@ -474,6 +474,8 @@ inline mock maker из Mockito 5.x), вручную не задирай.
 > ⚠️ Итог проверяется ТОЛЬКО полным `mvn clean test`: точечный `-Dtest=…` выключает второй
 > прогон (профиль `report-inventory`), а с ним половину сетки — при зелёной сборке.
 - `scripts/review-scan.sh` — механика проходов ревью (списки, которые надо просмотреть);
+  `scripts/report-tree.sh` — дерево шагов витрины: прочитать отчёт глазами, как его читает
+  ручной тестировщик (проход 2.6 playbook'а — **до** того, как показывать отчёт кому-либо);
   `scripts/compat-matrix.sh` — границы версий; `scripts/repeat.sh` — зависимость от порядка тестов.
 - `docs/adr/0001-assertj-instrumentation.md` — решение по самому хрупкому узлу (AssertJ).
 - `docs/adr/0002-allure-commons-compile-scope.md` — почему единственная compile-зависимость
