@@ -1,5 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
 
+import io.qameta.allure.Epic;
+
 import io.github.kolomyychenkoai.allure.spring.assertion.internal.AllureAssertJInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.qameta.allure.model.StepResult;
@@ -13,9 +15,11 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /** Уровень A: детерминированная проверка содержимого отчёта для AssertJ. */
+@Epic("Внутренние проверки библиотеки")
 class AllureAssertJTest {
 
     @BeforeAll
@@ -121,6 +125,31 @@ class AllureAssertJTest {
 
         long n = stepNames(result).stream().filter(s -> s.contains("isEqualTo")).count();
         assertThat(n).isEqualTo(1); // сломай дедуп (убери счётчик глубины) → станет 2
+    }
+
+    @Test
+    @DisplayName("проверки из АБСТРАКТНЫХ классов дают ровно один шаг (размен ADR 0001 закреплён)")
+    void assertsDeclaredInAbstractClassesGiveExactlyOneStep() {
+        // Эти три семьи — предмет пересмотра ADR 0001. isCloseTo объявлен в AbstractDoubleAssert,
+        // hasFieldOrPropertyWithValue — в AbstractObjectAssert: пока конструкторы были в матчере,
+        // сами эти классы не трансформировались и шага НЕ БЫЛО. isBetween — та проверка, которую
+        // ADR считал ломающейся от not(isConstructor()); она обязана остаться ровно одним шагом.
+        // Уберут not(isConstructor()) — красным станут первые два, и по имени теста будет ясно,
+        // что это осознанный размен, а не находка.
+        TestResult result = allure.run("abstract-declared", () -> {
+            assertThat(5).isBetween(1, 10);
+            assertThat(1.5).isCloseTo(1.4, within(0.2));
+            assertThat(new Product("laptop")).hasFieldOrPropertyWithValue("name", "laptop");
+        });
+
+        List<String> names = stepNames(result);
+        assertThat(names.stream().filter(n -> n.contains("isBetween")).count()).isEqualTo(1);
+        assertThat(names.stream().filter(n -> n.contains("isCloseTo")).count()).isEqualTo(1);
+        assertThat(names.stream().filter(n -> n.contains("hasFieldOrPropertyWithValue")).count()).isEqualTo(1);
+    }
+
+    /** Мишень для проверки полей объекта. */
+    record Product(String name) {
     }
 
     @Test

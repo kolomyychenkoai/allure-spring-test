@@ -133,14 +133,16 @@ public final class AllureLiquibaseInstrumentation {
         });
     }
 
+    // ВЛОЖЕНИЕ, а не имя шага → render(), а не safe(): всё здесь уже String, а комментарий
+    // changeset'а бывает многострочным — safe() схлопнул бы его в одну строку.
     private static String details(ChangeSet cs) {
         StringBuilder sb = new StringBuilder();
-        sb.append("Id: ").append(AllureAdviceSupport.safe(cs.getId()))
-                .append("\nAuthor: ").append(AllureAdviceSupport.safe(cs.getAuthor()))
-                .append("\nChangelog: ").append(AllureAdviceSupport.safe(cs.getFilePath()));
+        sb.append("Id: ").append(AllureAdviceSupport.render(cs.getId()))
+                .append("\nAuthor: ").append(AllureAdviceSupport.render(cs.getAuthor()))
+                .append("\nChangelog: ").append(AllureAdviceSupport.render(cs.getFilePath()));
         String comments = cs.getComments();
         if (comments != null && !comments.isBlank()) {
-            sb.append("\nComments: ").append(AllureAdviceSupport.safe(comments));
+            sb.append("\nComments: ").append(AllureAdviceSupport.render(comments));
         }
         return sb.toString();
     }

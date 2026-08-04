@@ -1,4 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
+
+import io.qameta.allure.Epic;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
@@ -15,6 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * ({@code safe}) и выбор статуса шага ({@code step}) — ветки, на которые опираются все
  * инструментирующие модули.
  */
+@Epic("Внутренние проверки библиотеки")
 class AllureAdviceSupportTest {
 
     @Test
@@ -33,6 +36,62 @@ class AllureAdviceSupportTest {
     }
 
     @Test
+    @DisplayName("safe: ПРИМИТИВНЫЙ массив тоже печатается поэлементно, а не [B@4a3f")
+    void safePrimitiveArrays() {
+        // имя шага читает человек: «Проверка: значение [B@4a3f — containsExactly [I@6d06» бесполезно
+        assertThat(AllureAdviceSupport.safe(new int[]{1, 2, 3})).isEqualTo("[1, 2, 3]");
+        assertThat(AllureAdviceSupport.safe(new long[]{7L})).isEqualTo("[7]");
+        assertThat(AllureAdviceSupport.safe(new boolean[]{true, false})).isEqualTo("[true, false]");
+        assertThat(AllureAdviceSupport.safe(new char[]{'a'})).isEqualTo("[a]");
+        assertThat(AllureAdviceSupport.safe(new byte[]{1, 2})).isEqualTo("[1, 2]");
+        // двоичное поэлементно нечитаемо — показываем размер (как в SQL-вложениях)
+        assertThat(AllureAdviceSupport.safe(new byte[100])).isEqualTo("<двоичные данные, 100 байт>");
+        // длинный массив не раздувает имя шага
+        assertThat(AllureAdviceSupport.safe(new int[80])).contains("всего 80");
+    }
+
+    @Test
+    @DisplayName("safe: лямбда и method-reference → «<лямбда>», а не Demo$$Lambda/0x…@1a2b")
+    void safeLambda() {
+        Runnable lambda = () -> {
+        };
+        assertThat(AllureAdviceSupport.safe(lambda)).isEqualTo("<лямбда>");
+        assertThat(AllureAdviceSupport.safe((Runnable) AllureAdviceSupportTest::helper)).isEqualTo("<лямбда>");
+        // varargs приходят МАССИВОМ (AssertJ satisfies — это Consumer<T>...): элементы обязаны
+        // проходить ту же очистку, иначе лямбда внутри массива печаталась бы хэшем
+        assertThat(AllureAdviceSupport.safe(new Object[]{lambda})).isEqualTo("[<лямбда>]");
+    }
+
+    @Test
+    @DisplayName("safe: объект без своего toString → «<Класс>», а не Класс@хэш")
+    void safeIdentityToString() {
+        assertThat(AllureAdviceSupport.safe(new NoToString())).isEqualTo("<NoToString>");
+    }
+
+    @Test
+    @DisplayName("АНТИ-правило: настоящий toString не подменяется (в т.ч. с «@» внутри)")
+    void safeKeepsRealToString() {
+        // проверка «идентичного toString» точная, поэтому легитимные значения не страдают
+        assertThat(AllureAdviceSupport.safe(new WithToString())).isEqualTo("Widget{name=gadget}");
+        assertThat(AllureAdviceSupport.safe("user@example.com")).isEqualTo("user@example.com");
+        // Hamcrest-матчер рендерится через describeTo (BaseMatcher.toString переопределён) — не трогаем
+        assertThat(AllureAdviceSupport.safe(org.hamcrest.Matchers.is("x"))).contains("\"x\"").doesNotContain("@");
+    }
+
+    private static void helper() {
+    }
+
+    private static final class NoToString {
+    }
+
+    private static final class WithToString {
+        @Override
+        public String toString() {
+            return "Widget{name=gadget}";
+        }
+    }
+
+    @Test
     @DisplayName("safe: бросающий toString не валит рендер — возвращается «<?>»")
     void safeThrowingToString() {
         Object boom = new Object() {
@@ -45,11 +104,63 @@ class AllureAdviceSupportTest {
     }
 
     @Test
+    @DisplayName("safe: имя шага — ОДНА строка (многострочное значение рвало бы вёрстку отчёта)")
+    void safeCollapsesWhitespace() {
+        assertThat(AllureAdviceSupport.safe("{\n  \"a\": 1\n}")).isEqualTo("{ \"a\": 1 }");
+        assertThat(AllureAdviceSupport.safe("строка\tс\tтабами")).isEqualTo("строка с табами");
+    }
+
+    @Test
+    @DisplayName("safe: обрезка не рвёт суррогатную пару пополам")
+    void safeKeepsSurrogatePairs() {
+        String emoji = "x".repeat(499) + "🚀" + "y".repeat(100);
+        String rendered = AllureAdviceSupport.safe(emoji);
+        assertThat(rendered).doesNotContain("\uD83D").endsWith("…");
+    }
+
+    @Test
     @DisplayName("safe: слишком длинное значение обрезается по лимиту с многоточием")
     void safeTruncatesLongValue() {
         String big = "x".repeat(1000);
         String rendered = AllureAdviceSupport.safe(big);
         assertThat(rendered).hasSize(501).endsWith("…");
+    }
+
+    @Test
+    @DisplayName("safeValue: значение ВЛОЖЕНИЯ остаётся многострочным (safe схлопнул бы)")
+    void safeValueKeepsLineBreaks() {
+        // Регресс на тихую деградацию: диф near-miss WireMock, комментарий changeset'а, сущность
+        // из БД — их ценность в переносах. Схлопнутое тело выглядит здоровым (имя, mime и
+        // «непусто» на месте), поэтому инвентарь отчёта такое НЕ ловит — ловить должен этот тест.
+        String multiline = "GET      | GET\n/api/a   | /api/b\n<<<<< URL does not match";
+        assertThat(AllureAdviceSupport.safeValue(multiline)).isEqualTo(multiline);
+        assertThat(AllureAdviceSupport.safe(multiline)).doesNotContain("\n");
+    }
+
+    @Test
+    @DisplayName("safeValue: длинное значение НЕ обрезается (обрезка — только у имени шага)")
+    void safeValueDoesNotTruncate() {
+        String big = "x".repeat(1000);
+        assertThat(AllureAdviceSupport.safeValue(big)).hasSize(1000).doesNotEndWith("…");
+    }
+
+    @Test
+    @DisplayName("safeValue: чистка мусора остаётся — массивы, лямбда, identity-хэш, бросающий toString")
+    void safeValueStillCleansGarbage() {
+        // «без схлопывания» не значит «без чистки»: [B@4a3f и Класс@хэш нечитаемы и во вложении
+        assertThat(AllureAdviceSupport.safeValue(new int[]{1, 2, 3})).isEqualTo("[1, 2, 3]");
+        assertThat(AllureAdviceSupport.safeValue(new byte[100])).isEqualTo("<двоичные данные, 100 байт>");
+        assertThat(AllureAdviceSupport.safeValue((Runnable) () -> {
+        })).isEqualTo("<лямбда>");
+        assertThat(AllureAdviceSupport.safeValue(new NoToString())).isEqualTo("<NoToString>");
+        assertThat(AllureAdviceSupport.safeValue(null)).isEqualTo("null");
+        Object boom = new Object() {
+            @Override
+            public String toString() {
+                throw new IllegalStateException("boom");
+            }
+        };
+        assertThat(AllureAdviceSupport.safeValue(boom)).isEqualTo("<?>");
     }
 
     @Test

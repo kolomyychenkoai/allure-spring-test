@@ -1,5 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
 
+import io.qameta.allure.Epic;
+
 import io.github.kolomyychenkoai.allure.spring.data.internal.AllureRepositoryAspect;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.github.kolomyychenkoai.allure.spring.support.jpa.Widget;
@@ -25,6 +27,7 @@ import static org.mockito.Mockito.when;
  * Уровень A: детерминированная проверка содержимого отчёта для аспекта репозиториев.
  * Аспект вызывается напрямую с замоканным ProceedingJoinPoint — без Spring/БД.
  */
+@Epic("Внутренние проверки библиотеки")
 class AllureRepositoryAspectTest {
 
     interface FakeRepo {
@@ -65,6 +68,51 @@ class AllureRepositoryAspectTest {
     @AfterEach
     void tearDown() {
         allure.uninstall();
+    }
+
+    @Test
+    @DisplayName("Page разбирается по сущностям, а не печатается как «Page 1 of N containing …»")
+    void formatsPage() throws Throwable {
+        Object page = new org.springframework.data.domain.PageImpl<>(
+                List.of(new Widget("gadget")), org.springframework.data.domain.PageRequest.of(0, 1), 5);
+
+        ProceedingJoinPoint joinPoint = pjp("findAll", new Object[]{}, page);
+        TestResult result = allure.run("db-page", () -> proceed(joinPoint));
+
+        String dbResult = allure.attachment(result, "DB Result").orElseThrow();
+        assertThat(dbResult).contains("gadget").doesNotContain("containing");
+        assertThat(dbResult).contains("всего: 5"); // контекст страницы, а не только её элементы
+    }
+
+    @Test
+    @DisplayName("Streamable (не Collection) тоже разбирается по элементам")
+    void formatsStreamable() throws Throwable {
+        Object streamable = org.springframework.data.util.Streamable.of(List.of(new Widget("gadget")));
+
+        ProceedingJoinPoint joinPoint = pjp("findAll", new Object[]{}, streamable);
+        TestResult result = allure.run("db-streamable", () -> proceed(joinPoint));
+
+        assertThat(allure.attachment(result, "DB Result").orElseThrow()).contains("gadget");
+    }
+
+    @Test
+    @DisplayName("Stream НЕ материализуется — иначе починка отчёта сломала бы вызывающего")
+    void doesNotConsumeStream() throws Throwable {
+        java.util.stream.Stream<Widget> stream = java.util.stream.Stream.of(new Widget("gadget"));
+
+        Object returned = aspect.logRepositoryCall(pjp("streamAll", new Object[]{}, stream));
+
+        // поток одноразовый: если бы мы прочитали его для отчёта, тест потребителя упал бы
+        assertThat(((java.util.stream.Stream<?>) returned).count()).isEqualTo(1);
+    }
+
+    /** Вызов аспекта внутри allure.run: сигнатура logRepositoryCall бросает Throwable. */
+    private void proceed(ProceedingJoinPoint pjp) {
+        try {
+            aspect.logRepositoryCall(pjp);
+        } catch (Throwable t) {
+            throw new IllegalStateException(t);
+        }
     }
 
     private ProceedingJoinPoint pjp(String method, Object[] args, Object returnValue) throws Throwable {

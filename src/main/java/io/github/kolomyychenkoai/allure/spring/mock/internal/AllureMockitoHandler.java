@@ -77,8 +77,11 @@ public class AllureMockitoHandler<T> implements MockHandler<T> {
                         Allure.addAttachment("Mock Call", "text/plain", call);
                     });
         } else if (productionCall) {
-            final String res = AllureAdviceSupport.safe(result);
-            Allure.step("Мок-вызов: " + signature + " → " + res, step -> {
+            // Одно значение в ДВУХ местах с разными правилами: во вложении — полностью
+            // (safeValue), в имени шага — одной строкой с обрезкой (safe поверх уже
+            // очищенного текста, чтобы не звать toString() объекта дважды).
+            final String res = AllureAdviceSupport.safeValue(result);
+            Allure.step("Мок-вызов: " + signature + " → " + AllureAdviceSupport.safe(res), step -> {
                 Allure.addAttachment("Mock Call", "text/plain", call);
                 Allure.addAttachment("Mock Result", "text/plain", res);
             });
@@ -109,6 +112,7 @@ public class AllureMockitoHandler<T> implements MockHandler<T> {
         return sb.toString();
     }
 
+    /** Тело вложения «Mock Call» → safeValue: аргумент бывает многострочным (JSON-DTO, текст). */
     private static String details(Invocation invocation) {
         StringBuilder sb = new StringBuilder("Method: ")
                 .append(invocation.getMethod().getDeclaringClass().getSimpleName())
@@ -117,7 +121,7 @@ public class AllureMockitoHandler<T> implements MockHandler<T> {
         if (args != null && args.length > 0) {
             sb.append("\nArguments:");
             for (int i = 0; i < args.length; i++) {
-                sb.append("\n  [").append(i).append("]: ").append(AllureAdviceSupport.safe(args[i]));
+                sb.append("\n  [").append(i).append("]: ").append(AllureAdviceSupport.safeValue(args[i]));
             }
         }
         return sb.toString();

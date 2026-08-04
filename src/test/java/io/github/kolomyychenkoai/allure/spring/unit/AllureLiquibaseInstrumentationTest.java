@@ -1,5 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
 
+import io.qameta.allure.Epic;
+
 import io.github.kolomyychenkoai.allure.spring.liquibase.internal.AllureLiquibaseInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.qameta.allure.model.TestResult;
@@ -24,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * накопленный снимок) сбрасываем рефлексией вокруг каждого теста — чтобы тесты не влияли друг на
  * друга и на уровень B.
  */
+@Epic("Внутренние проверки библиотеки")
 class AllureLiquibaseInstrumentationTest {
 
     private InMemoryAllure allure;

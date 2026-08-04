@@ -78,7 +78,10 @@ public final class CurrentReport {
      * <p>
      * ⚠️ Сканирует ВЕСЬ каталог результатов (файлы всех тестов прогона), поэтому {@code text}
      * ОБЯЗАН быть уникальным по всему прогону — иначе ассерт пройдёт за счёт файла другого
-     * теста (ложно-зелёный). Если маркер может встретиться у соседа (напр. шаг «Kafka: получено»
+     * теста (ложно-зелёный). Файлы ПРОШЛЫХ прогонов эту проверку больше не отравляют:
+     * каталог чистится перед каждым прогоном (maven-clean-plugin, execution
+     * {@code wipe-allure-results}) — до этого {@code mvn test} без {@code clean} мог зеленеть
+     * на результате недельной давности. Если маркер может встретиться у соседа (напр. шаг «Kafka: получено»
      * пишут два разных теста), привязывай проверку к уникальной подстроке через
      * {@link #anyResultFileContainsAll(String...)} (напр. + topic/значение этого теста).
      */
@@ -121,6 +124,33 @@ public final class CurrentReport {
             });
         } catch (IOException e) {
             return false;
+        }
+    }
+
+    /**
+     * Содержимое вложения, ВЛОЖЕННОГО В КОНКРЕТНЫЙ шаг. Нужно, когда одноимённых вложений
+     * несколько ({@code DB Result} у каждого DB-шага, {@code SQL Query} у каждого запроса пакета):
+     * общий {@link #attachmentContent(String)} берёт первое по имени и отвечает не на тот вопрос.
+     * Заодно доказывает ПРИВЯЗКУ вложения к шагу, а не соседство в одном файле.
+     */
+    public static Optional<String> attachmentOfStep(String stepName, String attachmentName) {
+        return steps().stream()
+                .filter(step -> stepName.equals(step.getName()))
+                .flatMap(step -> step.getAttachments().stream())
+                .filter(att -> attachmentName.equals(att.getName()))
+                .map(Attachment::getSource)
+                .filter(source -> source != null && !source.isBlank())
+                .findFirst()
+                .flatMap(CurrentReport::readAttachment);
+    }
+
+    private static Optional<String> readAttachment(String source) {
+        try {
+            return Optional.of(Files.readString(
+                    Paths.get(System.getProperty("allure.results.directory", "allure-results"), source),
+                    StandardCharsets.UTF_8));
+        } catch (IOException unreadable) {
+            return Optional.empty();
         }
     }
 

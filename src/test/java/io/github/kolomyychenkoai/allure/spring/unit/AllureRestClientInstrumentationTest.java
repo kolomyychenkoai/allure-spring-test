@@ -1,5 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
 
+import io.qameta.allure.Epic;
+
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.github.kolomyychenkoai.allure.spring.rest.internal.AllureRestClientInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.rest.internal.AllureRestTemplateInterceptor;
@@ -28,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
  * с фейковой фабрикой запросов. Дополняет уровень B ({@code RestClientReportIT})
  * детерминированной проверкой шага/вложений, дедупа и гейта активного кейса.
  */
+@Epic("Внутренние проверки библиотеки")
 class AllureRestClientInstrumentationTest {
 
     private InMemoryAllure allure;

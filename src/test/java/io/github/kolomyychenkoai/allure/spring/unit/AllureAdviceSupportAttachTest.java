@@ -1,5 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
 
+import io.qameta.allure.Epic;
+
 import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.qameta.allure.model.TestResult;
@@ -14,6 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * ({@code bodyContentType}) и раскладку двух вложений ({@code attach}) — на это опираются
  * все HTTP/WireMock/Kafka-модули, чтобы Allure сам форматировал JSON красиво.
  */
+@Epic("Внутренние проверки библиотеки")
 class AllureAdviceSupportAttachTest {
 
     @Test

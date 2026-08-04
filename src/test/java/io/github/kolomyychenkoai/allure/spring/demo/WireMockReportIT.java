@@ -41,6 +41,19 @@ class WireMockReportIT {
 
     static WireMockServer wireMock = new WireMockServer(0);
 
+    /**
+     * Второй способ регистрации, которым пользуется половина потребителей. WireMockExtension
+     * наследует DslWrapper, а НЕ WireMockServer, поэтому поиск по типу поля его не находил:
+     * байткод (stubFor/verify) работал, а «сервер поднят», «Запрос к заглушке» и вложения — нет.
+     * Обязательно static: нестатический @RegisterExtension стартует в beforeEach ПОСЛЕ
+     * SpringExtension, и к моменту beforeTestMethod сервер ещё не поднят.
+     */
+    @org.junit.jupiter.api.extension.RegisterExtension
+    static com.github.tomakehurst.wiremock.junit5.WireMockExtension wireMockExtension =
+            com.github.tomakehurst.wiremock.junit5.WireMockExtension.newInstance()
+                    .options(com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig().dynamicPort())
+                    .build();
+
     @BeforeAll
     static void start() {
         wireMock.start();
@@ -94,6 +107,16 @@ class WireMockReportIT {
         // имя шага сброса несёт РЕАЛЬНЫЙ порт сервера — пинним на живой цепочке, а не просто startsWith
         CurrentReport.assertStep("WireMock: сброс заглушек (:" + wireMock.port() + ")");
 
+        // Проверка допущений о ДЕЛЕГАЦИИ (stubFor→register, verify→verifyThat, resetAll→resetMappings):
+        // перехвачена одна точка каждой цепочки. Разорвут делегацию и перехватятся обе — шаги
+        // задвоятся. Считаем: 4 вызова stubFor = 4 шага, 2 вызова verify = 2 шага, 1 resetAll = 1 шаг.
+        long stubSteps = steps.stream().filter(n -> n.startsWith("Создана заглушка:")).count();
+        long verifySteps = steps.stream().filter(n -> n.startsWith("Проверка обращений к заглушке")).count();
+        long resetSteps = steps.stream().filter(n -> n.startsWith("WireMock: сброс заглушек")).count();
+        CurrentReport.check(stubSteps == 4, () -> "4 вызова stubFor должны дать 4 шага, а есть " + stubSteps + ": " + steps);
+        CurrentReport.check(verifySteps == 2, () -> "2 вызова verify должны дать 2 шага, а есть " + verifySteps + ": " + steps);
+        CurrentReport.check(resetSteps == 1, () -> "resetAll должен дать один шаг, а есть " + resetSteps + ": " + steps);
+
         // содержимое вложения стаба через реальную цепочку
         String stub = CurrentReport.attachmentContent("WireMock Stub").orElse("");
         CurrentReport.check(stub.contains("/api/prices"), () -> "WireMock Stub: " + stub);
@@ -107,8 +130,20 @@ class WireMockReportIT {
         // здесь, чтобы не плодить отдельный пустой тест-кейс в отчёте
         CurrentReport.check(CurrentReport.anyResultFileContains("Запрос к заглушке: GET /api/prices"),
                 () -> "нет шага запроса GET /api/prices (request-листенер не сработал?)");
-        CurrentReport.check(CurrentReport.anyResultFileContains("WireMock Request"),
-                () -> "нет вложения WireMock Request");
+        // Ищем ТОЧНОЕ поле JSON, а не подстроку: «WireMock Request» как подстрока матчится
+        // и на «WireMock Request Body», поэтому пропажа мета-вложения проходила незамеченной.
+        CurrentReport.check(CurrentReport.anyResultFileContains("\"name\":\"WireMock Request\""),
+                () -> "нет мета-вложения WireMock Request (тело Body его больше не прикрывает)");
+    }
+
+    @Test
+    @DisplayName("сервер из @RegisterExtension WireMockExtension тоже инструментирован")
+    void wireMockExtensionServerIsInstrumented() throws Exception {
+        wireMockExtension.stubFor(get(urlPathEqualTo("/api/ext")).willReturn(okJson("{\"ext\":true}")));
+        int status = send(HttpClient.newHttpClient(), wireMockExtension.baseUrl() + "/api/ext", null);
+
+        CurrentReport.check(status == 200, () -> "заглушка extension не ответила 200: " + status);
+        CurrentReport.assertStep("WireMock: сервер поднят (:" + wireMockExtension.getPort() + ")");
     }
 
     private static int send(HttpClient client, String url, String body) throws Exception {

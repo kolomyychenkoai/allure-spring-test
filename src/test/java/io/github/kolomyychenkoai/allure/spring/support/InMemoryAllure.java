@@ -81,6 +81,15 @@ public final class InMemoryAllure implements AllureResultsWriter {
                 .findFirst();
     }
 
+    /**
+     * Содержимое КОНКРЕТНОГО вложения. Нужно, когда одноимённых вложений несколько (пакет SQL,
+     * несколько сообщений Kafka) и «первое по имени» отвечает не на тот вопрос.
+     */
+    public Optional<String> attachmentContent(Attachment attachment) {
+        return Optional.ofNullable(attachmentBytes.get(attachment.getSource()))
+                .map(bytes -> new String(bytes, StandardCharsets.UTF_8));
+    }
+
     /** Content-type вложения по имени (для проверки, что тело — отдельное {@code application/json}). */
     public Optional<String> attachmentType(TestResult result, String name) {
         return allAttachments(result.getAttachments(), result.getSteps()).stream()

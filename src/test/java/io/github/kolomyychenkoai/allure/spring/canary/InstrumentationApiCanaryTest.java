@@ -1,11 +1,14 @@
 package io.github.kolomyychenkoai.allure.spring.canary;
 
+import io.qameta.allure.Epic;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Method;
+import io.github.kolomyychenkoai.allure.spring.internal.MovedTypeNames;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import java.lang.reflect.Method;
+import java.util.List;
+
 
 /**
  * Канарейки ВЕРСИОННЫХ ДОПУЩЕНИЙ инструментирования. Матчеры байткода заданы СТРОКАМИ
@@ -21,8 +24,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * отдельно — см. {@code mock.AllureMockitoTest#mockitoInternalFieldsExist}.
  * Решение по самому хрупкому узлу (AssertJ) описано в {@code docs/adr/0001-assertj-instrumentation.md}.
  */
+@Epic("Внутренние проверки библиотеки")
 @DisplayName("Канарейки версионных допущений матчеров (апгрейд библиотек ломает молча)")
 class InstrumentationApiCanaryTest {
+
+    /**
+     * Немой ассерт: голый throw вместо JUnit-ассерта. JUnit Jupiter Assertions ПЕРЕХВАЧЕНЫ
+     * модулем assertion, поэтому обычный assertTrue сам стал бы шагом «Проверка: …» —
+     * сотня строк девелоперского жаргона в отчёте, который принимают ручные тестировщики
+     * (то же правило, что для *ReportIT: verify только немым каналом).
+     */
+    private static void require(boolean condition, String message) {
+        if (!condition) {
+            throw new AssertionError(message);
+        }
+    }
 
     /** Есть ли у класса метод с именем (и опц. арностью {@code paramCount>=0} / типом arg0). */
     private static boolean hasMethod(String className, String method, int paramCount, String firstParamType) {
@@ -60,10 +76,17 @@ class InstrumentationApiCanaryTest {
     @Test
     @DisplayName("REST: MockMvc.perform и RestTemplate.getInterceptors (матчеры rest-модуля)")
     void restMatchers() {
-        assertTrue(hasMethod("org.springframework.test.web.servlet.MockMvc", "perform", -1, null),
+        require(hasMethod("org.springframework.test.web.servlet.MockMvc", "perform", -1, null),
                 "MockMvc.perform уехал → обнови матчер в AllureMockMvcInstrumentation");
-        assertTrue(hasMethod("org.springframework.web.client.RestTemplate", "getInterceptors", 0, null),
+        require(hasMethod("org.springframework.web.client.RestTemplate", "getInterceptors", 0, null),
                 "RestTemplate.getInterceptors уехал → AllureRestTemplateInstrumentation вешает интерсептор через него");
+        // Матчер вешает advice на ОБЪЯВИТЕЛЯ setInterceptors. ByteBuddy вплетает только в методы,
+        // ОБЪЯВЛЕННЫЕ в трансформируемом типе, поэтому переезд метода между классами иерархии
+        // превратил бы перехват в тихий no-op — красным это не станет само.
+        require(declaredIn("org.springframework.web.client.RestTemplate", "setInterceptors", java.util.List.class,
+                        "org.springframework.http.client.support.InterceptingHttpAccessor"),
+                "setInterceptors объявлен уже не в InterceptingHttpAccessor → матчер "
+                        + "AllureRestTemplateInstrumentation не сматчит ничего и станет тихим no-op");
     }
 
     @Test
@@ -71,9 +94,9 @@ class InstrumentationApiCanaryTest {
     void restClientMatchers() {
         // ВНИМАНИЕ: DefaultRestClientBuilder — package-private ВНУТРЕННИЙ класс Spring (не публичный
         // API). Самое хрупкое допущение ветки: при апгрейде Spring его могут переименовать/убрать молча.
-        assertTrue(classPresent("org.springframework.web.client.DefaultRestClientBuilder"),
+        require(classPresent("org.springframework.web.client.DefaultRestClientBuilder"),
                 "DefaultRestClientBuilder уехал (внутренний класс Spring!) → обнови матчер в AllureRestClientInstrumentation");
-        assertTrue(hasMethod("org.springframework.web.client.DefaultRestClientBuilder", "build", 0, null),
+        require(hasMethod("org.springframework.web.client.DefaultRestClientBuilder", "build", 0, null),
                 "DefaultRestClientBuilder.build() уехал → AllureRestClientInstrumentation вешает интерсептор в build()");
     }
 
@@ -84,16 +107,16 @@ class InstrumentationApiCanaryTest {
         // без гарантий совместимости) и носитель всех перегрузок проверок .then(). Самое хрупкое допущение
         // ветки: апгрейд RestAssured может переименовать класс/метод молча → шаги «Проверка ответа» исчезнут.
         String vroi = "io.restassured.internal.ValidatableResponseOptionsImpl";
-        assertTrue(classPresent(vroi),
+        require(classPresent(vroi),
                 "ValidatableResponseOptionsImpl уехал (внутренний класс RestAssured!) → обнови матчер в AllureRestAssuredValidationInstrumentation");
         for (String method : new String[]{"statusCode", "statusLine", "body", "header", "headers",
                 "cookie", "cookies", "contentType", "time"}) {
-            assertTrue(hasMethod(vroi, method, -1, null),
+            require(hasMethod(vroi, method, -1, null),
                     "ValidatableResponseOptionsImpl." + method + " уехал → обнови список имён в AllureRestAssuredValidationInstrumentation");
         }
         // допущение исключения log-вариантов: body()/headers()/cookies() 0-арг ДОЛЖНЫ существовать
         // (иначе not(takesArguments(0)) отсекает несуществующее — а значит меняется семантика перегрузок)
-        assertTrue(hasMethod(vroi, "body", 0, null),
+        require(hasMethod(vroi, "body", 0, null),
                 "body() 0-арг (log-вариант) уехал → пересмотри исключение not(takesArguments(0)) в AllureRestAssuredValidationInstrumentation");
     }
 
@@ -104,13 +127,13 @@ class InstrumentationApiCanaryTest {
         // полный инвентарь METHODS из AllureJdbcInstrumentation (не подмножество)
         for (String method : new String[]{"query", "queryForObject", "queryForList", "queryForMap",
                 "queryForRowSet", "queryForStream", "update", "batchUpdate", "execute"}) {
-            assertTrue(hasMethod(jt, method, -1, null),
+            require(hasMethod(jt, method, -1, null),
                     "JdbcTemplate." + method + " уехал → обнови METHODS в AllureJdbcInstrumentation");
         }
         String njt = "org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate";
-        assertTrue(hasMethod(njt, "update", -1, null),
+        require(hasMethod(njt, "update", -1, null),
                 "NamedParameterJdbcTemplate.update уехал → обнови матчер в AllureJdbcInstrumentation");
-        assertTrue(hasMethod(njt, "queryForObject", -1, null),
+        require(hasMethod(njt, "queryForObject", -1, null),
                 "NamedParameterJdbcTemplate.queryForObject уехал → обнови матчер в AllureJdbcInstrumentation");
     }
 
@@ -120,94 +143,94 @@ class InstrumentationApiCanaryTest {
         String cs = "liquibase.changelog.ChangeSet";
         // Матчим ТОЛЬКО 3-арг execute(DatabaseChangeLog, ChangeExecListener, Database): 2-арг overload
         // делегирует в него (проверено на Liquibase 4.x) — одна точка покрывает старт и ручной update без дублей.
-        assertTrue(hasMethod(cs, "execute", 3, null),
+        require(hasMethod(cs, "execute", 3, null),
                 "ChangeSet.execute(3-арг) уехал → обнови матчер в AllureLiquibaseInstrumentation");
-        assertTrue(hasMethod(cs, "getId", 0, null), "ChangeSet.getId уехал → AllureLiquibaseInstrumentation.details");
-        assertTrue(hasMethod(cs, "getAuthor", 0, null), "ChangeSet.getAuthor уехал → AllureLiquibaseInstrumentation.details");
-        assertTrue(hasMethod(cs, "getFilePath", 0, null), "ChangeSet.getFilePath уехал → AllureLiquibaseInstrumentation.details");
-        assertTrue(hasMethod(cs, "getComments", 0, null), "ChangeSet.getComments уехал → AllureLiquibaseInstrumentation.details");
+        require(hasMethod(cs, "getId", 0, null), "ChangeSet.getId уехал → AllureLiquibaseInstrumentation.details");
+        require(hasMethod(cs, "getAuthor", 0, null), "ChangeSet.getAuthor уехал → AllureLiquibaseInstrumentation.details");
+        require(hasMethod(cs, "getFilePath", 0, null), "ChangeSet.getFilePath уехал → AllureLiquibaseInstrumentation.details");
+        require(hasMethod(cs, "getComments", 0, null), "ChangeSet.getComments уехал → AllureLiquibaseInstrumentation.details");
     }
 
     @Test
     @DisplayName("Awaitility: SPI ConditionEvaluationListener + EvaluatedCondition-геттеры")
     void awaitilityMatchers() {
-        assertTrue(hasMethod("org.awaitility.Awaitility", "setDefaultConditionEvaluationListener", 1, null),
+        require(hasMethod("org.awaitility.Awaitility", "setDefaultConditionEvaluationListener", 1, null),
                 "Awaitility.setDefaultConditionEvaluationListener уехал → AllureAwaitilityListener регистрирует слушатель через него");
-        assertTrue(classPresent("org.awaitility.core.ConditionEvaluationListener"),
+        require(classPresent("org.awaitility.core.ConditionEvaluationListener"),
                 "ConditionEvaluationListener уехал → AllureAwaitilityConditionListener реализует этот SPI");
         String ec = "org.awaitility.core.EvaluatedCondition";
-        assertTrue(hasMethod(ec, "isSatisfied", 0, null), "EvaluatedCondition.isSatisfied уехал → AllureAwaitilityConditionListener");
-        assertTrue(hasMethod(ec, "getDescription", 0, null), "EvaluatedCondition.getDescription уехал → AllureAwaitilityConditionListener");
-        assertTrue(hasMethod(ec, "getElapsedTimeInMS", 0, null), "EvaluatedCondition.getElapsedTimeInMS уехал → AllureAwaitilityConditionListener");
+        require(hasMethod(ec, "isSatisfied", 0, null), "EvaluatedCondition.isSatisfied уехал → AllureAwaitilityConditionListener");
+        require(hasMethod(ec, "getDescription", 0, null), "EvaluatedCondition.getDescription уехал → AllureAwaitilityConditionListener");
+        require(hasMethod(ec, "getElapsedTimeInMS", 0, null), "EvaluatedCondition.getElapsedTimeInMS уехал → AllureAwaitilityConditionListener");
     }
 
     @Test
     @DisplayName("WireMock сбросы: static resetAllRequests/resetScenario/resetAllScenarios + WireMockServer resetMappings/resetRequests/resetScenarios")
     void wireMockResetMatchers() {
         String stat = "com.github.tomakehurst.wiremock.client.WireMock";
-        assertTrue(hasMethod(stat, "resetAllRequests", -1, null), "WireMock.resetAllRequests уехал → AllureWireMockVerifyInstrumentation");
-        assertTrue(hasMethod(stat, "resetScenario", -1, null), "WireMock.resetScenario уехал → AllureWireMockVerifyInstrumentation");
-        assertTrue(hasMethod(stat, "resetAllScenarios", -1, null), "WireMock.resetAllScenarios уехал → AllureWireMockVerifyInstrumentation");
+        require(hasMethod(stat, "resetAllRequests", -1, null), "WireMock.resetAllRequests уехал → AllureWireMockVerifyInstrumentation");
+        require(hasMethod(stat, "resetScenario", -1, null), "WireMock.resetScenario уехал → AllureWireMockVerifyInstrumentation");
+        require(hasMethod(stat, "resetAllScenarios", -1, null), "WireMock.resetAllScenarios уехал → AllureWireMockVerifyInstrumentation");
         String server = "com.github.tomakehurst.wiremock.WireMockServer";
-        assertTrue(hasMethod(server, "resetMappings", -1, null), "WireMockServer.resetMappings уехал → AllureWireMockVerifyInstrumentation");
-        assertTrue(hasMethod(server, "resetRequests", -1, null), "WireMockServer.resetRequests уехал → AllureWireMockVerifyInstrumentation");
-        assertTrue(hasMethod(server, "resetScenarios", -1, null), "WireMockServer.resetScenarios уехал → AllureWireMockVerifyInstrumentation");
+        require(hasMethod(server, "resetMappings", -1, null), "WireMockServer.resetMappings уехал → AllureWireMockVerifyInstrumentation");
+        require(hasMethod(server, "resetRequests", -1, null), "WireMockServer.resetRequests уехал → AllureWireMockVerifyInstrumentation");
+        require(hasMethod(server, "resetScenarios", -1, null), "WireMockServer.resetScenarios уехал → AllureWireMockVerifyInstrumentation");
     }
 
     @Test
     @DisplayName("WireMock near-miss/сценарии: API снятия журнала ДО сброса (AllureWireMockSteps)")
     void wireMockNearMissApi() {
         String server = "com.github.tomakehurst.wiremock.WireMockServer";
-        assertTrue(hasMethod(server, "findNearMissesForAllUnmatchedRequests", -1, null),
+        require(hasMethod(server, "findNearMissesForAllUnmatchedRequests", -1, null),
                 "WireMockServer.findNearMissesForAllUnmatchedRequests уехал → AllureWireMockSteps.nearMisses");
-        assertTrue(hasMethod(server, "getAllScenarios", -1, null),
+        require(hasMethod(server, "getAllScenarios", -1, null),
                 "WireMockServer.getAllScenarios уехал → AllureWireMockSteps.scenarios");
         String nearMiss = "com.github.tomakehurst.wiremock.verification.NearMiss";
-        assertTrue(hasMethod(nearMiss, "getDiff", -1, null), "NearMiss.getDiff уехал → AllureWireMockSteps");
-        assertTrue(hasMethod(nearMiss, "getRequest", -1, null), "NearMiss.getRequest уехал → AllureWireMockSteps");
-        assertTrue(hasMethod(nearMiss, "getStubMapping", -1, null), "NearMiss.getStubMapping уехал → AllureWireMockSteps");
+        require(hasMethod(nearMiss, "getDiff", -1, null), "NearMiss.getDiff уехал → AllureWireMockSteps");
+        require(hasMethod(nearMiss, "getRequest", -1, null), "NearMiss.getRequest уехал → AllureWireMockSteps");
+        require(hasMethod(nearMiss, "getStubMapping", -1, null), "NearMiss.getStubMapping уехал → AllureWireMockSteps");
         String scenario = "com.github.tomakehurst.wiremock.stubbing.Scenario";
-        assertTrue(hasMethod(scenario, "getName", -1, null), "Scenario.getName уехал → AllureWireMockSteps.scenarios");
-        assertTrue(hasMethod(scenario, "getState", -1, null), "Scenario.getState уехал → AllureWireMockSteps.scenarios");
+        require(hasMethod(scenario, "getName", -1, null), "Scenario.getName уехал → AllureWireMockSteps.scenarios");
+        require(hasMethod(scenario, "getState", -1, null), "Scenario.getState уехал → AllureWireMockSteps.scenarios");
     }
 
     @Test
     @DisplayName("datasource-proxy: ExecutionInfo/QueryInfo + форма ParameterSetOperation (инлайн значений SQL)")
     void dataSourceProxyApi() {
-        assertTrue(classPresent("net.ttddyy.dsproxy.ExecutionInfo"), "datasource-proxy ExecutionInfo уехал → AllureDataSourceListener");
-        assertTrue(classPresent("net.ttddyy.dsproxy.QueryInfo"), "datasource-proxy QueryInfo уехал → AllureDataSourceListener");
+        require(classPresent("net.ttddyy.dsproxy.ExecutionInfo"), "datasource-proxy ExecutionInfo уехал → AllureDataSourceListener");
+        require(classPresent("net.ttddyy.dsproxy.QueryInfo"), "datasource-proxy QueryInfo уехал → AllureDataSourceListener");
         // футер вложения «✓/✗ · N мс»
-        assertTrue(hasMethod("net.ttddyy.dsproxy.ExecutionInfo", "isSuccess", 0, null),
+        require(hasMethod("net.ttddyy.dsproxy.ExecutionInfo", "isSuccess", 0, null),
                 "ExecutionInfo.isSuccess уехал → AllureDataSourceListener.renderQuery (футер ✓/✗)");
-        assertTrue(hasMethod("net.ttddyy.dsproxy.ExecutionInfo", "getElapsedTime", 0, null),
+        require(hasMethod("net.ttddyy.dsproxy.ExecutionInfo", "getElapsedTime", 0, null),
                 "ExecutionInfo.getElapsedTime уехал → AllureDataSourceListener.renderQuery (футер · N мс)");
         // связанные параметры: QueryInfo.getParametersList() → List<List<ParameterSetOperation>>, форма getArgs()=[index,value]
-        assertTrue(hasMethod("net.ttddyy.dsproxy.QueryInfo", "getParametersList", 0, null),
+        require(hasMethod("net.ttddyy.dsproxy.QueryInfo", "getParametersList", 0, null),
                 "QueryInfo.getParametersList уехал → AllureDataSourceListener.renderQuery (инлайн значений сломается молча)");
-        assertTrue(hasMethod("net.ttddyy.dsproxy.proxy.ParameterSetOperation", "getArgs", 0, null),
+        require(hasMethod("net.ttddyy.dsproxy.proxy.ParameterSetOperation", "getArgs", 0, null),
                 "ParameterSetOperation.getArgs уехал → AllureDataSourceListener.inlineParams (ожидаем форму [0]=index, [1]=value)");
         // канонические предикаты спец-параметров (иначе КОД типа java.sql.Types попал бы в отчёт как значение)
         String pso = "net.ttddyy.dsproxy.proxy.ParameterSetOperation";
-        assertTrue(hasMethod(pso, "isSetNullParameterOperation", 1, pso),
+        require(hasMethod(pso, "isSetNullParameterOperation", 1, pso),
                 "ParameterSetOperation.isSetNullParameterOperation уехал → AllureDataSourceListener.renderParam");
-        assertTrue(hasMethod(pso, "isRegisterOutParameterOperation", 1, pso),
+        require(hasMethod(pso, "isRegisterOutParameterOperation", 1, pso),
                 "ParameterSetOperation.isRegisterOutParameterOperation уехал → AllureDataSourceListener.inlineParams");
     }
 
     @Test
     @DisplayName("Mockito MockMaker: InlineByteBuddyMockMaker (дефолтный inline-maker, который оборачиваем)")
     void mockitoMockMakerPresent() {
-        assertTrue(classPresent("org.mockito.internal.creation.bytebuddy.InlineByteBuddyMockMaker"),
+        require(classPresent("org.mockito.internal.creation.bytebuddy.InlineByteBuddyMockMaker"),
                 "InlineByteBuddyMockMaker уехал → AllureMockitoMockMaker оборачивает именно его (иначе NoClassDefFound у всех моков потребителя)");
     }
 
     @Test
     @DisplayName("Kafka: KafkaProducer.send(ProducerRecord, Callback) и KafkaConsumer.poll(Duration)")
     void kafkaMatchers() {
-        assertTrue(hasMethod("org.apache.kafka.clients.producer.KafkaProducer", "send", 2,
+        require(hasMethod("org.apache.kafka.clients.producer.KafkaProducer", "send", 2,
                         "org.apache.kafka.clients.producer.ProducerRecord"),
                 "KafkaProducer.send(ProducerRecord, Callback) уехал → обнови матчер в AllureKafkaProducerInstrumentation");
-        assertTrue(hasMethod("org.apache.kafka.clients.consumer.KafkaConsumer", "poll", 1, "java.time.Duration"),
+        require(hasMethod("org.apache.kafka.clients.consumer.KafkaConsumer", "poll", 1, "java.time.Duration"),
                 "KafkaConsumer.poll(Duration) уехал → обнови матчер в AllureKafkaConsumerInstrumentation");
     }
 
@@ -215,31 +238,31 @@ class InstrumentationApiCanaryTest {
     @DisplayName("WireMock: static WireMock.{verify,stubFor,reset} и WireMockServer.{verify,stubFor,resetAll}")
     void wireMockMatchers() {
         String stat = "com.github.tomakehurst.wiremock.client.WireMock";
-        assertTrue(hasMethod(stat, "verify", -1, null), "WireMock.verify уехал → AllureWireMockVerifyInstrumentation");
-        assertTrue(hasMethod(stat, "stubFor", -1, null), "WireMock.stubFor уехал → AllureWireMockVerifyInstrumentation");
-        assertTrue(hasMethod(stat, "reset", -1, null), "WireMock.reset уехал → AllureWireMockVerifyInstrumentation");
+        require(hasMethod(stat, "verify", -1, null), "WireMock.verify уехал → AllureWireMockVerifyInstrumentation");
+        require(hasMethod(stat, "stubFor", -1, null), "WireMock.stubFor уехал → AllureWireMockVerifyInstrumentation");
+        require(hasMethod(stat, "reset", -1, null), "WireMock.reset уехал → AllureWireMockVerifyInstrumentation");
         String server = "com.github.tomakehurst.wiremock.WireMockServer";
-        assertTrue(hasMethod(server, "verify", -1, null), "WireMockServer.verify уехал → AllureWireMockVerifyInstrumentation");
-        assertTrue(hasMethod(server, "stubFor", -1, null), "WireMockServer.stubFor уехал → AllureWireMockVerifyInstrumentation");
-        assertTrue(hasMethod(server, "resetAll", -1, null), "WireMockServer.resetAll уехал → AllureWireMockVerifyInstrumentation");
+        require(hasMethod(server, "verify", -1, null), "WireMockServer.verify уехал → AllureWireMockVerifyInstrumentation");
+        require(hasMethod(server, "stubFor", -1, null), "WireMockServer.stubFor уехал → AllureWireMockVerifyInstrumentation");
+        require(hasMethod(server, "resetAll", -1, null), "WireMockServer.resetAll уехал → AllureWireMockVerifyInstrumentation");
     }
 
     @Test
     @DisplayName("Spring AssertionErrors: assertEquals/assertNotEquals(3), assertTrue/False/Null/NotNull(2)")
     void springAssertionMatchers() {
         String ae = "org.springframework.test.util.AssertionErrors";
-        assertTrue(hasMethod(ae, "assertEquals", 3, null), "AssertionErrors.assertEquals(3-арг) уехал → AllureSpringAssertionsInstrumentation");
-        assertTrue(hasMethod(ae, "assertNotEquals", 3, null), "AssertionErrors.assertNotEquals(3-арг) уехал → AllureSpringAssertionsInstrumentation");
-        assertTrue(hasMethod(ae, "assertTrue", 2, null), "AssertionErrors.assertTrue(2-арг) уехал → AllureSpringAssertionsInstrumentation");
-        assertTrue(hasMethod(ae, "assertFalse", 2, null), "AssertionErrors.assertFalse(2-арг) уехал → AllureSpringAssertionsInstrumentation");
-        assertTrue(hasMethod(ae, "assertNull", 2, null), "AssertionErrors.assertNull(2-арг) уехал → AllureSpringAssertionsInstrumentation");
-        assertTrue(hasMethod(ae, "assertNotNull", 2, null), "AssertionErrors.assertNotNull(2-арг) уехал → AllureSpringAssertionsInstrumentation");
+        require(hasMethod(ae, "assertEquals", 3, null), "AssertionErrors.assertEquals(3-арг) уехал → AllureSpringAssertionsInstrumentation");
+        require(hasMethod(ae, "assertNotEquals", 3, null), "AssertionErrors.assertNotEquals(3-арг) уехал → AllureSpringAssertionsInstrumentation");
+        require(hasMethod(ae, "assertTrue", 2, null), "AssertionErrors.require(2-арг) уехал → AllureSpringAssertionsInstrumentation");
+        require(hasMethod(ae, "assertFalse", 2, null), "AssertionErrors.assertFalse(2-арг) уехал → AllureSpringAssertionsInstrumentation");
+        require(hasMethod(ae, "assertNull", 2, null), "AssertionErrors.assertNull(2-арг) уехал → AllureSpringAssertionsInstrumentation");
+        require(hasMethod(ae, "assertNotNull", 2, null), "AssertionErrors.assertNotNull(2-арг) уехал → AllureSpringAssertionsInstrumentation");
     }
 
     @Test
     @DisplayName("Hamcrest: MatcherAssert.assertThat(reason, actual, matcher) — 3-арг")
     void hamcrestMatcher() {
-        assertTrue(hasMethod("org.hamcrest.MatcherAssert", "assertThat", 3, null),
+        require(hasMethod("org.hamcrest.MatcherAssert", "assertThat", 3, null),
                 "MatcherAssert.assertThat(3-арг) уехал → обнови матчер в AllureHamcrestInstrumentation");
     }
 
@@ -248,11 +271,11 @@ class InstrumentationApiCanaryTest {
     void assertjHierarchy() {
         // матчер isSubTypeOf(AbstractAssert) + методы-проверки в абстрактных предках;
         // если уедут — перехват неполон (см. docs/adr/0001-assertj-instrumentation.md)
-        assertTrue(hasMethod("org.assertj.core.api.AbstractAssert", "isEqualTo", 1, null),
+        require(hasMethod("org.assertj.core.api.AbstractAssert", "isEqualTo", 1, null),
                 "AbstractAssert.isEqualTo уехал → пересмотри AllureAssertJInstrumentation");
-        assertTrue(hasMethod("org.assertj.core.api.AbstractCharSequenceAssert", "startsWith", 1, null),
+        require(hasMethod("org.assertj.core.api.AbstractCharSequenceAssert", "startsWith", 1, null),
                 "AbstractCharSequenceAssert.startsWith уехал → строковые ассерты выпадут из отчёта");
-        assertTrue(hasMethod("org.assertj.core.api.AbstractIterableAssert", "contains", 1, null),
+        require(hasMethod("org.assertj.core.api.AbstractIterableAssert", "contains", 1, null),
                 "AbstractIterableAssert.contains уехал → коллекционные ассерты выпадут из отчёта");
     }
 
@@ -265,7 +288,7 @@ class InstrumentationApiCanaryTest {
                 "assertNull", "assertNotNull", "assertSame", "assertNotSame", "assertArrayEquals",
                 "assertIterableEquals", "assertLinesMatch", "assertInstanceOf", "assertThrows",
                 "assertThrowsExactly", "assertDoesNotThrow", "assertTimeout", "assertTimeoutPreemptively"}) {
-            assertTrue(hasMethod(a, m, -1, null),
+            require(hasMethod(a, m, -1, null),
                     "Assertions." + m + " уехал → обнови матчер в AllureJUnitJupiterAssertionsInstrumentation");
         }
         // допущение «фасад Assertions не само-делегирует → депт-счётчик не нужен» стерегут РАНТАЙМ-тесты
@@ -273,9 +296,173 @@ class InstrumentationApiCanaryTest {
         // JUnitJupiterAssertionsReportIT (eq==1, level-B) — покраснеют, если появится удвоение (эффект
         // сильнее статического байт-скана: проверяем результат, а не форму).
         // fail/assertAll ДОЛЖНЫ существовать — их мы ОСОЗНАННО исключили; если исчезнут, исключение врёт
-        assertTrue(hasMethod(a, "fail", -1, null),
+        require(hasMethod(a, "fail", -1, null),
                 "Assertions.fail уехал → пересмотри исключение fail в AllureJUnitJupiterAssertionsInstrumentation");
-        assertTrue(hasMethod(a, "assertAll", -1, null),
+        require(hasMethod(a, "assertAll", -1, null),
                 "Assertions.assertAll уехал → пересмотри исключение assertAll в AllureJUnitJupiterAssertionsInstrumentation");
+    }
+
+    @Test
+    @DisplayName("AssertJ: приватное поле AbstractAssert.actual (@Advice.FieldValue(\"actual\"))")
+    void assertjActualField() {
+        // AllureAssertJInstrumentation читает значение через @Advice.FieldValue("actual") — это имя
+        // ПРИВАТНОГО поля. Переименуют → трансформация типа падает целиком, и без счётчика сбоев
+        // это было бы невидимо: исчезли бы ВСЕ шаги AssertJ при зелёных тестах.
+        require(hasField("org.assertj.core.api.AbstractAssert", "actual"),
+                "AbstractAssert.actual уехал → обнови @Advice.FieldValue в AllureAssertJInstrumentation");
+    }
+
+    // Списки известных имён живут в main (MovedTypeNames) — там же, где их читают автоконфиги
+    // и диагност. Дублировать их здесь нельзя: разъедутся, и канарейка станет стеречь не то.
+    private static final List<String> MOCKMVC_CUSTOMIZER = MovedTypeNames.MOCKMVC_CUSTOMIZER;
+    private static final List<String> WEBTESTCLIENT_CUSTOMIZER = MovedTypeNames.WEBTESTCLIENT_CUSTOMIZER;
+
+    @Test
+    @DisplayName("Spring Boot: кастомайзеры MockMvc/WebTestClient есть под СТАРЫМ или НОВЫМ именем")
+    void springBootTestCustomizers() {
+        // Гейт @ConditionalOnClass читается ASM-ом БЕЗ загрузки класса: класс уехал → условие
+        // просто false → автоконфиг молча не применяется. Канарейка обязана быть полезной и ДО,
+        // и ПОСЛЕ апгрейда, поэтому проверяет НАБОР известных имён, а не одно.
+        require(anyPresent(MOCKMVC_CUSTOMIZER),
+                "MockMvcBuilderCustomizer не найден НИ ПОД ОДНИМ известным именем — @ConditionalOnClass "
+                        + "в AllureMockMvcAutoConfiguration ложен, кастомайзер МОЛЧА не регистрируется "
+                        + "(остаётся только байткод-канал MockMvc.perform).\n  известные имена: " + MOCKMVC_CUSTOMIZER);
+        require(anyPresent(WEBTESTCLIENT_CUSTOMIZER),
+                "WebTestClientBuilderCustomizer не найден НИ ПОД ОДНИМ известным именем — у WebTestClient "
+                        + "байткод-фолбэка НЕТ, шаги исчезнут ПОЛНОСТЬЮ.\n  известные имена: " + WEBTESTCLIENT_CUSTOMIZER);
+
+        // Раньше здесь сверялось, что main скомпилирован против имени ИЗ списка. Теперь main не
+        // компилируется ни против одного: интерфейс поднимается по имени (MovedCustomizerRegistrar).
+        // Пересчитывать размер списка вместо этого БЕСПОЛЕЗНО: опечатка в имени соседнего мажора
+        // прожила бы до самого апгрейда — то есть до момента, когда сетка обязана предупредить
+        // ЗАРАНЕЕ. Поэтому стережём форму имён и то, что ровно одно из пары живо ЗДЕСЬ.
+        for (List<String> names : List.of(MOCKMVC_CUSTOMIZER, WEBTESTCLIENT_CUSTOMIZER)) {
+            require(names.size() >= 2, "в MovedTypeNames нужно минимум два имени на кастомайзер "
+                    + "(Boot 3.x и Boot 4.x) — иначе кросс-версионность держится на одном: " + names);
+            for (String name : names) {
+                require(name.matches("([a-z][a-zA-Z\\d_]*\\.)+[A-Z][a-zA-Z\\d_$]*"),
+                        "«" + name + "» не похоже на полное имя класса — опечатка в MovedTypeNames "
+                                + "не даст резолва и обнаружится только на апгрейде");
+            }
+            long alive = names.stream().filter(InstrumentationApiCanaryTest::classPresent).count();
+            require(alive == 1, "на текущем стеке должно резолвиться РОВНО ОДНО имя из " + names
+                    + ", а резолвится " + alive + ". Ноль — список разъехался с реальностью; "
+                    + "больше одного — переходное состояние, проверь, что регистрируются оба бина "
+                    + "(MovedCustomizerRegistrar.register), иначе Boot соберёт не наш тип");
+        }
+
+        require(classPresent("org.springframework.test.web.servlet.ResultHandler"),
+                "ResultHandler уехал → AllureMockMvcAutoConfiguration вешает AllureMockMvcResultHandler через него");
+    }
+
+    /** Есть ли класс хотя бы под одним из известных имён (класс переезжает между мажорами). */
+    private static boolean anyPresent(List<String> classNames) {
+        for (String name : classNames) {
+            if (classPresent(name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Test
+    @DisplayName("RestAssured: метод content и класс-исключение ResponseAwareMatcher")
+    void restAssuredValidationExtras() {
+        String vroi = "io.restassured.internal.ValidatableResponseOptionsImpl";
+        require(hasMethod(vroi, "content", -1, null),
+                "ValidatableResponseOptionsImpl.content уехал → обнови список имён в AllureRestAssuredValidationInstrumentation");
+        // матчер ИСКЛЮЧАЕТ перегрузки с ResponseAwareMatcher: уедет класс — исключение начнёт
+        // молча пропускать их в отчёт (лишние/битые шаги), а не падать
+        require(classPresent("io.restassured.matcher.ResponseAwareMatcher"),
+                "ResponseAwareMatcher уехал → пересмотри исключение hasType(...) в AllureRestAssuredValidationInstrumentation");
+    }
+
+    @Test
+    @DisplayName("JPA: jakarta.persistence.Entity (разбор полей сущностей во вложении DB Result)")
+    void jpaEntityAnnotation() {
+        // AllureRepositoryAspect ищет аннотацию через Class.forName и при ClassNotFoundException
+        // ТИХО деградирует к generic toString() — вложение остаётся, но становится бесполезным
+        require(classPresent("jakarta.persistence.Entity"),
+                "jakarta.persistence.Entity уехал → AllureRepositoryAspect перестанет разбирать поля сущностей");
+    }
+
+    @Test
+    @DisplayName("Гейты присутствия (ClassPresence): строки-имена из листенеров")
+    void classPresenceGates() {
+        // Каждая строка — выключатель целого модуля: не найден класс → листенер молча не включается.
+        // Полный инвентарь строк из *Listener (grep ClassPresence.isPresent в src/main).
+        for (String[] gate : new String[][]{
+                {"org.springframework.test.web.servlet.MockMvc", "AllureMockMvcListener"},
+                {"org.springframework.web.client.RestTemplate", "AllureRestTemplateListener"},
+                {"org.springframework.web.client.RestClient", "AllureRestClientListener"},
+                {"io.restassured.RestAssured", "AllureRestAssuredListener"},
+                {"org.springframework.jdbc.core.JdbcTemplate", "AllureJdbcListener"},
+                {"ch.qos.logback.classic.LoggerContext", "AllureApplicationLogsListener"},
+                {"com.github.tomakehurst.wiremock.WireMockServer", "AllureWireMockTestListener"},
+                {"liquibase.changelog.ChangeSet", "AllureLiquibaseListener"},
+                {"org.awaitility.Awaitility", "AllureAwaitilityListener"}}) {
+            require(classPresent(gate[0]),
+                    gate[0] + " уехал → " + gate[1] + " молча выключится (обнови строку ClassPresence.isPresent)");
+        }
+    }
+
+    @Test
+    @DisplayName("byte-buddy знает формат классов текущей JVM (иначе весь перехват тихо мёртв)")
+    void byteBuddySupportsCurrentJvmClassFormat() {
+        // Апгрейд JDK опережает byte-buddy: если формат class-файлов новее известного ему,
+        // трансформация падает на КАЖДОМ типе. Прямая канарейка на Java 25+.
+        // Версию берём у самой JVM, БЕЗ фолбэка ofThisVm(JAVA_V21): фолбэк отдаётся, когда версию
+        // определить не удалось, и канарейка зеленела бы ровно тогда, когда ничего не известно —
+        // ветки «не смог проверить → считаю, что всё хорошо» у детектора быть не должно.
+        require(net.bytebuddy.ClassFileVersion.ofJavaVersion(Runtime.version().feature())
+                        .isAtMost(net.bytebuddy.ClassFileVersion.latest()),
+                "byte-buddy не знает формат классов этой JVM → весь байткод-слой мёртв. "
+                        + "Подними версию byte-buddy (или включи -Dnet.bytebuddy.experimental=true ОСОЗНАННО)");
+    }
+
+    @Test
+    @DisplayName("прогон идёт на ТОЙ JVM, которую заказал профиль (compat-профиль обязан доказывать)")
+    void runsOnExpectedJvm() {
+        // Профиль java25 форкает surefire на другой JDK через <jvm>${java25.home}/bin/java.
+        // Ошибись путём — тесты пойдут на 21, профиль будет зелёным, и строка «проверено до 25»
+        // в README станет неправдой. Свойство приезжает из профиля; без него проверка не идёт
+        // (обычный прогон не заказывает конкретную версию и ничего про неё не обещает).
+        String expected = System.getProperty("expected.java.feature");
+        if (expected == null || expected.isBlank()) {
+            return;
+        }
+        int actual = Runtime.version().feature();
+        require(String.valueOf(actual).equals(expected.trim()),
+                "профиль заказывал Java " + expected + ", а тесты идут на " + actual
+                        + " → проверь java25.home (-Djava25.home=$(jenv prefix 25)). "
+                        + "Пока не совпало, прогон НИЧЕГО не доказывает про заявленную границу");
+    }
+
+    /** Объявлен ли метод ИМЕННО в этом классе иерархии (ByteBuddy вплетает только в объявителя). */
+    private static boolean declaredIn(String className, String method, Class<?> paramType, String expectedDeclarer) {
+        try {
+            return Class.forName(className).getMethod(method, paramType).getDeclaringClass()
+                    .getName().equals(expectedDeclarer);
+        } catch (ReflectiveOperationException e) {
+            return false;
+        }
+    }
+
+    /** Есть ли у класса поле (в т.ч. приватное) — для канареек на {@code @Advice.FieldValue}. */
+    private static boolean hasField(String className, String field) {
+        try {
+            Class<?> c = Class.forName(className);
+            for (Class<?> k = c; k != null; k = k.getSuperclass()) {
+                try {
+                    k.getDeclaredField(field);
+                    return true;
+                } catch (NoSuchFieldException next) {
+                    // ищем выше по иерархии
+                }
+            }
+            return false;
+        } catch (ClassNotFoundException e) {
+            return false;
+        }
     }
 }

@@ -1,4 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.autoconfig;
+
+import io.qameta.allure.Epic;
 import io.github.kolomyychenkoai.allure.spring.rest.AllureMockMvcAutoConfiguration;
 
 import org.junit.jupiter.api.DisplayName;
@@ -15,6 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Уровень A: авто-активация HTTP-модуля. Падает, если кастомайзер MockMvc перестанет
  * регистрироваться по умолчанию (когда MockMvc есть на classpath).
  */
+@Epic("Внутренние проверки библиотеки")
 class AllureMockMvcAutoConfigurationTest {
 
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
@@ -24,6 +27,16 @@ class AllureMockMvcAutoConfigurationTest {
     @DisplayName("кастомайзер MockMvc регистрируется по умолчанию")
     void customizerPresentByDefault() {
         runner.run(ctx -> assertThat(ctx).hasSingleBean(MockMvcBuilderCustomizer.class));
+    }
+
+    @Test
+    @DisplayName("СЦЕНАРИЙ BOOT 4: нет MockMvcBuilderCustomizer → кастомайзер не регистрируется")
+    void customizerAbsentWithoutBootTestModule() {
+        // В Boot 4 этот класс уехал в отдельный артефакт (spring-boot-webmvc-test). Потребитель,
+        // не добавивший его, получит МОЛЧА выключенный автоконфиг. FilteredClassLoader
+        // воспроизводит будущую реальность точно и УЖЕ СЕЙЧАС, на Boot 3.5.8.
+        runner.withClassLoader(new FilteredClassLoader(MockMvcBuilderCustomizer.class))
+                .run(ctx -> assertThat(ctx).doesNotHaveBean(MockMvcBuilderCustomizer.class));
     }
 
     @Test

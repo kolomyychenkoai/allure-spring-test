@@ -4,7 +4,6 @@ import io.github.kolomyychenkoai.allure.spring.support.CurrentReport;
 import io.github.kolomyychenkoai.allure.spring.support.JpaTestApp;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
-import io.qameta.allure.model.Attachment;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,13 +12,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -58,8 +52,8 @@ class JdbcReportIT {
                 () -> "SQL без текста запроса: " + CurrentReport.attachmentContent("SQL (шаблон)"));
         // содержимое результата ИМЕННО шага queryForObject (что вернулось) — через реальную цепочку,
         // не только уровень A. Берём DB Result конкретного шага: первый общий DB Result — это update (=1).
-        CurrentReport.check(dbResultOfStep("DB JdbcTemplate.queryForObject").orElse("").contains("jdbc-gadget"),
-                () -> "DB Result queryForObject без значения: " + dbResultOfStep("DB JdbcTemplate.queryForObject"));
+        CurrentReport.check(CurrentReport.attachmentOfStep("DB JdbcTemplate.queryForObject", "DB Result").orElse("").contains("jdbc-gadget"),
+                () -> "DB Result queryForObject без значения: " + CurrentReport.attachmentOfStep("DB JdbcTemplate.queryForObject", "DB Result"));
 
         // реальный SQL от datasource-proxy вложен в шаг шаблона (без него виден только текст запроса)
         CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("SQL INSERT") && n.contains("widget")),
@@ -81,23 +75,20 @@ class JdbcReportIT {
                 () -> "в шаге NamedParameter должен быть именованный SQL (:n): " + CurrentReport.attachmentContent("SQL (шаблон)"));
     }
 
-    /** Содержимое вложения «DB Result» КОНКРЕТНОГО шага (общий хелпер берёт первый по имени). */
-    private static Optional<String> dbResultOfStep(String stepName) {
-        return CurrentReport.steps().stream()
-                .filter(s -> stepName.equals(s.getName()))
-                .flatMap(s -> s.getAttachments().stream())
-                .filter(a -> "DB Result".equals(a.getName()))
-                .map(Attachment::getSource)
-                .filter(src -> src != null && !src.isBlank())
-                .findFirst()
-                .flatMap(src -> {
-                    try {
-                        return Optional.of(Files.readString(Paths.get(
-                                System.getProperty("allure.results.directory", "allure-results"), src),
-                                StandardCharsets.UTF_8));
-                    } catch (IOException e) {
-                        return Optional.empty();
-                    }
-                });
+    @Test
+    @DisplayName("batchUpdate: КАЖДЫЙ запрос пакета даёт свой шаг SQL, а не только первый")
+    void batchUpdateLogsEveryStatement() {
+        jdbc.batchUpdate("insert into widget(name) values ('batch-1')",
+                "update widget set name='batch-2' where name='batch-1'");
+
+        List<String> steps = CurrentReport.stepNames();
+        CurrentReport.check(steps.stream().anyMatch("DB JdbcTemplate.batchUpdate"::equals),
+                () -> "нет шага DB JdbcTemplate.batchUpdate: " + steps);
+        CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("SQL INSERT") && n.contains("widget")),
+                () -> "нет SQL INSERT из пакета: " + steps);
+        // второй запрос пакета раньше молча терялся: брался queryInfoList.get(0)
+        CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("SQL UPDATE") && n.contains("widget")),
+                () -> "второй запрос пакета потерян: " + steps);
     }
+
 }

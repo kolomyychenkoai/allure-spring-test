@@ -1,5 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.rest.internal;
 
+import io.qameta.allure.Epic;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -10,6 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * детерминизм имени шага (эфемерный порт не должен попадать в имя) — поэтому ветки
  * (норм/без пути/null/битый URL) под тестами.
  */
+@Epic("Внутренние проверки библиотеки")
 class AllureHttpTest {
 
     @Test

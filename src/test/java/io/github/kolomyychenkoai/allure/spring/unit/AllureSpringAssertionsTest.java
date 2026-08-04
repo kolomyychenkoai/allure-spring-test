@@ -1,5 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
 
+import io.qameta.allure.Epic;
+
 import io.github.kolomyychenkoai.allure.spring.assertion.internal.AllureSpringAssertionsInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.qameta.allure.model.TestResult;
@@ -17,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * Уровень A: детерминированная проверка содержимого отчёта для Spring-ассертов.
  * Инструментирование ставится один раз, ассерты зовутся напрямую — без Spring-контекста.
  */
+@Epic("Внутренние проверки библиотеки")
 class AllureSpringAssertionsTest {
 
     @BeforeAll

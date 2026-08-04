@@ -10,6 +10,7 @@ import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
+import static net.bytebuddy.matcher.ElementMatchers.isConstructor;
 import static net.bytebuddy.matcher.ElementMatchers.isPublic;
 import static net.bytebuddy.matcher.ElementMatchers.isStatic;
 import static net.bytebuddy.matcher.ElementMatchers.isSubTypeOf;
@@ -107,7 +108,17 @@ public final class AllureAssertJInstrumentation {
         AllureInstrumentation.retransform(
                 isSubTypeOf(AbstractAssert.class),
                 (builder, type, cl, module, pd) -> builder.visit(Advice.to(AssertJAdvice.class)
-                        .on(isPublic().and(not(isStatic())).and(not(namedOneOf(NON_ASSERTION_METHODS))))));
+                        // not(isConstructor()): наш advice ловит исключения (onThrowable), а вокруг
+                        // конструктора try/catch не ставится — ByteBuddy бросает «Cannot catch
+                        // exception during constructor call» и НЕ трансформирует ВЕСЬ тип. Падали
+                        // не только листовые (StringAssert), но и АБСТРАКТНЫЕ AbstractObjectAssert /
+                        // AbstractDoubleAssert / AbstractFloatAssert — а на них ОБЪЯВЛЕНЫ isCloseTo,
+                        // hasFieldOrPropertyWithValue, returns: наследовать их неоткуда, и шага
+                        // не было вовсе. Витрина это теперь показывает (AssertJReportIT), сбои 47 → 2.
+                        // ⚠️ Правка отменяет «отвергнутую альтернативу» из ADR 0001 — перед тем как
+                        // трогать матчер снова, прочитай там раздел с замерами.
+                        .on(isPublic().and(not(isStatic())).and(not(isConstructor()))
+                                .and(not(namedOneOf(NON_ASSERTION_METHODS))))));
     }
 
     public static class AssertJAdvice {

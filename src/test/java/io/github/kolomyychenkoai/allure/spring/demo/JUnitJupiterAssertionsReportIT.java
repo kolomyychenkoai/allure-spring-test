@@ -49,4 +49,46 @@ class JUnitJupiterAssertionsReportIT {
         // assertThrows реально поймал ожидаемое исключение (драйвер отработал)
         CurrentReport.check(caught != null, () -> "assertThrows не вернул исключение");
     }
+
+    @Test
+    @DisplayName("остальные семейства ассертов Jupiter (12 из 17 матчера) тоже дают шаги")
+    void remainingAssertionFamiliesAppearInReport() {
+        // Матчер перехватывает 17 имён, витрина показывала 5 — то есть 12 веток разбора
+        // не проверялись НИЧЕМ на живой цепочке. Там же живёт хрупкая эвристика «сообщение —
+        // последний параметр String/Supplier по дескриптору»: берём перегрузки И с сообщением,
+        // И без, чтобы разъезд разбора дескриптора был виден.
+        Assertions.assertNotEquals("laptop", "phone");
+        Assertions.assertFalse(1 > 2, "единица не больше двух");
+        Assertions.assertNull(null, "значения нет");
+        Assertions.assertSame(this, this);
+        Assertions.assertNotSame(new Object(), new Object());
+        Assertions.assertArrayEquals(new int[]{1, 2}, new int[]{1, 2});
+        Assertions.assertIterableEquals(List.of("a"), List.of("a"));
+        Assertions.assertLinesMatch(List.of("строка"), List.of("строка"));
+        Assertions.assertThrowsExactly(IllegalArgumentException.class,
+                () -> { throw new IllegalArgumentException("точный тип"); });
+        String value = Assertions.assertDoesNotThrow(() -> "ок");
+        Assertions.assertTimeout(java.time.Duration.ofSeconds(5), () -> "успели");
+
+        List<String> steps = CurrentReport.stepNames();
+        CurrentReport.check(value.equals("ок"), () -> "assertDoesNotThrow не вернул значение");
+        for (String expected : new String[]{
+                "Проверка: laptop ≠ phone",
+                "Проверка: массивы равны",
+                "Проверка: коллекции равны",
+                "Проверка: строки совпали",
+                "Проверка: брошено IllegalArgumentException",
+                "Проверка: без исключения",
+                "Проверка: уложились в таймаут"}) {
+            CurrentReport.check(steps.contains(expected), () -> "нет шага «" + expected + "»: " + steps);
+        }
+        // identity-toString в именах больше не течёт: «<Object>», а не «java.lang.Object@1a2b»
+        CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("Проверка: разные объекты") && n.contains("<Object>")),
+                () -> "в имени шага должен быть читаемый «<Object>»: " + steps);
+        // сообщение из перегрузки со String действительно попадает в имя шага (эвристика жива)
+        CurrentReport.check(steps.stream().anyMatch(n -> n.contains("единица не больше двух")),
+                () -> "сообщение assertFalse не попало в шаг: " + steps);
+        CurrentReport.check(steps.stream().anyMatch(n -> n.contains("значения нет")),
+                () -> "сообщение assertNull не попало в шаг: " + steps);
+    }
 }

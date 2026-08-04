@@ -41,10 +41,43 @@
         <spring-boot.version>3.5.8</spring-boot.version>
         <allure.version>2.25.0</allure.version>
         <allure-maven.version>2.12.0</allure-maven.version>
+        <!-- Версия ЯВНАЯ, не из Boot BOM: в spring-boot-dependencies 4.1 rest-assured больше
+             НЕ УПРАВЛЯЕТСЯ (в 3.5.8 был 5.5.6). Без пина ветка апгрейда падает на построении
+             модели Maven («version is missing») ЕЩЁ ДО компиляции — то есть раньше всех наших
+             сигналов, и разбираться будет не с чем. Значение равно тому, что даёт BOM 3.5.8,
+             поэтому здесь это no-op. ⚠️ В ветке апгрейда пина МАЛО: Boot 4.1 тянет groovy-bom 5,
+             а RA 5.5.6 собран на Groovy 4 → там нужна rest-assured 6.x. См. docs/upgrade-checklist.md. -->
+        <rest-assured.version>5.5.6</rest-assured.version>
+
+        <!-- ОБЪЯВЛЕННЫЕ ГРАНИЦЫ СОВМЕСТИМОСТИ — здесь и только здесь.
+             README и AllureApiCanaryTest читают ЭТИ числа (канарейка — через
+             systemPropertyVariables ниже), поэтому разъехаться они не могут.
+             Меняешь число → обязан прогнать соответствующий compat-профиль. -->
+        <compat.allure.min>2.20.0</compat.allure.min>
+        <compat.allure.max>2.35.4</compat.allure.max>
+        <compat.boot.min>3.2.12</compat.boot.min>
+
+        <!-- Версия CLI-генератора отчёта РАСЦЕПЛЕНА с версией библиотеки: матрица меняет
+             allure.version, и без расцепления она заодно меняла бы генератор — а это разные
+             вещи (одна про наш байткод, другая про дистрибутив, который качается из сети). -->
+        <allure-report.version>2.25.0</allure-report.version>
+
+        <!-- Сверка инвентаря с эталоном. `off` допустим ТОЛЬКО внутри compat-профилей —
+             стережёт unit/PomCompatibilityTest. Эталон принадлежит нашей комбинации версий,
+             на чужой он краснел бы законно, поэтому там печатаем дельту человеку. -->
+        <inventory.compare>on</inventory.compare>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <!-- НАШИ пины идут ПЕРВЫМИ: dependencyManagement разрешается сверху вниз, и первое
+                 совпадение побеждает. Переопределить версию из импортируемого BOM одноимённым
+                 свойством нельзя — свойства BOM вычисляются в его собственном контексте. -->
+            <dependency>
+                <groupId>io.rest-assured</groupId>
+                <artifactId>rest-assured</artifactId>
+                <version>${rest-assured.version}</version>
+            </dependency>
             <!-- Версии Spring/Logback/JUnit/AssertJ берём из Spring Boot BOM,
                  чтобы совпадать с тем, что уже есть у потребителя. -->
             <dependency>
@@ -246,6 +279,9 @@
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
+            <!-- ⚠️ В Boot 4.x этот артефакт ПЕРЕИМЕНОВАН в spring-boot-starter-aspectj: в ветке
+                 апгрейда будет второй «version is missing». Пинить версию бессмысленно (артефакта
+                 с таким именем там нет) — правка принадлежит ветке апгрейда. -->
             <artifactId>spring-boot-starter-aop</artifactId>
             <scope>test</scope>
         </dependency>
@@ -296,8 +332,63 @@
                     <runOrder>random</runOrder>
                     <systemPropertyVariables>
                         <allure.results.directory>${project.build.directory}/allure-results</allure.results.directory>
+                        <!-- границы из <properties>: единственный источник правды -->
+                        <allure.compat.min>${compat.allure.min}</allure.compat.min>
+                        <allure.compat.max>${compat.allure.max}</allure.compat.max>
+                        <inventory.compare>${inventory.compare}</inventory.compare>
                     </systemPropertyVariables>
+                    <!-- Self-attach byte-buddy-агента (ByteBuddyAgent.install) на JDK 21+ печатает
+                         предупреждение, а в будущих JDK может быть запрещён по умолчанию (JEP 451).
+                         Разрешаем явно: иначе весь байткод-слой ТИХО выключится.
+                         ⚠️ Если в проекте появится jacoco — писать «@{argLine} -XX:+…», иначе его
+                         argLine затрётся и покрытие пропадёт молча. -->
+                    <argLine>-XX:+EnableDynamicAgentLoading</argLine>
                 </configuration>
+                <executions>
+                    <execution>
+                        <id>default-test</id>
+                        <configuration>
+                            <!-- Инвентарь гоняется ОТДЕЛЬНЫМ прогоном (профиль report-inventory):
+                                 в основном ему нечего проверять — результаты ещё пишутся.
+                                 Правило записано, а не подразумевается именем класса. -->
+                            <excludes>
+                                <exclude>**/inventory/ReportInventoryCheck.java</exclude>
+                            </excludes>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Каталог результатов чистим ПЕРЕД тестами, а не только в `mvn clean`: иначе
+                 CurrentReport.anyResultFileContains (сканирует ВЕСЬ каталог) и инвентарь читают
+                 файлы прошлых прогонов — ложно-зелёный ровно там, где ловим тихую поломку. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-clean-plugin</artifactId>
+                <version>3.4.0</version>
+                <executions>
+                    <execution>
+                        <id>wipe-allure-results</id>
+                        <phase>process-test-classes</phase>
+                        <goals><goal>clean</goal></goals>
+                        <configuration>
+                            <!-- ОБЯЗАТЕЛЬНО: иначе цель clean снесёт весь target/ посреди сборки -->
+                            <excludeDefaultDirectories>true</excludeDefaultDirectories>
+                            <failOnError>false</failOnError>
+                            <filesets>
+                                <fileset>
+                                    <directory>${project.build.directory}/allure-results</directory>
+                                </fileset>
+                                <!-- дампы диагностики перехвата — та же болезнь: если основная JVM
+                                     умрёт до закрытия сессии (симптом сломанного агента!), гейт
+                                     прочитал бы файл ПРОШЛОГО прогона и промолчал -->
+                                <fileset>
+                                    <directory>${project.build.directory}/instrumentation-diagnostics</directory>
+                                </fileset>
+                            </filesets>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
 
             <!-- Allure CLI: mvn allure:serve / allure:report -->
@@ -306,7 +397,10 @@
                 <artifactId>allure-maven</artifactId>
                 <version>${allure-maven.version}</version>
                 <configuration>
-                    <reportVersion>${allure.version}</reportVersion>
+                    <!-- НЕ ${allure.version}: матрица меняет версию БИБЛИОТЕКИ, а не генератора
+                         отчёта. Связка заставляла бы compat-профиль качать чужой дистрибутив CLI
+                         и давала бы ложный сигнал «сломалось на старом Allure». -->
+                    <reportVersion>${allure-report.version}</reportVersion>
                     <resultsDirectory>${project.build.directory}/allure-results</resultsDirectory>
                 </configuration>
             </plugin>
@@ -368,4 +462,109 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!-- ВТОРОЙ прогон, ОТДЕЛЬНАЯ JVM: инвентарь видов шагов против эталона. К его старту
+             основной прогон завершён и все result.json на диске.
+
+             Профиль, а не просто execution: user-property `test` перебивает <includes> у ВСЕХ
+             executions сразу, поэтому `mvn test -Dtest=KafkaReportIT` гонял бы KafkaReportIT
+             ДВАЖДЫ (второй встроенный брокер, дубли в allure-results). Активация по отсутствию
+             `test` выключает второй прогон целиком: точечный запуск снова стоит один прогон,
+             а инвентарь на неполных данных всё равно бессмыслен. -->
+        <profile>
+            <id>report-inventory</id>
+            <activation>
+                <property>
+                    <name>!test</name>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>report-inventory</id>
+                                <phase>test</phase>
+                                <goals><goal>test</goal></goals>
+                                <configuration>
+                                    <includes>
+                                        <include>**/inventory/ReportInventoryCheck.java</include>
+                                    </includes>
+                                    <excludes combine.self="override"/>
+                                    <runOrder>filesystem</runOrder>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!-- ══════════════ МАТРИЦА СОВМЕСТИМОСТИ ══════════════
+             Все профили ниже НЕ активны по умолчанию: ежедневный `mvn clean test` не меняется.
+             Гоняются перед релизом и при любой правке compat.* — одной командой
+             scripts/compat-matrix.sh. Подробности: docs/compat-matrix.md. -->
+
+        <!-- Java 25 на нашей комбинации библиотек. Форкаем ТОЛЬКО тесты, компиляция остаётся
+             release=21: проверяем ровно то, что получит потребитель — jar под 21 на JVM 25.
+             Maven и его плагины остаются на 21, поэтому при поломке подозреваемый один.
+             <jvm> стоит в общей <configuration> → наследуется и прогоном инвентаря. -->
+        <profile>
+            <id>java25</id>
+            <properties>
+                <!-- brew install openjdk@25. Перебить: -Djava25.home=$(jenv prefix 25) -->
+                <java25.home>/opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk/Contents/Home</java25.home>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <jvm>${java25.home}/bin/java</jvm>
+                            <systemPropertyVariables>
+                                <!-- Без этого профиль ничего не ДОКАЗЫВАЕТ: укажи java25.home на
+                                     JDK 21 — и он зеленеет, а строка «проверено до 25» в README
+                                     врёт. Канарейка сверяет число с Runtime.version().feature(). -->
+                                <expected.java.feature>25</expected.java.feature>
+                            </systemPropertyVariables>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!-- Нижняя граница Allure. Пересобирает main против неё → компилятор первая линия,
+             AllureApiCanaryTest вторая, а его проверка рантайм-версии убеждается, что
+             объявленная граница не соврала. Инвентарь сверяем: версия Allure не меняет ни
+             одного нашего шага (мы их формируем сами), значит расхождение = настоящий сигнал. -->
+        <profile>
+            <id>compat-allure-min</id>
+            <properties>
+                <allure.version>${compat.allure.min}</allure.version>
+            </properties>
+        </profile>
+
+        <profile>
+            <id>compat-allure-max</id>
+            <properties>
+                <allure.version>${compat.allure.max}</allure.version>
+            </properties>
+        </profile>
+
+        <!-- Нижняя граница Spring Boot: меняется ВЕСЬ BOM (Spring 6.1, Hibernate 6.4,
+             Liquibase 4.2x, Kafka 3.6, byte-buddy 1.14.x, JUnit 5.10, AssertJ 3.24).
+             Форма SQL Hibernate и служебный SQL Liquibase поедут ЗАКОННО → сверку с эталоном
+             выключаем, дельту печатаем человеку. Безусловные гейты остаются жёсткими. -->
+        <profile>
+            <id>compat-boot-min</id>
+            <properties>
+                <spring-boot.version>${compat.boot.min}</spring-boot.version>
+                <inventory.compare>off</inventory.compare>
+            </properties>
+        </profile>
+    </profiles>
 </project>

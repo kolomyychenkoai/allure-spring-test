@@ -1,5 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
 
+import io.qameta.allure.Epic;
+
 import io.github.kolomyychenkoai.allure.spring.rest.internal.AllureRestTemplateInterceptor;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.qameta.allure.model.TestResult;
@@ -27,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * зовём {@code intercept(...)} напрямую с фейковым execution. Дополняет уровень B
  * ({@code RestTemplateReportIT}) детерминированной проверкой шага/вложений и гейта активного кейса.
  */
+@Epic("Внутренние проверки библиотеки")
 class AllureRestTemplateInterceptorTest {
 
     private InMemoryAllure allure;
@@ -59,7 +62,11 @@ class AllureRestTemplateInterceptorTest {
                 return new HttpHeaders();
             }
 
-            @Override
+            // БЕЗ @Override намеренно: HttpRequest.getAttributes появился в Spring Framework 6.2,
+            // а нижняя объявленная граница — Boot 3.2 (SF 6.1), где такого метода нет и аннотация
+            // ломает компиляцию. Без неё класс собирается на обеих версиях: на 6.2 это реализация
+            // абстрактного метода, на 6.1 — просто лишний метод фикстуры.
+            // Найдено прогоном mvn -Pcompat-boot-min (это была ЕДИНСТВЕННАЯ поломка на 3.2).
             public java.util.Map<String, Object> getAttributes() {
                 return new java.util.HashMap<>();
             }

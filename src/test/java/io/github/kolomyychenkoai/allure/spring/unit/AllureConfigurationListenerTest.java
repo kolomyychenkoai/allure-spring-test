@@ -1,4 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
+
+import io.qameta.allure.Epic;
 import io.github.kolomyychenkoai.allure.spring.config.AllureConfigurationListener;
 
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
@@ -19,6 +21,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** Уровень A: детерминированная проверка содержимого отчёта для снимка конфигурации. */
+@Epic("Внутренние проверки библиотеки")
 class AllureConfigurationListenerTest {
 
     private final AllureConfigurationListener listener = new AllureConfigurationListener();

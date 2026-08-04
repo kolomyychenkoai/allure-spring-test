@@ -1,6 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.liquibase;
 
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
+import io.github.kolomyychenkoai.allure.spring.internal.ByteBuddyPresence;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import io.github.kolomyychenkoai.allure.spring.internal.ClassPresence;
 import io.github.kolomyychenkoai.allure.spring.liquibase.internal.AllureLiquibaseInstrumentation;
@@ -49,7 +50,7 @@ public class AllureLiquibaseListener implements TestExecutionListener, Ordered {
 
     @Override
     public void beforeTestClass(TestContext testContext) {
-        if (!LIQUIBASE_PRESENT || !AllureInstrumentation.available()) {
+        if (!LIQUIBASE_PRESENT || !ByteBuddyPresence.available()) {
             return;
         }
         AllureLiquibaseInstrumentation.install();

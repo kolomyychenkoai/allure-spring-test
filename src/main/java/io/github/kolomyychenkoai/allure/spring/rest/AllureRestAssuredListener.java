@@ -1,16 +1,13 @@
 package io.github.kolomyychenkoai.allure.spring.rest;
 
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
+import io.github.kolomyychenkoai.allure.spring.internal.ByteBuddyPresence;
 import io.github.kolomyychenkoai.allure.spring.internal.ClassPresence;
-import io.github.kolomyychenkoai.allure.spring.rest.internal.AllureRestAssuredFilter;
+import io.github.kolomyychenkoai.allure.spring.rest.internal.AllureRestAssuredRegistrar;
 import io.github.kolomyychenkoai.allure.spring.rest.internal.AllureRestAssuredValidationInstrumentation;
-import io.restassured.RestAssured;
-import io.restassured.filter.Filter;
 import org.springframework.core.Ordered;
 import org.springframework.test.context.TestContext;
 import org.springframework.test.context.TestExecutionListener;
-
-import java.util.List;
 
 /**
  * Ставит {@link AllureRestAssuredFilter} в глобальные фильтры RestAssured —
@@ -36,11 +33,12 @@ import java.util.List;
  */
 public class AllureRestAssuredListener implements TestExecutionListener, Ordered {
 
-    private static final Object LOCK = new Object();
-
     // RestAssured в scope provided — у потребителя его может не быть. Листенер
     // регистрируется всегда (spring.factories), поэтому без гейта обращение к RestAssured
     // в хуке дало бы NoClassDefFoundError и уронило бы тест потребителя. См. ClassPresence.
+    // Сама работа с типами RestAssured — в AllureRestAssuredRegistrar: держать её здесь нельзя,
+    // иначе верификатор грузит io.restassured.filter.Filter при линковке ЭТОГО класса и гейт
+    // ниже не успевает выполниться (гранулярность линковки — класс, а не метод).
     private static final boolean RESTASSURED_PRESENT =
             ClassPresence.isPresent("io.restassured.RestAssured");
 
@@ -54,16 +52,10 @@ public class AllureRestAssuredListener implements TestExecutionListener, Ordered
         if (!RESTASSURED_PRESENT) {
             return;
         }
-        synchronized (LOCK) {
-            List<Filter> current = RestAssured.filters();
-            boolean present = current.stream().anyMatch(AllureRestAssuredFilter.class::isInstance);
-            if (!present) {
-                RestAssured.filters(new AllureRestAssuredFilter());
-            }
-        }
+        AllureRestAssuredRegistrar.registerFilterOnce();
         // байткод-перехват проверок .then() (statusCode/body/...) — их фильтром не поймать
         // (RestAssured валидирует мимо MatcherAssert). Идемпотентно, один раз на JVM.
-        if (AllureInstrumentation.available()) {
+        if (ByteBuddyPresence.available()) {
             AllureRestAssuredValidationInstrumentation.install();
         }
     }

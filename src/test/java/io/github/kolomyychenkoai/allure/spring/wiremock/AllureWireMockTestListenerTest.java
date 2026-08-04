@@ -1,5 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.wiremock;
 
+import io.qameta.allure.Epic;
+
 import com.github.tomakehurst.wiremock.WireMockServer;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import org.junit.jupiter.api.AfterEach;
@@ -26,6 +28,7 @@ import static org.mockito.Mockito.mock;
  * активного кейса — иначе наш MockMaker залогировал бы шаг с рандомным hashCode мока
  * (недетерминизм в отчёте).
  */
+@Epic("Внутренние проверки библиотеки")
 class AllureWireMockTestListenerTest {
 
     private final AllureWireMockTestListener listener = new AllureWireMockTestListener();
@@ -49,6 +52,57 @@ class AllureWireMockTestListenerTest {
         server.start();
         started.add(server);
         return server;
+    }
+
+    @Test
+    @DisplayName("находит сервер ВНУТРИ WireMockExtension (@RegisterExtension), а не только в поле WireMockServer")
+    void findsServerInsideWireMockExtension() throws Exception {
+        // WireMockExtension наследует DslWrapper, а НЕ WireMockServer, поэтому фильтр по типу поля
+        // его пропускал: байткод (stubFor/verify) работал, а «сервер поднят», «Запрос к заглушке»,
+        // вложения Request/Response, near-miss и сценарии молча отсутствовали.
+        WireMockServer server = running();
+        com.github.tomakehurst.wiremock.junit5.WireMockExtension extension =
+                com.github.tomakehurst.wiremock.junit5.WireMockExtension.newInstance().build();
+        java.lang.reflect.Field field =
+                com.github.tomakehurst.wiremock.junit5.WireMockExtension.class.getDeclaredField("wireMockServer");
+        field.setAccessible(true);
+        field.set(extension, server); // так же кладёт сам extension при старте
+
+        WithExtension instance = new WithExtension();
+        instance.wireMock = extension;
+
+        assertThat(listener.findServers(context(WithExtension.class, instance))).containsExactly(server);
+    }
+
+    @Test
+    @DisplayName("контекст закрыт (@DirtiesContext) — за бинами НЕ лезем, иначе воскресим его")
+    void doesNotResurrectClosedContext() {
+        TestContext testContext = context(NoFields.class, new NoFields());
+        doReturn(false).when(testContext).hasApplicationContext();
+
+        assertThat(listener.findServers(testContext)).isEmpty();
+        org.mockito.Mockito.verify(testContext, org.mockito.Mockito.never()).getApplicationContext();
+    }
+
+    @Test
+    @DisplayName("находит WireMockServer среди бинов контекста (@AutoConfigureWireMock)")
+    void findsServerAmongBeans() {
+        WireMockServer server = running();
+        org.springframework.context.ApplicationContext ctx =
+                mock(org.springframework.context.ApplicationContext.class);
+        doReturn(java.util.Map.of("wireMockServer", server)).when(ctx).getBeansOfType(WireMockServer.class);
+        TestContext testContext = context(NoFields.class, new NoFields());
+        doReturn(true).when(testContext).hasApplicationContext();
+        doReturn(ctx).when(testContext).getApplicationContext();
+
+        assertThat(listener.findServers(testContext)).containsExactly(server);
+    }
+
+    static class WithExtension {
+        com.github.tomakehurst.wiremock.junit5.WireMockExtension wireMock;
+    }
+
+    static class NoFields {
     }
 
     private TestContext context(Class<?> testClass, Object instance) {

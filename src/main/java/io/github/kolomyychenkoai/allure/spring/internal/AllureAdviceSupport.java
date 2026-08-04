@@ -11,11 +11,34 @@ import java.util.Arrays;
  * ({@link #attach}, {@link #render}, {@link #bodyContentType}) — из обычных листенеров/
  * фильтров/интерцепторов (REST/WireMock/Kafka), чтобы рендер значений, выбор статуса и раскладка
  * вложений были единообразны и безопасны. Это НЕ публичный API (см. {@code package-info}).
+ * <p>
+ * <b>Три рендера значения — три РАЗНЫХ места отчёта.</b> Путать их дорого: имя шага и тело
+ * вложения живут по противоположным правилам, а перепутанный рендер деградирует отчёт МОЛЧА
+ * (имя вложения, mime и признак «непусто» при этом не меняются, поэтому инвентарь такое не ловит).
+ *
+ * <table border="1">
+ *   <caption>Что чем рендерить</caption>
+ *   <tr><th>функция</th><th>куда</th><th>одна строка</th><th>обрезка 500</th><th>чистка мусора</th></tr>
+ *   <tr><td>{@link #safe}</td><td>ИМЯ шага</td><td>да</td><td>да</td><td>да</td></tr>
+ *   <tr><td>{@link #safeValue}</td><td>ЗНАЧЕНИЕ во вложении</td><td>нет</td><td>нет</td><td>да</td></tr>
+ *   <tr><td>{@link #render}</td><td>СЫРОЕ тело (JSON, payload Kafka)</td><td>нет</td><td>нет</td><td>нет</td></tr>
+ * </table>
+ *
+ * «Чистка мусора» — массивы поэлементно, лямбда → {@code <лямбда>}, объект без {@code toString}
+ * → {@code <Класс>}. Инвариант: {@code safe} зовут ТОЛЬКО для имён шагов.
  */
 public final class AllureAdviceSupport {
 
     /** Предел длины значения в имени шага — чтобы тяжёлый toString не раздувал отчёт. */
     private static final int MAX_LEN = 500;
+
+    /**
+     * Предел длины значения во ВЛОЖЕНИИ. На три порядка больше, чем у имени шага: во вложение
+     * идут за содержанием, и резать его по 500 — это и была та деградация, из-за которой
+     * {@link #safeValue} появился. Но совсем без потолка одно поле {@code @Lob} превращает
+     * вложение в мегабайты, поэтому граница есть — просто далеко.
+     */
+    private static final int MAX_VALUE_LEN = 500_000;
 
     private AllureAdviceSupport() {
     }
@@ -36,22 +59,156 @@ public final class AllureAdviceSupport {
         Allure.step(name, Status.PASSED);
     }
 
+    /** Больше — не печатаем поэлементно: перечисление на сотни элементов уже нечитаемо. */
+    private static final int MAX_ARRAY_ITEMS = 50;
+    /** Двоичное содержимое поэлементно нечитаемо — как и в SQL-вложениях, показываем размер. */
+    private static final int MAX_BINARY = 32;
+
     /**
-     * Безопасный рендер значения для имени шага: не бросает ({@code toString()}
-     * пользовательского объекта может кинуть), массивы печатает поэлементно
-     * ({@code deepToString}), длину ограничивает {@link #MAX_LEN}. При сбое — {@code "<?>"}.
+     * Безопасный рендер значения для ИМЕНИ ШАГА: не бросает ({@code toString()} пользовательского
+     * объекта может кинуть), длину ограничивает {@link #MAX_LEN}. При сбое — {@code "<?>"}.
+     * <p>
+     * Имя шага читает ЧЕЛОВЕК (отчёт принимают вручную), поэтому здесь же убирается технический
+     * мусор, который иначе течёт во все модули сразу — это единственная общая точка рендера
+     * значений для AssertJ, Hamcrest, Jupiter, Spring-ассертов, Mockito и WireMock-verify:
+     * <ul>
+     *   <li>массивы — поэлементно, ВКЛЮЧАЯ примитивные (без этого {@code assertThat(bytes)}
+     *       давал {@code [B@4a3f2b1c});</li>
+     *   <li>лямбды и method-reference → {@code <лямбда>} (было {@code Demo$$Lambda/0x…@1a2b});</li>
+     *   <li>объект без своего {@code toString()} → {@code <ПростоеИмя>} (было {@code Класс@хэш}).</li>
+     * </ul>
+     * <p>
+     * ⚠️ Только для ИМЕНИ шага. Для значения во ВЛОЖЕНИИ — {@link #safeValue}: там схлопывание
+     * и обрезка убивают содержание (см. таблицу ролей в javadoc класса).
      */
     public static String safe(Object value) {
+        // Имя шага — ОДНА строка: многострочное значение (JSON-тело, стек, SQL) разрывает вёрстку
+        // отчёта, который читают вручную. Схлопываем пробельное ДО обрезки, иначе в лимит попадут
+        // переносы вместо содержимого.
+        String s = WHITESPACE.matcher(clean(value)).replaceAll(" ").trim();
+        if (s.length() > MAX_LEN) {
+            int cut = MAX_LEN;
+            if (Character.isHighSurrogate(s.charAt(cut - 1))) {
+                cut--; // не рвём суррогатную пару пополам — иначе в отчёте «кракозябра»
+            }
+            s = s.substring(0, cut) + "…";
+        }
+        return s;
+    }
+
+    /**
+     * Безопасный рендер значения для ВЛОЖЕНИЯ: та же чистка, что у {@link #safe} (массивы
+     * поэлементно, лямбда, identity-хэш, бросающий {@code toString}), но БЕЗ схлопывания
+     * в одну строку и БЕЗ обрезки по {@link #MAX_LEN}.
+     * <p>
+     * Отдельно от {@code safe} потому, что во вложении многострочность — это и есть содержание:
+     * диф near-miss у WireMock, комментарий changeset'а, сущность из БД. Схлопнутое тело выглядит
+     * «нормальным» (имя, mime и «непусто» на месте), поэтому такую деградацию не видит ни
+     * инвентарь отчёта, ни тест, проверяющий вложение на {@code isNotBlank} — она тихая.
+     * <p>
+     * Потолок массива (50 элементов) остаётся: он про читаемость перечисления, а не про длину
+     * имени шага. Для СЫРОГО тела (JSON, payload) нужен {@link #render} — там чистка не нужна.
+     */
+    public static String safeValue(Object value) {
+        String s = clean(value);
+        if (s.length() <= MAX_VALUE_LEN) {
+            return s;
+        }
+        // Потолок МЯГКИЙ и очень высокий: он не про читаемость (её решает содержание), а про
+        // то, чтобы одно жирное поле сущности (@Lob, JSON-колонка, blob-в-строке) не раздуло
+        // вложение на мегабайты. Обрезка НАЗВАНА, а не сделана молча.
+        return s.substring(0, MAX_VALUE_LEN)
+                + "\n… обрезано: значение " + s.length() + " символов, показан первый "
+                + MAX_VALUE_LEN;
+    }
+
+    /** Общий конвейер чистки для {@link #safe} и {@link #safeValue}. Никогда не бросает и не {@code null}. */
+    private static String clean(Object value) {
         String s;
         try {
-            s = (value instanceof Object[]) ? Arrays.deepToString((Object[]) value) : String.valueOf(value);
+            s = clean(value, 0);
         } catch (Throwable t) {
             s = "<?>";
         }
-        if (s != null && s.length() > MAX_LEN) {
-            s = s.substring(0, MAX_LEN) + "…";
+        return s == null ? "<?>" : s;
+    }
+
+    /** Предел вложенности массивов: у рукописного обхода нет детекта циклов, как у deepToString. */
+    private static final int MAX_DEPTH = 4;
+    private static final java.util.regex.Pattern WHITESPACE = java.util.regex.Pattern.compile("\\s+");
+
+    private static String clean(Object value, int depth) {
+        if (value == null) {
+            return "null";
         }
-        return s;
+        Class<?> type = value.getClass();
+        // Проверяем И synthetic, И маркер имени: synthetic бывает у прокси и записей компилятора,
+        // а «$$» без synthetic — у классов пользователя с таким именем. Нужны оба признака.
+        if (type.isSynthetic() && type.getName().contains("$$Lambda")) {
+            return "<лямбда>";
+        }
+        if (type.isArray()) {
+            return depth >= MAX_DEPTH ? "[…]" : array(value, depth);
+        }
+        String text = String.valueOf(value);
+        if (text == null) {
+            return "<null-toString>"; // toString() вернул null — наружу null не отдаём
+        }
+        return isIdentityToString(text, value, type) ? "<" + readableName(type) + ">" : text;
+    }
+
+    /**
+     * Похоже ли на {@code Object.toString()} (= имя класса + '@' + hex(hashCode)) — то есть
+     * {@code toString()} не переопределён и в имя шага течёт хэш.
+     * <p>
+     * Сначала дешёвая проверка ФОРМЫ по префиксу, и только потом {@code hashCode()} — и он
+     * в своём try: у неинициализированного Hibernate-прокси он и бросает
+     * ({@code LazyInitializationException}), и будит прокси. Исправный {@code toString()}
+     * из-за сломанного {@code hashCode()} терять нельзя.
+     */
+    private static boolean isIdentityToString(String text, Object value, Class<?> type) {
+        String name = type.getName();
+        if (text.length() <= name.length() || text.charAt(name.length()) != '@' || !text.startsWith(name)) {
+            return false;
+        }
+        try {
+            return text.equals(name + "@" + Integer.toHexString(value.hashCode()));
+        } catch (Throwable keepText) {
+            return false;
+        }
+    }
+
+    /** У анонимных классов {@code getSimpleName()} пуст — берём то, чем он является. */
+    private static String readableName(Class<?> type) {
+        String simple = type.getSimpleName();
+        if (!simple.isEmpty()) {
+            return simple;
+        }
+        Class<?>[] interfaces = type.getInterfaces();
+        if (interfaces.length > 0) {
+            return interfaces[0].getSimpleName();
+        }
+        Class<?> parent = type.getSuperclass();
+        return parent == null ? "?" : parent.getSimpleName();
+    }
+
+    private static String array(Object value, int depth) {
+        if (value instanceof byte[] bytes) {
+            return bytes.length > MAX_BINARY ? "<двоичные данные, " + bytes.length + " байт>" : Arrays.toString(bytes);
+        }
+        boolean objects = value instanceof Object[];
+        int length = java.lang.reflect.Array.getLength(value);
+        StringBuilder out = new StringBuilder("[");
+        int shown = 0;
+        // Элементы Object[] рендерим ТЕМ ЖЕ правилом, а не deepToString: varargs приходят массивом
+        // (AssertJ satisfies/matches — это Consumer<T>...), и лямбда внутри массива иначе
+        // печаталась бы как «$$Lambda/0x…@1a2b» в обход всей очистки.
+        while (shown < Math.min(length, MAX_ARRAY_ITEMS) && out.length() <= MAX_LEN) {
+            Object item = java.lang.reflect.Array.get(value, shown);
+            out.append(shown > 0 ? ", " : "").append(objects ? clean(item, depth + 1) : item);
+            shown++;
+        }
+        return out.append(shown < length ? ", … всего " + length + "]" : "]").toString();
     }
 
     /**

@@ -1,4 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.autoconfig;
+
+import io.qameta.allure.Epic;
 import io.github.kolomyychenkoai.allure.spring.data.AllureDataSourceAutoConfiguration;
 import io.github.kolomyychenkoai.allure.spring.data.AllureDataJpaAutoConfiguration;
 
@@ -21,6 +23,7 @@ import static org.mockito.Mockito.mock;
  * Уровень A: авто-конфиги и защита от двойной обёртки DataSource.
  * Тесты падают, если фича перестанет включаться или начнёт оборачивать уже обёрнутый DataSource второй раз.
  */
+@Epic("Внутренние проверки библиотеки")
 class AllureDataAutoConfigurationTest {
 
     @Test

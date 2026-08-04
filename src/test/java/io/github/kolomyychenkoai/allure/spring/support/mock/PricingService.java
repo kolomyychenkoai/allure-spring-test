@@ -16,4 +16,9 @@ public class PricingService implements Pricing {
     public double total(String product, int quantity) {
         return 100.0 * quantity;
     }
+
+    @Override
+    public double bulk(byte[] sku) {
+        return 10.0 * sku.length;
+    }
 }

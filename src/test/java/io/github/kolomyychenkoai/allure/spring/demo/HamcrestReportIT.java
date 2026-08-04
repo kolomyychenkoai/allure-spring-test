@@ -44,4 +44,18 @@ class HamcrestReportIT {
         CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("Проверка: цена есть: значение 99, ожидалось")),
                 () -> "" + steps);
     }
+
+    @Test
+    @DisplayName("описание матчера в шаге — РЕАЛЬНОЕ (describeTo), а не Класс@хэш")
+    void matcherDescriptionIsRendered() {
+        // Раньше проверялось только начало имени («… ожидалось»), поэтому деградация
+        // «печатаем org.hamcrest.core.Is@1a2b вместо is "laptop"» проходила мимо.
+        // Ожидаемый хвост вычисляет САМ Hamcrest — при смене формулировок в новой версии
+        // обе стороны едут вместе, флака не будет.
+        org.hamcrest.Matcher<String> matcher = org.hamcrest.Matchers.is("laptop");
+        MatcherAssert.assertThat("laptop", matcher);
+
+        CurrentReport.assertStep("Проверка: значение laptop, ожидалось "
+                + org.hamcrest.StringDescription.toString(matcher));
+    }
 }

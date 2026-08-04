@@ -2,6 +2,7 @@ package io.github.kolomyychenkoai.allure.spring.data;
 
 import io.github.kolomyychenkoai.allure.spring.data.internal.AllureJdbcInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
+import io.github.kolomyychenkoai.allure.spring.internal.ByteBuddyPresence;
 import io.github.kolomyychenkoai.allure.spring.internal.ClassPresence;
 import org.springframework.core.Ordered;
 import org.springframework.test.context.TestContext;
@@ -27,7 +28,7 @@ public class AllureJdbcListener implements TestExecutionListener, Ordered {
 
     @Override
     public void beforeTestClass(TestContext testContext) {
-        if (!JDBC_PRESENT || !AllureInstrumentation.available()) {
+        if (!JDBC_PRESENT || !ByteBuddyPresence.available()) {
             return;
         }
         AllureJdbcInstrumentation.install();

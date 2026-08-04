@@ -117,7 +117,7 @@ public final class AllureKafkaConsumerInstrumentation {
             meta.append("Topic: ").append(record.topic())
                     .append("\nPartition: ").append(record.partition())
                     .append("\nOffset: ").append(record.offset())
-                    .append("\nKey: ").append(AllureAdviceSupport.safe(record.key()));
+                    .append("\nKey: ").append(AllureAdviceSupport.safeValue(record.key()));
             values.add(record.value() == null ? null : AllureAdviceSupport.render(record.value()));
         }
         return new Captured(records.count(), meta.toString(), values);

@@ -11,6 +11,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 
 /**
  * Уровень B: «живой» прогон через РЕАЛЬНУЮ регистрацию (spring.factories →
@@ -35,11 +36,45 @@ class AssertJReportIT {
         assertThat(List.of("a", "b")).contains("a");     // коллекция — был баг полноты
         assertThat(List.of("a", "b")).hasSize(2);
 
-        List<String> steps = CurrentReport.stepNames();
         CurrentReport.assertStep("Проверка: значение laptop — isEqualTo laptop");
         CurrentReport.assertStep("Проверка: значение laptop — startsWith lap");
         CurrentReport.assertStep("Проверка: значение 99 — isGreaterThan 0");
         CurrentReport.assertStep("Проверка: значение [a, b] — contains [a]");
         CurrentReport.assertStep("Проверка: значение [a, b] — hasSize 2");
+    }
+
+    @Test
+    @DisplayName("проверки, объявленные в абстрактных классах AssertJ (isBetween/isCloseTo/поля объекта)")
+    void assertjFamiliesDeclaredInAbstractClassesAppearInReport() {
+        // Эти семьи объявлены в АБСТРАКТНЫХ классах, которые сами падали при трансформации
+        // (публичный конструктор): isCloseTo — в AbstractDoubleAssert, hasFieldOrPropertyWithValue —
+        // в AbstractObjectAssert. Наследовать их неоткуда, поэтому шага не было ВООБЩЕ.
+        // Пока витрина их не показывала, вопрос «ломает ли not(isConstructor())» был неразрешим
+        // прогоном: зелёная сборка ничего не доказывала. Теперь разрешим — см. ADR 0001.
+        assertThat(5).isBetween(1, 10);                                   // AbstractComparableAssert
+        assertThat(1.5).isCloseTo(1.4, within(0.2));                      // AbstractDoubleAssert
+        assertThat(new Order("laptop")).hasFieldOrPropertyWithValue("name", "laptop"); // AbstractObjectAssert
+
+        CurrentReport.assertStep("Проверка: значение 5 — isBetween 1, 10");
+        CurrentReport.assertStep("Проверка: значение 1.5 — isCloseTo 1.4, Offset[value=0.2]");
+        CurrentReport.assertStep("Проверка: значение Order[name=laptop] — hasFieldOrPropertyWithValue name, laptop");
+    }
+
+    @Test
+    @DisplayName("массивы и satisfies дают ЧИТАЕМОЕ имя шага (без [I@… и $$Lambda)")
+    void arraysAndLambdasRenderReadably() {
+        // satisfies/returns/matches намеренно перехватываются (это настоящие проверки), но их
+        // аргумент — лямбда: без общего фикса рендера в имени шага был бы «$$Lambda/0x…@1a2b».
+        // Массивы: примитивные раньше печатались как «[I@6d06d69c».
+        assertThat(new int[]{1, 2, 3}).containsExactly(1, 2, 3);
+        assertThat(new Order("laptop")).satisfies(order -> {
+        });
+
+        CurrentReport.assertStep("Проверка: значение [1, 2, 3] — containsExactly [1, 2, 3]");
+        CurrentReport.assertStep("Проверка: значение Order[name=laptop] — satisfies [<лямбда>]");
+    }
+
+    /** Мишень для проверки полей объекта (hasFieldOrPropertyWithValue объявлен в AbstractObjectAssert). */
+    record Order(String name) {
     }
 }

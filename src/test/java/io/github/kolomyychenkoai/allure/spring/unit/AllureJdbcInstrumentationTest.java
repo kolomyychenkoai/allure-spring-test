@@ -1,5 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
 
+import io.qameta.allure.Epic;
+
 import io.github.kolomyychenkoai.allure.spring.data.internal.AllureJdbcInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.qameta.allure.model.TestResult;
@@ -17,6 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * (как это сделал бы advice вокруг метода шаблона). Дополняет уровень B ({@code JdbcReportIT})
  * детерминированной проверкой шага/вложений, дедупа по глубине и гейта активного кейса.
  */
+@Epic("Внутренние проверки библиотеки")
 class AllureJdbcInstrumentationTest {
 
     private static final String JDBC = "org.springframework.jdbc.core.JdbcTemplate";

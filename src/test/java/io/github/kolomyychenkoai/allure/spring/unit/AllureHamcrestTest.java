@@ -1,5 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
 
+import io.qameta.allure.Epic;
+
 import io.github.kolomyychenkoai.allure.spring.assertion.internal.AllureHamcrestInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.qameta.allure.model.StepResult;
@@ -22,6 +24,7 @@ import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
 
 /** Уровень A: детерминированная проверка содержимого отчёта для Hamcrest. */
+@Epic("Внутренние проверки библиотеки")
 class AllureHamcrestTest {
 
     @BeforeAll
@@ -77,6 +80,17 @@ class AllureHamcrestTest {
                         () -> MatcherAssert.assertThat("несовпадение", "mouse", equalTo("cat"))));
 
         assertThat(stepNames(result)).noneMatch(n -> n.contains("несовпадение"));
+    }
+
+    @Test
+    @DisplayName("одна проверка = РОВНО один шаг (2-арг делегирует в 3-арг, дубля быть не должно)")
+    void singleAssertOneStep() {
+        // Перехвачен ТОЛЬКО 3-арг assertThat — на допущении «2-арг делегирует в него».
+        // Если апгрейд Hamcrest разорвёт делегацию, шаг либо пропадёт (это ловит logsTwoArg),
+        // либо задвоится, если перехватят оба пути — это ловит счётчик здесь.
+        TestResult result = allure.run("one", () -> MatcherAssert.assertThat("mouse", is("mouse")));
+
+        assertThat(stepNames(result)).hasSize(1);
     }
 
     @Test

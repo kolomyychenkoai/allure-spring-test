@@ -2,6 +2,7 @@ package io.github.kolomyychenkoai.allure.spring.wiremock;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
+import io.github.kolomyychenkoai.allure.spring.internal.ByteBuddyPresence;
 import io.github.kolomyychenkoai.allure.spring.internal.ClassPresence;
 import io.github.kolomyychenkoai.allure.spring.wiremock.internal.AllureWireMockListener;
 import io.github.kolomyychenkoai.allure.spring.wiremock.internal.AllureWireMockSteps;
@@ -27,12 +28,22 @@ import java.util.WeakHashMap;
  * Заглушки/verify/resetAll ловятся байткодом — см. {@link AllureWireMockVerifyInstrumentation}.
  * Код в тестах не нужен. Регистрируется через {@code META-INF/spring.factories}.
  * <p>
- * Перед установкой байткода проверяется {@link AllureInstrumentation#available()} — если
+ * Перед установкой байткода проверяется {@link ByteBuddyPresence#available()} — если
  * byte-buddy нет на classpath, тихий no-op. Если WireMock нет — матчер ничего не находит.
  * <p>
  * near-miss и состояния сценариев снимаются в {@code afterTestMethod} для тестов БЕЗ
  * {@code resetAll()}; для тестов С {@code resetAll()} они уже сняты в reset-advice ДО сброса
  * (тогда в afterTestMethod сервер пуст — без дублей).
+ * <p>
+ * <b>Как находим сервер</b> (в порядке поиска): поля тест-класса и его предков — по ЗНАЧЕНИЮ,
+ * с разворотом чужого объекта на один уровень (так достаётся сервер внутри
+ * {@code WireMockExtension} из {@code @RegisterExtension}); затем бины контекста (так достаётся
+ * {@code @AutoConfigureWireMock} из Spring Cloud Contract).
+ * <p>
+ * <b>Граница:</b> декларативный {@code @WireMockTest} не поддержан — там сервер живёт в
+ * {@code ExtensionContext.Store} JUnit, ни полем, ни бином его не достать. Отвергнут и вариант
+ * «перехват {@code WireMockServer.start()} + JVM-глобальный реестр»: у сервера в реестре нет
+ * владельца, и статический сервер одного класса протекал бы шагами во все последующие.
  */
 public class AllureWireMockTestListener implements TestExecutionListener, Ordered {
 
@@ -54,7 +65,7 @@ public class AllureWireMockTestListener implements TestExecutionListener, Ordere
 
     @Override
     public void beforeTestClass(TestContext testContext) {
-        if (!WIREMOCK_PRESENT || !AllureInstrumentation.available()) {
+        if (!WIREMOCK_PRESENT || !ByteBuddyPresence.available()) {
             return;
         }
         // verify()/resetAll/stubFor нет listener-хука — ставим байткод-инструментирование один раз
@@ -98,26 +109,93 @@ public class AllureWireMockTestListener implements TestExecutionListener, Ordere
         Class<?> c = testContext.getTestClass();
         while (c != null && c != Object.class) {
             for (Field field : c.getDeclaredFields()) {
-                if (!WireMockServer.class.isAssignableFrom(field.getType())) {
-                    continue;
-                }
                 try {
                     field.setAccessible(true);
                     boolean isStatic = Modifier.isStatic(field.getModifiers());
                     if (!isStatic && instance == null) {
                         continue; // instance-поле, но экземпляра нет — пропускаем
                     }
-                    WireMockServer server = (WireMockServer) field.get(isStatic ? null : instance);
-                    if (server != null && server.isRunning() && seen.add(server)) {
-                        servers.add(server);
-                    }
+                    // Фильтруем по ЗНАЧЕНИЮ, а не по объявленному типу поля: WireMockExtension
+                    // (@RegisterExtension) наследует DslWrapper, а не WireMockServer, и держит
+                    // сервер внутри — по типу поля он не находился, и половина модуля молчала.
+                    collect(field.get(isStatic ? null : instance), servers, seen, 1);
                 } catch (Throwable ignored) {
                     // недоступное поле — пропускаем
                 }
             }
             c = c.getSuperclass();
         }
+        // @AutoConfigureWireMock (Spring Cloud Contract) держит сервер БИНОМ, а не полем теста
+        for (WireMockServer bean : beans(testContext)) {
+            add(bean, servers, seen);
+        }
         return servers;
+    }
+
+    /**
+     * Сервер — либо сам объект, либо ОДИН уровень вглубь чужого (у {@code WireMockExtension} это
+     * приватное {@code wireMockServer} плюс унаследованные {@code admin}/{@code stubbing} — все три
+     * ссылаются на один экземпляр, дубли гасит identity-дедуп).
+     * <p>
+     * Глубже НЕ идём осознанно: обход графа объектов дорог и способен разбудить ленивые прокси.
+     * Пакеты JDK пропускаем — там серверов нет, а полей много.
+     * <p>
+     * <b>Стоимость ЗАМЕРЕНА</b> (а не прикинута): на полном сьюте 90 вызовов, 457 чтений полей,
+     * 7,8 мс СУММАРНО — около 5 полей и 86 мкс на вызов. Дёшево, потому что сканируются поля
+     * ТЕСТ-КЛАССА (их единицы), а вглубь идём ровно на один уровень. Сужать по префиксу пакета
+     * не стали: выигрыш в пределах шума, а любой фильтр рискует потерять сервер в чужой обёртке.
+     */
+    private void collect(Object value, List<WireMockServer> servers, Set<WireMockServer> seen, int depth) {
+        if (value == null) {
+            return;
+        }
+        if (value instanceof WireMockServer server) {
+            add(server, servers, seen);
+            return;
+        }
+        if (depth == 0 || value.getClass().getName().startsWith("java.")
+                || value.getClass().getName().startsWith("jdk.")) {
+            return;
+        }
+        for (Class<?> c = value.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+            for (Field field : c.getDeclaredFields()) {
+                if (Modifier.isStatic(field.getModifiers())) {
+                    continue;
+                }
+                try {
+                    field.setAccessible(true);
+                    collect(field.get(value), servers, seen, depth - 1);
+                } catch (Throwable ignored) {
+                    // недоступное поле — пропускаем
+                }
+            }
+        }
+    }
+
+    private void add(WireMockServer server, List<WireMockServer> servers, Set<WireMockServer> seen) {
+        try {
+            if (server.isRunning() && seen.add(server)) {
+                servers.add(server);
+            }
+        } catch (Throwable ignored) {
+            // сервер в непонятном состоянии — пропускаем
+        }
+    }
+
+    private static List<WireMockServer> beans(TestContext testContext) {
+        // hasApplicationContext, а не getApplicationContext: наш afterTestMethod идёт ПОСЛЕДНИМ
+        // (HIGHEST_PRECEDENCE = крайний с обеих сторон), то есть уже после того, как
+        // @DirtiesContext закрыл и выселил контекст. Безусловный геттер ВОСКРЕСИЛ БЫ его —
+        // лишняя полная загрузка контекста в чужом прогоне.
+        if (!testContext.hasApplicationContext()) {
+            return List.of();
+        }
+        try {
+            return new ArrayList<>(testContext.getApplicationContext()
+                    .getBeansOfType(WireMockServer.class).values());
+        } catch (Throwable noContext) {
+            return List.of(); // у теста может не быть контекста или он упал — это не наша беда
+        }
     }
 
     private static Object safeInstance(TestContext testContext) {
