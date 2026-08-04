@@ -165,7 +165,8 @@ public final class AllureJdbcInstrumentation {
         if (result instanceof int[] arr) {
             return "batch rows: " + arr.length;
         }
-        return AllureAdviceSupport.safe(result);
+        // тело вложения «DB Result» → safeValue (без схлопывания и обрезки), не safe
+        return AllureAdviceSupport.safeValue(result);
     }
 
     private static String simpleName(String fqn) {

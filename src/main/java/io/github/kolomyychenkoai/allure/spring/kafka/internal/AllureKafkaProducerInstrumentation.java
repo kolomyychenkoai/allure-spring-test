@@ -60,10 +60,10 @@ public final class AllureKafkaProducerInstrumentation {
             }
             String stepName = "Kafka: отправлено → " + record.topic()
                     + (record.key() != null ? " [" + AllureAdviceSupport.safe(record.key()) + "]" : "");
-            // метаданные (topic/key/partition) — text/plain; safe() тут ок (ключ короткий)
+            // метаданные (topic/key/partition) — text/plain; это ВЛОЖЕНИЕ, поэтому safeValue
             StringBuilder sb = new StringBuilder()
                     .append("Topic: ").append(record.topic())
-                    .append("\nKey: ").append(AllureAdviceSupport.safe(record.key()));
+                    .append("\nKey: ").append(AllureAdviceSupport.safeValue(record.key()));
             if (record.partition() != null) {
                 sb.append("\nPartition: ").append(record.partition());
             }

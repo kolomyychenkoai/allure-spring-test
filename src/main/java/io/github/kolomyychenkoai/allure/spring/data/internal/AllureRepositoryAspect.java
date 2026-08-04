@@ -259,7 +259,9 @@ public class AllureRepositoryAspect {
         if (ENTITY_ANNOTATION != null && clazz.isAnnotationPresent(ENTITY_ANNOTATION)) {
             return describeEntity(obj, clazz);
         }
-        return AllureAdviceSupport.safe(obj); // безопасный рендер: toString может бросить + лимит длины
+        // safeValue, а не safe: это ТЕЛО вложения «DB Call»/«DB Result» — многострочный toString
+        // (агрегат, JSON-поле) там читается, а схлопывание и обрезка по 500 его бы съели.
+        return AllureAdviceSupport.safeValue(obj);
     }
 
     private String describeEntity(Object obj, Class<?> clazz) {
@@ -287,6 +289,9 @@ public class AllureRepositoryAspect {
         StringJoiner sj = new StringJoiner(", ", clazz.getSimpleName() + "{", "}");
         for (Field field : fields) {
             try {
+                // Здесь safe() ОСОЗНАННО, а не safeValue: сущность печатается однострочным
+                // «Widget{id=1, name=…}», и список выборки читается строка-на-сущность.
+                // Многострочное значение поля разорвало бы этот формат.
                 sj.add(field.getName() + "=" + AllureAdviceSupport.safe(field.get(obj)));
             } catch (Throwable e) {
                 // напр. LazyInitializationException по ленивой связи — не теряем остальные поля

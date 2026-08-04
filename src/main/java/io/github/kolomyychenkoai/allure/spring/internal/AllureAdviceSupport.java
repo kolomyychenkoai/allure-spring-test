@@ -11,6 +11,21 @@ import java.util.Arrays;
  * ({@link #attach}, {@link #render}, {@link #bodyContentType}) — из обычных листенеров/
  * фильтров/интерцепторов (REST/WireMock/Kafka), чтобы рендер значений, выбор статуса и раскладка
  * вложений были единообразны и безопасны. Это НЕ публичный API (см. {@code package-info}).
+ * <p>
+ * <b>Три рендера значения — три РАЗНЫХ места отчёта.</b> Путать их дорого: имя шага и тело
+ * вложения живут по противоположным правилам, а перепутанный рендер деградирует отчёт МОЛЧА
+ * (имя вложения, mime и признак «непусто» при этом не меняются, поэтому инвентарь такое не ловит).
+ *
+ * <table border="1">
+ *   <caption>Что чем рендерить</caption>
+ *   <tr><th>функция</th><th>куда</th><th>одна строка</th><th>обрезка 500</th><th>чистка мусора</th></tr>
+ *   <tr><td>{@link #safe}</td><td>ИМЯ шага</td><td>да</td><td>да</td><td>да</td></tr>
+ *   <tr><td>{@link #safeValue}</td><td>ЗНАЧЕНИЕ во вложении</td><td>нет</td><td>нет</td><td>да</td></tr>
+ *   <tr><td>{@link #render}</td><td>СЫРОЕ тело (JSON, payload Kafka)</td><td>нет</td><td>нет</td><td>нет</td></tr>
+ * </table>
+ *
+ * «Чистка мусора» — массивы поэлементно, лямбда → {@code <лямбда>}, объект без {@code toString}
+ * → {@code <Класс>}. Инвариант: {@code safe} зовут ТОЛЬКО для имён шагов.
  */
 public final class AllureAdviceSupport {
 
@@ -36,7 +51,7 @@ public final class AllureAdviceSupport {
         Allure.step(name, Status.PASSED);
     }
 
-    /** Больше — не печатаем поэлементно: имя шага всё равно обрежется по {@link #MAX_LEN}. */
+    /** Больше — не печатаем поэлементно: перечисление на сотни элементов уже нечитаемо. */
     private static final int MAX_ARRAY_ITEMS = 50;
     /** Двоичное содержимое поэлементно нечитаемо — как и в SQL-вложениях, показываем размер. */
     private static final int MAX_BINARY = 32;
@@ -54,21 +69,15 @@ public final class AllureAdviceSupport {
      *   <li>лямбды и method-reference → {@code <лямбда>} (было {@code Demo$$Lambda/0x…@1a2b});</li>
      *   <li>объект без своего {@code toString()} → {@code <ПростоеИмя>} (было {@code Класс@хэш}).</li>
      * </ul>
+     * <p>
+     * ⚠️ Только для ИМЕНИ шага. Для значения во ВЛОЖЕНИИ — {@link #safeValue}: там схлопывание
+     * и обрезка убивают содержание (см. таблицу ролей в javadoc класса).
      */
     public static String safe(Object value) {
-        String s;
-        try {
-            s = renderForName(value);
-        } catch (Throwable t) {
-            s = "<?>";
-        }
-        if (s == null) {
-            return "<?>";
-        }
         // Имя шага — ОДНА строка: многострочное значение (JSON-тело, стек, SQL) разрывает вёрстку
         // отчёта, который читают вручную. Схлопываем пробельное ДО обрезки, иначе в лимит попадут
         // переносы вместо содержимого.
-        s = WHITESPACE.matcher(s).replaceAll(" ").trim();
+        String s = WHITESPACE.matcher(clean(value)).replaceAll(" ").trim();
         if (s.length() > MAX_LEN) {
             int cut = MAX_LEN;
             if (Character.isHighSurrogate(s.charAt(cut - 1))) {
@@ -79,15 +88,39 @@ public final class AllureAdviceSupport {
         return s;
     }
 
+    /**
+     * Безопасный рендер значения для ВЛОЖЕНИЯ: та же чистка, что у {@link #safe} (массивы
+     * поэлементно, лямбда, identity-хэш, бросающий {@code toString}), но БЕЗ схлопывания
+     * в одну строку и БЕЗ обрезки по {@link #MAX_LEN}.
+     * <p>
+     * Отдельно от {@code safe} потому, что во вложении многострочность — это и есть содержание:
+     * диф near-miss у WireMock, комментарий changeset'а, сущность из БД. Схлопнутое тело выглядит
+     * «нормальным» (имя, mime и «непусто» на месте), поэтому такую деградацию не видит ни
+     * инвентарь отчёта, ни тест, проверяющий вложение на {@code isNotBlank} — она тихая.
+     * <p>
+     * Потолок массива (50 элементов) остаётся: он про читаемость перечисления, а не про длину
+     * имени шага. Для СЫРОГО тела (JSON, payload) нужен {@link #render} — там чистка не нужна.
+     */
+    public static String safeValue(Object value) {
+        return clean(value);
+    }
+
+    /** Общий конвейер чистки для {@link #safe} и {@link #safeValue}. Никогда не бросает и не {@code null}. */
+    private static String clean(Object value) {
+        String s;
+        try {
+            s = clean(value, 0);
+        } catch (Throwable t) {
+            s = "<?>";
+        }
+        return s == null ? "<?>" : s;
+    }
+
     /** Предел вложенности массивов: у рукописного обхода нет детекта циклов, как у deepToString. */
     private static final int MAX_DEPTH = 4;
     private static final java.util.regex.Pattern WHITESPACE = java.util.regex.Pattern.compile("\\s+");
 
-    private static String renderForName(Object value) {
-        return renderForName(value, 0);
-    }
-
-    private static String renderForName(Object value, int depth) {
+    private static String clean(Object value, int depth) {
         if (value == null) {
             return "null";
         }
@@ -155,7 +188,7 @@ public final class AllureAdviceSupport {
         // печаталась бы как «$$Lambda/0x…@1a2b» в обход всей очистки.
         while (shown < Math.min(length, MAX_ARRAY_ITEMS) && out.length() <= MAX_LEN) {
             Object item = java.lang.reflect.Array.get(value, shown);
-            out.append(shown > 0 ? ", " : "").append(objects ? renderForName(item, depth + 1) : item);
+            out.append(shown > 0 ? ", " : "").append(objects ? clean(item, depth + 1) : item);
             shown++;
         }
         return out.append(shown < length ? ", … всего " + length + "]" : "]").toString();

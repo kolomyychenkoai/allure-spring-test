@@ -109,7 +109,11 @@ public final class AllureWireMockSteps {
                 step.getAttachments().add(new Attachment()
                         .setName("Near miss (почему не сматчилось)")
                         .setType("text/plain")
-                        .setSource(writeAttachment(AllureAdviceSupport.safe(nearMiss.getDiff()))));
+                        // render(), а НЕ safe(): диф — колоночная простыня WireMock, и вся его
+                        // ценность в переносах строк. safe() схлопнул бы его в одну строку и
+                        // обрезал по 500 — вложение осталось бы «непустым» и тихая деградация
+                        // прошла бы мимо инвентаря (имя и mime не меняются).
+                        .setSource(writeAttachment(AllureAdviceSupport.render(nearMiss.getDiff()))));
                 addStep(step);
             }
         } catch (Throwable t) {

@@ -260,8 +260,14 @@ class AllureWireMockVerifyTest {
             StepResult nearMiss = result.getSteps().stream()
                     .filter(s -> s.getName().startsWith("Near-miss:")).findFirst().orElseThrow();
             assertThat(nearMiss.getStatus()).isEqualTo(Status.PASSED);
-            assertThat(allure.attachment(result, "Near miss (почему не сматчилось)").orElseThrow())
-                    .isNotBlank();
+            // isNotBlank() мало: диф WireMock — колоночная простыня, и вся его польза в переносах
+            // строк. Рендер через safe() (схлопывание в одну строку + обрезка) оставлял вложение
+            // «непустым», поэтому такую деградацию не видит ни инвентарь отчёта, ни isNotBlank.
+            String diff = allure.attachment(result, "Near miss (почему не сматчилось)").orElseThrow();
+            assertThat(diff).isNotBlank();
+            assertThat(diff.lines().count())
+                    .as("диф near-miss обязан остаться многострочным, а не схлопнуться: <%s>", diff)
+                    .isGreaterThan(1);
             // SOURCE вложения (имя файла на диске), а не только контент: по конвенции Allure
             // <uuid>-attachment.<ext>. Мутация: верни в writeAttachment голый UUID без суффикса →
             // внешние потребители results (TestOps/ReportPortal) не определят тип → RED.

@@ -127,6 +127,43 @@ class AllureAdviceSupportTest {
     }
 
     @Test
+    @DisplayName("safeValue: значение ВЛОЖЕНИЯ остаётся многострочным (safe схлопнул бы)")
+    void safeValueKeepsLineBreaks() {
+        // Регресс на тихую деградацию: диф near-miss WireMock, комментарий changeset'а, сущность
+        // из БД — их ценность в переносах. Схлопнутое тело выглядит здоровым (имя, mime и
+        // «непусто» на месте), поэтому инвентарь отчёта такое НЕ ловит — ловить должен этот тест.
+        String multiline = "GET      | GET\n/api/a   | /api/b\n<<<<< URL does not match";
+        assertThat(AllureAdviceSupport.safeValue(multiline)).isEqualTo(multiline);
+        assertThat(AllureAdviceSupport.safe(multiline)).doesNotContain("\n");
+    }
+
+    @Test
+    @DisplayName("safeValue: длинное значение НЕ обрезается (обрезка — только у имени шага)")
+    void safeValueDoesNotTruncate() {
+        String big = "x".repeat(1000);
+        assertThat(AllureAdviceSupport.safeValue(big)).hasSize(1000).doesNotEndWith("…");
+    }
+
+    @Test
+    @DisplayName("safeValue: чистка мусора остаётся — массивы, лямбда, identity-хэш, бросающий toString")
+    void safeValueStillCleansGarbage() {
+        // «без схлопывания» не значит «без чистки»: [B@4a3f и Класс@хэш нечитаемы и во вложении
+        assertThat(AllureAdviceSupport.safeValue(new int[]{1, 2, 3})).isEqualTo("[1, 2, 3]");
+        assertThat(AllureAdviceSupport.safeValue(new byte[100])).isEqualTo("<двоичные данные, 100 байт>");
+        assertThat(AllureAdviceSupport.safeValue((Runnable) () -> {
+        })).isEqualTo("<лямбда>");
+        assertThat(AllureAdviceSupport.safeValue(new NoToString())).isEqualTo("<NoToString>");
+        assertThat(AllureAdviceSupport.safeValue(null)).isEqualTo("null");
+        Object boom = new Object() {
+            @Override
+            public String toString() {
+                throw new IllegalStateException("boom");
+            }
+        };
+        assertThat(AllureAdviceSupport.safeValue(boom)).isEqualTo("<?>");
+    }
+
+    @Test
     @DisplayName("step: успешная проверка → PASSED-шаг; упавшая → шага НЕТ")
     void stepLogsOnlySuccess() {
         InMemoryAllure allure = new InMemoryAllure().install();
