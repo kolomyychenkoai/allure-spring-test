@@ -567,4 +567,132 @@ class ReportInventoryTest {
             assertThat(Files.readString(file, StandardCharsets.UTF_8)).isEqualTo(first);
         }
     }
+
+    @Nested
+    @Epic("Внутренние проверки библиотеки")
+    @DisplayName("форма тела вложения (гейты сломанного гейта)")
+    class Shapes {
+
+        private final Kind nearMiss = kind("WireMockReportIT", "Near miss (почему не сматчилось) | text/plain");
+
+        /** Наблюдения формы: сколько передали — столько и «видели». */
+        private ReportInventory.ShapeStat stat(ReportInventory.Shape... observed) {
+            return new ReportInventory.ShapeStat(
+                    java.util.EnumSet.copyOf(java.util.List.of(observed)), observed.length);
+        }
+
+
+        @Test
+        @DisplayName("многострочное тело схлопнулось в одну строку — красный")
+        void collapsedBodyIsCaught() {
+            // Ровно та регрессия, которая прошла мимо сетки руками: near-miss стал одной строкой,
+            // а имя, mime и «непусто» не изменились.
+            List<ReportInventory.ShapeMismatch> mismatches = ReportInventory.shapes(
+                    Map.of(nearMiss, ReportInventory.Shape.MULTILINE),
+                    Map.of(nearMiss, stat(ReportInventory.Shape.ONE_LINE)));
+
+            assertThat(mismatches).singleElement()
+                    .satisfies(m -> assertThat(m.kind()).isEqualTo(nearMiss));
+        }
+
+        @Test
+        @DisplayName("форма стала ПЛАВАЮЩЕЙ — тоже красный (маркер обещал стабильность)")
+        void unstableShapeIsCaught() {
+            assertThat(ReportInventory.shapes(
+                    Map.of(nearMiss, ReportInventory.Shape.MULTILINE),
+                    Map.of(nearMiss, stat(ReportInventory.Shape.MULTILINE, ReportInventory.Shape.ONE_LINE))))
+                    .hasSize(1);
+        }
+
+        @Test
+        @DisplayName("АНТИ-правило: вид без маркера формой не стерегётся")
+        void unmarkedKindNotGuarded() {
+            assertThat(ReportInventory.shapes(Map.of(), Map.of(nearMiss, stat(ReportInventory.Shape.ONE_LINE))))
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("АНТИ-правило: вид, которого прогон не дал, — это missing, а не форма")
+        void absentKindNotDiagnosedTwice() {
+            assertThat(ReportInventory.shapes(Map.of(nearMiss, ReportInventory.Shape.MULTILINE), Map.of()))
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("посев: стабильная форма получает маркер, плавающая — теряет")
+        void seedMarksOnlyStable() {
+            Kind stable = kind("KafkaReportIT", "Значение сообщения | application/json");
+            Kind floating = kind("DataJpaReportIT", "DB Call | text/plain");
+            Kind oneLine = kind("JdbcReportIT", "DB Result | text/plain");
+            Scan scan = new Scan(new TreeSet<>(), new TreeSet<>(), Set.of("KafkaReportIT"), 1,
+                    List.of(), List.of(), List.of(), Map.of(), List.of(),
+                    Map.of(stable, stat(ReportInventory.Shape.MULTILINE, ReportInventory.Shape.MULTILINE),
+                            floating, stat(ReportInventory.Shape.MULTILINE, ReportInventory.Shape.ONE_LINE),
+                            oneLine, stat(ReportInventory.Shape.ONE_LINE, ReportInventory.Shape.ONE_LINE)));
+            Baseline previous = new Baseline(Set.of(), Set.of(), Set.of(), Map.of(), Map.of(),
+                    Map.of(floating, ReportInventory.Shape.MULTILINE));
+
+            Map<Kind, ReportInventory.Shape> seeded = ReportInventory.seedShapes(scan, previous);
+
+            assertThat(seeded).containsEntry(stable, ReportInventory.Shape.MULTILINE);
+            assertThat(seeded).as("поплывшая форма обязана ПОТЕРЯТЬ маркер: «не меньше» тут не бывает")
+                    .doesNotContainKey(floating);
+            assertThat(seeded).as("однострочное не помечаем: «стало несколько строк» — не деградация, "
+                            + "а обычное поведение логов, и такой маркер только флакал бы")
+                    .doesNotContainKey(oneLine);
+        }
+
+        @Test
+        @DisplayName("маркер формы переживает запись и чтение эталона (рядом с кратностью)")
+        void markerSurvivesRoundTrip(@TempDir Path dir) throws IOException {
+            // Оба маркера на одной строке: чтение обязано снимать их в обратном порядке записи,
+            // иначе один съест другой и белый список тихо распустится.
+            Path file = dir.resolve("baseline.txt");
+            Kind kind = kind("WireMockReportIT", "Near miss | text/plain");
+            Scan scan = scanOf(Set.of(), Set.of(kind));
+            Baseline previous = new Baseline(Set.of(), Set.of(kind), Set.of(),
+                    Map.of(kind, "AllureWireMockSteps"),
+                    Map.of(kind, new ReportInventory.Count(1, false)),
+                    Map.of(kind, ReportInventory.Shape.MULTILINE));
+
+            ReportInventory.write(file, scan, previous);
+            Baseline reread = ReportInventory.readBaseline(file);
+
+            assertThat(reread.shapes()).containsEntry(kind, ReportInventory.Shape.MULTILINE);
+            assertThat(reread.counts()).containsEntry(kind, new ReportInventory.Count(1, false));
+            assertThat(reread.comments()).containsEntry(kind, "AllureWireMockSteps");
+            assertThat(reread.attachments()).containsExactly(kind);
+        }
+
+        @Test
+        @DisplayName("скан читает форму из настоящих файлов вложений")
+        void scanReadsShapeFromFiles(@TempDir Path dir) throws IOException {
+            Files.writeString(dir.resolve("multi-attachment.txt"), "GET | GET\n/a | /b", StandardCharsets.UTF_8);
+            Files.writeString(dir.resolve("one-attachment.txt"), "id=1", StandardCharsets.UTF_8);
+            Files.writeString(dir.resolve("a-result.json"), """
+                    {"labels":[{"name":"testClass","value":"io.github.kolomyychenkoai.allure.spring.demo.WireMockReportIT"}],
+                     "attachments":[{"name":"Near miss","type":"text/plain","source":"multi-attachment.txt"},
+                                    {"name":"DB Result","type":"text/plain","source":"one-attachment.txt"}]}
+                    """, StandardCharsets.UTF_8);
+
+            Map<Kind, ReportInventory.ShapeStat> shapes = ReportInventory.scan(dir).shapes();
+
+            assertThat(shapes.get(kind("WireMockReportIT", "Near miss | text/plain")).seen())
+                    .containsExactly(ReportInventory.Shape.MULTILINE);
+            assertThat(shapes.get(kind("WireMockReportIT", "DB Result | text/plain")).seen())
+                    .containsExactly(ReportInventory.Shape.ONE_LINE);
+        }
+
+        @Test
+        @DisplayName("пустое тело формы не имеет (это уже отдельное измерение вида)")
+        void emptyBodyHasNoShape(@TempDir Path dir) throws IOException {
+            Files.writeString(dir.resolve("empty-attachment.txt"), "   ", StandardCharsets.UTF_8);
+            Files.writeString(dir.resolve("a-result.json"), """
+                    {"labels":[{"name":"testClass","value":"io.github.kolomyychenkoai.allure.spring.demo.KafkaReportIT"}],
+                     "attachments":[{"name":"DB Result","type":"text/plain","source":"empty-attachment.txt"}]}
+                    """, StandardCharsets.UTF_8);
+
+            assertThat(ReportInventory.scan(dir).shapes()).isEmpty();
+        }
+    }
 }

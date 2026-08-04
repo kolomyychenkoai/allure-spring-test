@@ -11,11 +11,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -64,6 +66,11 @@ public final class ReportInventory {
     private static final Pattern COUNT_MARKER = Pattern.compile("\\s{2,}×(≥)?(\\d+)\\s*$");
     /** Маркер статусного вида: « [BROKEN]», « [FAILED]», « [SKIPPED]». */
     private static final Pattern STATUS_MARKER = Pattern.compile(" \\[[A-Z]+]$");
+    /**
+     * Маркер формы тела вложения в конце строки эталона: «  ¶1», «  ¶N».
+     * Пишется ПОСЛЕ маркера кратности, поэтому при чтении снимается ПЕРВЫМ.
+     */
+    private static final Pattern SHAPE_MARKER = Pattern.compile("\\s{2,}¶(1|N)\\s*$");
 
     private ReportInventory() {
     }
@@ -85,14 +92,15 @@ public final class ReportInventory {
     /** Что реально произвёл прогон. */
     public record Scan(Set<Kind> steps, Set<Kind> attachments, Set<String> owners, int resultFiles,
                        List<String> unreadable, List<String> missingFiles, List<String> dirtyNames,
-                       Map<Kind, Range> perCase, List<String> dirtyBodies) {
+                       Map<Kind, Range> perCase, List<String> dirtyBodies,
+                       Map<Kind, ShapeStat> shapes) {
 
-        /** Без {@code dirtyBodies} — для тестов вердикта, которым тела вложений не нужны. */
+        /** Без тел вложений — для тестов вердикта, которым содержимое не нужно. */
         public Scan(Set<Kind> steps, Set<Kind> attachments, Set<String> owners, int resultFiles,
                     List<String> unreadable, List<String> missingFiles, List<String> dirtyNames,
                     Map<Kind, Range> perCase) {
             this(steps, attachments, owners, resultFiles, unreadable, missingFiles, dirtyNames,
-                    perCase, List.of());
+                    perCase, List.of(), Map.of());
         }
     }
 
@@ -134,12 +142,85 @@ public final class ReportInventory {
     public record CountMismatch(Kind kind, Count expected, Range seen) {
     }
 
+    /**
+     * Форма ТЕЛА вложения: одной строкой или многострочное.
+     * <p>
+     * Зачем отдельное измерение: вид вложения знает только «пусто/непусто», поэтому «тело
+     * схлопнулось в строку» или «от него осталась одна строка после обрезки» — деградация,
+     * которую сетка иначе не видит. Именно так прошёл near-miss WireMock (колоночный диф стал
+     * одной строкой): имя, mime и непустота не изменились.
+     * <p>
+     * В сам ВИД форму класть нельзя — замер показал, что у 7 видов из 87 она законно плавает
+     * (например «DB Call» с одним аргументом против нескольких), и такие виды раздвоились бы.
+     * Поэтому форма — МАРКЕР в эталоне по замеру, ровно как кратность {@link Count}: помечаем
+     * только виды со стабильной формой, плавающие остаются без маркера и не стерегутся.
+     */
+    public enum Shape {
+        ONE_LINE("¶1"), MULTILINE("¶N");
+
+        private final String marker;
+
+        Shape(String marker) {
+            this.marker = marker;
+        }
+
+        @Override
+        public String toString() {
+            return marker;
+        }
+
+        static Shape of(String marker) {
+            return ONE_LINE.marker.equals(marker) ? ONE_LINE : MULTILINE;
+        }
+    }
+
+    /** Форма тела разъехалась: ждали одну, увидели другую (или сразу обе). */
+    public record ShapeMismatch(Kind kind, Shape expected, Set<Shape> seen) {
+    }
+
+    /**
+     * Наблюдения формы по одному виду: какие формы встретились и СКОЛЬКО РАЗ всего.
+     * <p>
+     * Число наблюдений нужно посеву: у вида, встреченного за прогон ОДИН раз, «форма стабильна» —
+     * тавтология. Замерено на живых данных: такой посев пометил {@code Application Logs} как
+     * однострочный, а на следующем прогоне лог оказался длиннее — гейт покраснел на ровном месте.
+     * Поэтому маркер получают только виды с {@link #MIN_OBSERVATIONS}+ наблюдениями.
+     */
+    public record ShapeStat(Set<Shape> seen, int observations) {
+
+        ShapeStat with(Shape shape) {
+            Set<Shape> merged = EnumSet.copyOf(seen);
+            merged.add(shape);
+            return new ShapeStat(merged, observations + 1);
+        }
+
+        static ShapeStat first(Shape shape) {
+            return new ShapeStat(EnumSet.of(shape), 1);
+        }
+    }
+
+    /**
+     * Сколько раз надо увидеть вид, чтобы поверить в стабильность его формы.
+     * <p>
+     * Для КРАТНОСТИ такое требование осознанно отвергнуто (там оно превратило бы почти всё
+     * в «×≥1», а это не ловит задвоение — ради чего кратность и заведена). У формы этого размена
+     * нет: ослабленного варианта не существует, вид просто остаётся без маркера. Цена — 48
+     * помеченных видов вместо 81, зато без ложных срабатываний.
+     */
+    private static final int MIN_OBSERVATIONS = 2;
+
     /** Что записано в эталоне. */
     public record Baseline(Set<Kind> steps, Set<Kind> attachments, Set<Kind> optional,
-                           Map<Kind, String> comments, Map<Kind, Count> counts) {
+                           Map<Kind, String> comments, Map<Kind, Count> counts,
+                           Map<Kind, Shape> shapes) {
 
         public Baseline(Set<Kind> steps, Set<Kind> attachments, Set<Kind> optional, Map<Kind, String> comments) {
-            this(steps, attachments, optional, comments, Map.of());
+            this(steps, attachments, optional, comments, Map.of(), Map.of());
+        }
+
+        public Baseline(Set<Kind> steps, Set<Kind> attachments, Set<Kind> optional,
+                        Map<Kind, String> comments, Map<Kind, Count> counts) {
+            this(steps, attachments, optional, comments, counts, Map.of());
         }
 
         public Set<String> owners() {
@@ -161,13 +242,21 @@ public final class ReportInventory {
     public record Verdict(boolean noData, List<Kind> missingSteps, List<Kind> missingAttachments,
                           List<Kind> extraSteps, List<Kind> extraAttachments,
                           List<String> silentOwners, List<String> unknownOwners,
-                          List<CountMismatch> countMismatches) {
+                          List<CountMismatch> countMismatches, List<ShapeMismatch> shapeMismatches) {
 
         public Verdict(boolean noData, List<Kind> missingSteps, List<Kind> missingAttachments,
                        List<Kind> extraSteps, List<Kind> extraAttachments,
                        List<String> silentOwners, List<String> unknownOwners) {
             this(noData, missingSteps, missingAttachments, extraSteps, extraAttachments,
-                    silentOwners, unknownOwners, List.of());
+                    silentOwners, unknownOwners, List.of(), List.of());
+        }
+
+        public Verdict(boolean noData, List<Kind> missingSteps, List<Kind> missingAttachments,
+                       List<Kind> extraSteps, List<Kind> extraAttachments,
+                       List<String> silentOwners, List<String> unknownOwners,
+                       List<CountMismatch> countMismatches) {
+            this(noData, missingSteps, missingAttachments, extraSteps, extraAttachments,
+                    silentOwners, unknownOwners, countMismatches, List.of());
         }
 
 
@@ -185,7 +274,7 @@ public final class ReportInventory {
                     || !unknownOwners.isEmpty() || !silentOwners.isEmpty()
                     // новый ШАГ — это обогащение отчёта (норма), новый НЕ-PASSED статус — поломка:
                     // правило библиотеки «упавшую проверку шагом не логируем» перестало соблюдаться
-                    || newFailures() || !countMismatches.isEmpty()
+                    || newFailures() || !countMismatches.isEmpty() || !shapeMismatches.isEmpty()
                     || (strict && (!extraSteps.isEmpty() || !extraAttachments.isEmpty()));
         }
 
@@ -222,6 +311,7 @@ public final class ReportInventory {
         List<String> dirtyNames = new ArrayList<>();
         List<String> dirtyBodies = new ArrayList<>();
         Map<Kind, Range> perCase = new TreeMap<>();
+        Map<Kind, ShapeStat> shapes = new TreeMap<>();
         try (Stream<Path> list = Files.list(resultsDir)) {
             List<Path> results = list.filter(p -> p.getFileName().toString().endsWith("-result.json")).toList();
             for (Path file : results) {
@@ -240,22 +330,25 @@ public final class ReportInventory {
                 // эталон по причине, не связанной с отчётом. Инвариант библиотеки — «один вызов =
                 // один шаг», и он про кейс.
                 Map<Kind, Integer> local = new HashMap<>();
-                collectAttachments(root, owner, attachments, resultsDir, missingFiles, dirtyNames, dirtyBodies, local);
+                collectAttachments(root, owner, attachments, resultsDir, missingFiles, dirtyNames,
+                        dirtyBodies, shapes, local);
                 collectSteps(root, owner, null, steps, attachments, resultsDir, missingFiles, dirtyNames,
-                        dirtyBodies, local);
+                        dirtyBodies, shapes, local);
                 local.forEach((kind, n) -> perCase.merge(kind, new Range(n, n), Range::with));
             }
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        return new Scan(steps, attachments, owners, files, unreadable, missingFiles, dirtyNames, perCase, dirtyBodies);
+        return new Scan(steps, attachments, owners, files, unreadable, missingFiles, dirtyNames, perCase,
+                dirtyBodies, shapes);
     }
 
     /** {@code parent} — шаблон НЕПОСРЕДСТВЕННОГО родителя (null для верхнего уровня). */
     private static void collectSteps(JsonNode node, String owner, String parent, Set<Kind> steps,
                                      Set<Kind> attachments, Path resultsDir,
                                      List<String> missingFiles, List<String> dirtyNames,
-                                     List<String> dirtyBodies, Map<Kind, Integer> local) {
+                                     List<String> dirtyBodies, Map<Kind, ShapeStat> shapes,
+                                     Map<Kind, Integer> local) {
         for (JsonNode step : node.path("steps")) {
             String raw = step.path("name").asText("");
             hygiene(owner, raw, dirtyNames);
@@ -266,9 +359,10 @@ public final class ReportInventory {
                     (parent == null ? template : parent + NESTED + template) + statusSuffix(step));
             steps.add(kind);
             local.merge(kind, 1, Integer::sum);
-            collectAttachments(step, owner, attachments, resultsDir, missingFiles, dirtyNames, dirtyBodies, local);
+            collectAttachments(step, owner, attachments, resultsDir, missingFiles, dirtyNames,
+                    dirtyBodies, shapes, local);
             collectSteps(step, owner, template, steps, attachments, resultsDir, missingFiles, dirtyNames,
-                    dirtyBodies, local);
+                    dirtyBodies, shapes, local);
         }
     }
 
@@ -306,26 +400,57 @@ public final class ReportInventory {
      * Только текстовые вложения: гонять регулярки по декодированным байтам картинки или архива
      * значит выдумывать нарушения на ровном месте.
      */
-    private static void bodyHygiene(String owner, String name, String type, Path resultsDir,
-                                    String source, List<String> dirtyBodies) {
-        if (source == null || source.isBlank() || !isText(type)) {
+    private static void bodyHygiene(String owner, String name, Body body, List<String> dirtyBodies) {
+        if (body == null) {
             return;
+        }
+        StepNameHygiene.bodyDefect(body.text()).ifPresent(diagnosis ->
+                dirtyBodies.add(owner + " | " + name + " → " + diagnosis + "\n      …"
+                        + excerpt(body.text()) + "…"));
+    }
+
+    /** Прочитанное начало тела вложения. {@code truncated} — файл длиннее пробы. */
+    private record Body(String text, boolean truncated) {
+    }
+
+    /**
+     * Начало тела текстового вложения — один раз на вложение, для гигиены И для формы.
+     * {@code null}, если анализировать нечего (нет источника, не текст, файла нет, не читается).
+     */
+    private static Body body(String type, Path resultsDir, String source) {
+        if (source == null || source.isBlank() || !isText(type)) {
+            return null;
         }
         Path file = resultsDir.resolve(source);
         if (!Files.isRegularFile(file)) {
-            return; // «файла нет» — отдельный гейт missingFiles, второй раз не диагностируем
+            return null; // «файла нет» — отдельный гейт missingFiles, второй раз не диагностируем
         }
-        String body;
         try (var reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
             char[] probe = new char[BODY_PROBE];
             int read = reader.read(probe);
-            body = read <= 0 ? "" : new String(probe, 0, read);
+            return new Body(read <= 0 ? "" : new String(probe, 0, read), read == BODY_PROBE);
         } catch (IOException | RuntimeException unreadable) {
-            return; // нечитаемое тело — не наша тема, о ней скажет content()/unreadable
+            return null; // нечитаемое тело — не наша тема, о ней скажет content()/unreadable
         }
-        StepNameHygiene.bodyDefect(body).ifPresent(diagnosis ->
-                dirtyBodies.add(owner + " | " + name + " → " + diagnosis + "\n      …"
-                        + excerpt(body) + "…"));
+    }
+
+    /**
+     * Форма тела: одной строкой или многострочное. Пусто — формы нет (это уже отдельное
+     * измерение вида). Проба обрезана и переноса в ней не нашлось — тоже нет: судить о форме
+     * по началу файла значит выдумывать, а выдуманный маркер краснел бы на ровном месте.
+     */
+    static Optional<Shape> shapeOf(Body body) {
+        if (body == null) {
+            return Optional.empty();
+        }
+        String text = body.text().strip();
+        if (text.isEmpty()) {
+            return Optional.empty();
+        }
+        if (text.contains("\n")) {
+            return Optional.of(Shape.MULTILINE);
+        }
+        return body.truncated() ? Optional.empty() : Optional.of(Shape.ONE_LINE);
     }
 
     /** Текстовое ли вложение (регулярки по картинке дали бы выдуманные нарушения). */
@@ -343,13 +468,15 @@ public final class ReportInventory {
 
     private static void collectAttachments(JsonNode node, String owner, Set<Kind> attachments, Path resultsDir,
                                            List<String> missingFiles, List<String> dirtyNames,
-                                           List<String> dirtyBodies, Map<Kind, Integer> local) {
+                                           List<String> dirtyBodies, Map<Kind, ShapeStat> shapes,
+                                     Map<Kind, Integer> local) {
         for (JsonNode att : node.path("attachments")) {
             String name = att.path("name").asText("");
             hygiene(owner, name, dirtyNames);
             String source = att.path("source").asText(null);
             Content content = content(resultsDir, source);
-            bodyHygiene(owner, name, att.path("type").asText(""), resultsDir, source, dirtyBodies);
+            Body body = body(att.path("type").asText(""), resultsDir, source);
+            bodyHygiene(owner, name, body, dirtyBodies);
             if (content == Content.MISSING) {
                 // НЕ вид: «вложение объявлено, а байтов нет» — это не «отчёт стал другим», а
                 // «отчёт сломан», и лечится оно не обновлением эталона. Отдельный безусловный гейт.
@@ -359,6 +486,10 @@ public final class ReportInventory {
                     name, att.path("type").asText(""), content != Content.EMPTY));
             attachments.add(kind);
             local.merge(kind, 1, Integer::sum);
+            // Копим МНОЖЕСТВО наблюдённых форм: маркер получит только вид, у которого оно
+            // из одного элемента. Так белый список берётся из факта, а не из предположения.
+            shapeOf(body).ifPresent(shape -> shapes.merge(kind, ShapeStat.first(shape),
+                    (was, fresh) -> was.with(shape)));
         }
     }
 
@@ -427,7 +558,30 @@ public final class ReportInventory {
                 missing(baseline.attachments(), baseline.optional(), scan.attachments()),
                 extra(baseline.steps(), scan.steps()),
                 extra(baseline.attachments(), scan.attachments()),
-                silent, unknown, counts(baseline.counts(), scan.perCase()));
+                silent, unknown, counts(baseline.counts(), scan.perCase()),
+                shapes(baseline.shapes(), scan.shapes()));
+    }
+
+    /**
+     * Виды, у которых форма тела разъехалась с помеченной в эталоне. Как и кратность, считается
+     * ТОЛЬКО для помеченных видов — белый список живёт в данных, а не в коде. Вид, которого прогон
+     * не дал, пропускаем: это уже {@code missing}, второй раз тот же факт не диагностируем.
+     */
+    public static List<ShapeMismatch> shapes(Map<Kind, Shape> expected, Map<Kind, ShapeStat> seen) {
+        List<ShapeMismatch> mismatches = new ArrayList<>();
+        expected.forEach((kind, shape) -> {
+            ShapeStat stat = seen.get(kind);
+            if (stat == null || stat.seen().isEmpty()) {
+                return;
+            }
+            Set<Shape> observed = stat.seen();
+            // Форма обязана совпасть в КАЖДОМ наблюдении: «иногда одной строкой» — это уже
+            // не стабильный вид, и маркер на нём стоять не должен.
+            if (observed.size() != 1 || !observed.contains(shape)) {
+                mismatches.add(new ShapeMismatch(kind, shape, observed));
+            }
+        });
+        return mismatches;
     }
 
     /**
@@ -543,8 +697,9 @@ public final class ReportInventory {
         Set<Kind> optional = new TreeSet<>();
         Map<Kind, String> comments = new TreeMap<>();
         Map<Kind, Count> counts = new TreeMap<>();
+        Map<Kind, Shape> shapes = new TreeMap<>();
         if (!Files.isRegularFile(path)) {
-            return new Baseline(steps, attachments, optional, comments, counts);
+            return new Baseline(steps, attachments, optional, comments, counts, shapes);
         }
         String section = "steps";
         for (String raw : readLines(path)) {
@@ -566,6 +721,14 @@ public final class ReportInventory {
                 comment = line.substring(commentAt.start()).replaceFirst("^\\s*#\\s*", "");
                 line = line.substring(0, commentAt.start()).strip();
             }
+            // Порядок снятия ОБРАТЕН порядку записи: сначала форма (она пишется последней
+            // перед комментарием), потом кратность.
+            Shape shape = null;
+            Matcher shapeAt = SHAPE_MARKER.matcher(line);
+            if (shapeAt.find()) {
+                shape = Shape.of("¶" + shapeAt.group(1));
+                line = line.substring(0, shapeAt.start()).strip();
+            }
             Count count = null;
             Matcher countAt = COUNT_MARKER.matcher(line);
             if (countAt.find()) {
@@ -580,6 +743,9 @@ public final class ReportInventory {
             if (count != null) {
                 counts.put(kind, count);
             }
+            if (shape != null) {
+                shapes.put(kind, shape);
+            }
             ("attachments".equals(section) ? attachments : steps).add(kind);
             if (isOptional) {
                 optional.add(kind);
@@ -588,7 +754,7 @@ public final class ReportInventory {
                 comments.put(kind, comment);
             }
         }
-        return new Baseline(steps, attachments, optional, comments, counts);
+        return new Baseline(steps, attachments, optional, comments, counts, shapes);
     }
 
     private static List<String> readLines(Path path) {
@@ -666,6 +832,32 @@ public final class ReportInventory {
         return counts;
     }
 
+    /**
+     * Разовый посев маркеров ФОРМЫ по замеру. Помечаются только виды, которые во ВСЕХ
+     * наблюдениях прогона (и не меньше {@link #MIN_OBSERVATIONS} раз) были МНОГОСТРОЧНЫМИ.
+     * <p>
+     * <b>Почему только {@code ¶N}.</b> Стеречь имеет смысл ровно одно направление: «многострочное
+     * тело схлопнулось / обрезалось до строки» — это деградация. Обратное («была строка, стало
+     * несколько») деградацией не является, зато случается постоянно: у {@code Application Logs}
+     * объём вывода зависит от того, поднимался ли в этом классе контекст. Замерено больно —
+     * посев в обе стороны дал ложное падение на ДРУГОМ прогоне, дважды и у разных классов.
+     * <p>
+     * Так белый список получается из ФАКТА и из направления риска, а не из симметрии механизма.
+     */
+    public static Map<Kind, Shape> seedShapes(Scan scan, Baseline previous) {
+        Map<Kind, Shape> shapes = new TreeMap<>(previous.shapes());
+        scan.shapes().forEach((kind, stat) -> {
+            boolean stable = stat.seen().size() == 1 && stat.observations() >= MIN_OBSERVATIONS;
+            if (stable && stat.seen().contains(Shape.MULTILINE)) {
+                shapes.put(kind, Shape.MULTILINE);
+            } else {
+                // форма поплыла, наблюдение одно ЛИБО тело однострочное — стеречь нечего
+                shapes.remove(kind);
+            }
+        });
+        return shapes;
+    }
+
     /** К увиденному добавляем «аварийные клапаны» эталона: {@code *}-виды и {@code ?}-виды. */
     private static Set<Kind> merge(Set<Kind> seen, Set<Kind> previous, Baseline baseline) {
         Set<Kind> result = new TreeSet<>(seen);
@@ -688,6 +880,10 @@ public final class ReportInventory {
             Count count = previous.counts().get(kind);
             if (count != null) {
                 line = line + "  " + count; // маркер переносится: белый список живёт в эталоне
+            }
+            Shape shape = previous.shapes().get(kind);
+            if (shape != null) {
+                line = line + "  " + shape; // ПОСЛЕ кратности — чтение снимает в обратном порядке
             }
             String comment = previous.comments().get(kind);
             if (comment != null) {

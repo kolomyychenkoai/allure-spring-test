@@ -162,49 +162,49 @@ WireMockReportIT | Создана заглушка: POST /api/orders → 201  ×
 
 [attachments]
 AllureMockitoReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
-AllureMockitoReportIT | Mock Call | text/plain  # AllureMockitoHandler
+AllureMockitoReportIT | Mock Call | text/plain  ¶N  # AllureMockitoHandler
 AllureMockitoReportIT | Mock Result | text/plain  # AllureMockitoHandler
-AllureMockitoReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
+AllureMockitoReportIT | Свойства | text/plain  ×1  ¶N  # AllureConfigurationListener
 AssertJReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
-AssertJReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
+AssertJReportIT | Свойства | text/plain  ×1  ¶N  # AllureConfigurationListener
 AwaitilityReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
 AwaitilityReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
 AwaitilityReportIT | Условие ожидания | text/plain  ×1  # AllureAwaitilityConditionListener
 DataJpaReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
 DataJpaReportIT | DB Call | text/plain  # AllureRepositoryAspect
 DataJpaReportIT | DB Result | text/plain  # AllureRepositoryAspect
-DataJpaReportIT | SQL Query | text/plain  # AllureDataSourceListener
-DataJpaReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
+DataJpaReportIT | SQL Query | text/plain  ¶N  # AllureDataSourceListener
+DataJpaReportIT | Свойства | text/plain  ×1  ¶N  # AllureConfigurationListener
 HamcrestReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
-HamcrestReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
+HamcrestReportIT | Свойства | text/plain  ×1  ¶N  # AllureConfigurationListener
 JUnitJupiterAssertionsReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
-JUnitJupiterAssertionsReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
+JUnitJupiterAssertionsReportIT | Свойства | text/plain  ×1  ¶N  # AllureConfigurationListener
 JdbcReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
 JdbcReportIT | DB Result | text/plain  # AllureRepositoryAspect
 JdbcReportIT | SQL (шаблон) | text/plain  # AllureJdbcInstrumentation
-JdbcReportIT | SQL Query | text/plain  # AllureDataSourceListener
-JdbcReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
+JdbcReportIT | SQL Query | text/plain  ¶N  # AllureDataSourceListener
+JdbcReportIT | Свойства | text/plain  ×1  ¶N  # AllureConfigurationListener
 KafkaListenerReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
-KafkaListenerReportIT | Значение сообщения | application/json  ×2  # AllureKafkaSteps (притти-JSON value)
+KafkaListenerReportIT | Значение сообщения | application/json  ×2  ¶N  # AllureKafkaSteps (притти-JSON value)
 KafkaListenerReportIT | Отправленное сообщение | text/plain  ×1  # AllureKafkaProducerInstrumentation
 KafkaListenerReportIT | Принятые сообщения | text/plain  ×1  # AllureKafkaConsumerInstrumentation
 KafkaListenerReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
 KafkaReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
-KafkaReportIT | Значение сообщения | application/json  ×2  # AllureKafkaSteps (притти-JSON value)
+KafkaReportIT | Значение сообщения | application/json  ×2  ¶N  # AllureKafkaSteps (притти-JSON value)
 KafkaReportIT | Отправленное сообщение | text/plain  ×1  # AllureKafkaProducerInstrumentation
 KafkaReportIT | Принятые сообщения | text/plain  ×1  # AllureKafkaConsumerInstrumentation
 KafkaReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
 LiquibaseReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
 LiquibaseReportIT | Changeset | text/plain  ×1  # AllureLiquibaseInstrumentation
-LiquibaseReportIT | SQL Query | text/plain  ×16  # AllureDataSourceListener
+LiquibaseReportIT | SQL Query | text/plain  ×16  ¶N  # AllureDataSourceListener
 LiquibaseReportIT | Применённые миграции | text/plain  ×1  # AllureLiquibaseInstrumentation
 LiquibaseReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
 MockMvcReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
 MockMvcReportIT | HTTP Exception | text/plain  ×1  # AllureMockMvcResultHandler
 MockMvcReportIT | HTTP Request Body | application/json  ×1  # AllureMockMvcResultHandler
 MockMvcReportIT | HTTP Request | text/plain  ×4  # AllureMockMvcResultHandler
-MockMvcReportIT | HTTP Response Body | application/json  ×3  # AllureMockMvcResultHandler
-MockMvcReportIT | HTTP Response | text/plain  ×4  # AllureMockMvcResultHandler
+MockMvcReportIT | HTTP Response Body | application/json  ×3  ¶N  # AllureMockMvcResultHandler
+MockMvcReportIT | HTTP Response | text/plain  ×4  ¶N  # AllureMockMvcResultHandler
 MockMvcReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
 MockMvcStandaloneReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
 MockMvcStandaloneReportIT | HTTP Request | text/plain  ×1  # AllureMockMvcInstrumentation
@@ -215,36 +215,36 @@ ReportSmokeIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListe
 ReportSmokeIT | Свойства | text/plain  ×1  # AllureConfigurationListener
 RestAssuredReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
 RestAssuredReportIT | HTTP Request Body | application/json  ×1  # AllureRestAssuredFilter
-RestAssuredReportIT | HTTP Request | text/plain  ×6  # AllureRestAssuredFilter
-RestAssuredReportIT | HTTP Response Body | application/json  ×6  # AllureRestAssuredFilter
-RestAssuredReportIT | HTTP Response | text/plain  ×6  # AllureRestAssuredFilter
+RestAssuredReportIT | HTTP Request | text/plain  ×6  ¶N  # AllureRestAssuredFilter
+RestAssuredReportIT | HTTP Response Body | application/json  ×6  ¶N  # AllureRestAssuredFilter
+RestAssuredReportIT | HTTP Response | text/plain  ×6  ¶N  # AllureRestAssuredFilter
 RestAssuredReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
 RestClientReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
 RestClientReportIT | HTTP Request Body | application/json  ×1  # AllureRestClientInstrumentation
-RestClientReportIT | HTTP Request | text/plain  ×1  # AllureRestClientInstrumentation
-RestClientReportIT | HTTP Response Body | application/json  ×1  # AllureRestClientInstrumentation
-RestClientReportIT | HTTP Response | text/plain  ×1  # AllureRestClientInstrumentation
-RestClientReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
+RestClientReportIT | HTTP Request | text/plain  ×1  ¶N  # AllureRestClientInstrumentation
+RestClientReportIT | HTTP Response Body | application/json  ×1  ¶N  # AllureRestClientInstrumentation
+RestClientReportIT | HTTP Response | text/plain  ×1  ¶N  # AllureRestClientInstrumentation
+RestClientReportIT | Свойства | text/plain  ×1  ¶N  # AllureConfigurationListener
 RestTemplateReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
 RestTemplateReportIT | HTTP Request Body | application/json  ×1  # AllureRestTemplateInterceptor
-RestTemplateReportIT | HTTP Request | text/plain  ×1  # AllureRestTemplateInterceptor
-RestTemplateReportIT | HTTP Response Body | application/json  ×1  # AllureRestTemplateInterceptor
-RestTemplateReportIT | HTTP Response | text/plain  ×1  # AllureRestTemplateInterceptor
-RestTemplateReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
+RestTemplateReportIT | HTTP Request | text/plain  ×1  ¶N  # AllureRestTemplateInterceptor
+RestTemplateReportIT | HTTP Response Body | application/json  ×1  ¶N  # AllureRestTemplateInterceptor
+RestTemplateReportIT | HTTP Response | text/plain  ×1  ¶N  # AllureRestTemplateInterceptor
+RestTemplateReportIT | Свойства | text/plain  ×1  ¶N  # AllureConfigurationListener
 SpringAssertionsReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
-SpringAssertionsReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
+SpringAssertionsReportIT | Свойства | text/plain  ×1  ¶N  # AllureConfigurationListener
 WebTestClientReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
 WebTestClientReportIT | HTTP Request Body | application/json  ×1  # AllureWebTestClientLogger
-WebTestClientReportIT | HTTP Request | text/plain  ×1  # AllureWebTestClientLogger
-WebTestClientReportIT | HTTP Response Body | application/json  ×1  # AllureWebTestClientLogger
-WebTestClientReportIT | HTTP Response | text/plain  ×1  # AllureWebTestClientLogger
-WebTestClientReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
+WebTestClientReportIT | HTTP Request | text/plain  ×1  ¶N  # AllureWebTestClientLogger
+WebTestClientReportIT | HTTP Response Body | application/json  ×1  ¶N  # AllureWebTestClientLogger
+WebTestClientReportIT | HTTP Response | text/plain  ×1  ¶N  # AllureWebTestClientLogger
+WebTestClientReportIT | Свойства | text/plain  ×1  ¶N  # AllureConfigurationListener
 WireMockReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
-WireMockReportIT | Near miss (почему не сматчилось) | text/plain  ×3  # AllureWireMockSteps (near-miss)
+WireMockReportIT | Near miss (почему не сматчилось) | text/plain  ×3  ¶N  # AllureWireMockSteps (near-miss)
 WireMockReportIT | WireMock Request Body | application/json  ×1  # AllureWireMockSteps
-WireMockReportIT | WireMock Request | text/plain  # AllureWireMockSteps
-WireMockReportIT | WireMock Response Body | application/json  # AllureWireMockSteps
+WireMockReportIT | WireMock Request | text/plain  ¶N  # AllureWireMockSteps
+WireMockReportIT | WireMock Response Body | application/json  ¶N  # AllureWireMockSteps
 WireMockReportIT | WireMock Response | text/plain  # AllureWireMockSteps
-WireMockReportIT | WireMock Stub | application/json  # AllureWireMockSteps
-WireMockReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
+WireMockReportIT | WireMock Stub | application/json  ¶N  # AllureWireMockSteps
+WireMockReportIT | Свойства | text/plain  ×1  ¶N  # AllureConfigurationListener
 WireMockReportIT | Условие проверки | text/plain  ×2  # AllureWireMockSteps

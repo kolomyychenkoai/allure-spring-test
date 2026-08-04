@@ -40,6 +40,8 @@ class ReportInventoryCheck {
     private static final String STRICT_FLAG = "inventory.strict";
     /** Пересев маркеров кратности «×N» по замеру прогона. */
     private static final String COUNTS_FLAG = "inventory.counts";
+    /** Пересев маркеров формы тела вложения «¶1»/«¶N» по замеру прогона. */
+    private static final String SHAPES_FLAG = "inventory.shapes";
     /**
      * Сверка с эталоном: {@code on} (умолчание) или {@code off}.
      * <p>
@@ -174,9 +176,26 @@ class ReportInventoryCheck {
                 }
             });
         }
-        Baseline toWrite = Boolean.getBoolean(COUNTS_FLAG)
+        if (Boolean.getBoolean(SHAPES_FLAG)) {
+            // Как и с кратностью: снятие маркера — способ распустить сетку, поэтому изменения
+            // печатаем поимённо, а не прячем в diff на две сотни строк.
+            Map<Kind, ReportInventory.Shape> seeded = ReportInventory.seedShapes(scan, baseline);
+            baseline.shapes().forEach((kind, was) -> {
+                ReportInventory.Shape now = seeded.get(kind);
+                if (now != was) {
+                    System.out.println("ИНВЕНТАРЬ: форма тела " + kind + " — было " + was
+                            + ", стало " + (now == null ? "без маркера" : now));
+                }
+            });
+        }
+        // Маркеры переносятся ВМЕСТЕ: пересев одного не должен стирать другой.
+        Baseline toWrite = Boolean.getBoolean(COUNTS_FLAG) || Boolean.getBoolean(SHAPES_FLAG)
                 ? new Baseline(baseline.steps(), baseline.attachments(), baseline.optional(),
-                        baseline.comments(), ReportInventory.seedCounts(scan, baseline))
+                        baseline.comments(),
+                        Boolean.getBoolean(COUNTS_FLAG)
+                                ? ReportInventory.seedCounts(scan, baseline) : baseline.counts(),
+                        Boolean.getBoolean(SHAPES_FLAG)
+                                ? ReportInventory.seedShapes(scan, baseline) : baseline.shapes())
                 : baseline;
         ReportInventory.write(ReportInventory.BASELINE, scan, toWrite);
         // Колонка «кто отвечает» — весь смысл формата: она печатается при пропаже вида как
@@ -220,6 +239,15 @@ class ReportInventoryCheck {
             verdict.countMismatches().forEach(mismatch -> out.append("  × ").append(mismatch.kind())
                     .append(" — ждали ").append(mismatch.expected())
                     .append(" в каждом кейсе, где вид встречался, увидели ").append(mismatch.seen())
+                    .append(responsible(baseline, mismatch.kind())).append('\n'));
+        }
+
+        if (!verdict.shapeMismatches().isEmpty()) {
+            out.append("\nФОРМА ТЕЛА ВЛОЖЕНИЯ РАЗЪЕХАЛАСЬ — содержимое выродилось "
+                    + "(схлопнулось в строку / обрезано) либо витрина изменилась осознанно:\n");
+            verdict.shapeMismatches().forEach(mismatch -> out.append("  ¶ ").append(mismatch.kind())
+                    .append(" — ждали ").append(shapeWord(mismatch.expected()))
+                    .append(", увидели ").append(mismatch.seen().stream().map(this::shapeWord).toList())
                     .append(responsible(baseline, mismatch.kind())).append('\n'));
         }
 
@@ -270,6 +298,12 @@ class ReportInventoryCheck {
             out.append("  изменилась кратность → mvn clean test -D").append(UPDATE_FLAG)
                     .append("=true -D").append(COUNTS_FLAG).append("=true\n");
         }
+        if (!verdict.shapeMismatches().isEmpty()) {
+            out.append("  изменилась форма тела → mvn clean test -D").append(UPDATE_FLAG)
+                    .append("=true -D").append(SHAPES_FLAG).append("=true\n")
+                    .append("  ⚠️ но сперва убедись, что тело не выродилось: схлопывание в одну строку\n")
+                    .append("     — типовая тихая деградация (см. AllureAdviceSupport.safe vs safeValue).\n");
+        }
         out.append("  затем прочитать git diff эталона и закоммитить.\n");
         return out.toString();
     }
@@ -280,6 +314,11 @@ class ReportInventoryCheck {
                 .filter(k -> k.owner().equals(owner))
                 .filter(k -> !baseline.optional().contains(k))
                 .count();
+    }
+
+    /** Человеческое имя формы: в сообщении о падении «¶N» без расшифровки читать неприятно. */
+    private String shapeWord(ReportInventory.Shape shape) {
+        return shape == ReportInventory.Shape.ONE_LINE ? "одну строку" : "многострочное";
     }
 
     /** Подпись «за это отвечает такой-то класс» из комментария эталона. */
