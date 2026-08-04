@@ -38,16 +38,16 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.release>21</maven.compiler.release>
-        <spring-boot.version>3.5.8</spring-boot.version>
+        <spring-boot.version>4.1.0</spring-boot.version>
         <allure.version>2.25.0</allure.version>
         <allure-maven.version>2.12.0</allure-maven.version>
         <!-- Версия ЯВНАЯ, не из Boot BOM: в spring-boot-dependencies 4.1 rest-assured больше
              НЕ УПРАВЛЯЕТСЯ (в 3.5.8 был 5.5.6). Без пина ветка апгрейда падает на построении
              модели Maven («version is missing») ЕЩЁ ДО компиляции — то есть раньше всех наших
              сигналов, и разбираться будет не с чем. Значение равно тому, что даёт BOM 3.5.8,
-             поэтому здесь это no-op. ⚠️ В ветке апгрейда пина МАЛО: Boot 4.1 тянет groovy-bom 5,
-             а RA 5.5.6 собран на Groovy 4 → там нужна rest-assured 6.x. См. docs/upgrade-checklist.md. -->
-        <rest-assured.version>5.5.6</rest-assured.version>
+             поэтому здесь это no-op. Boot 4.1 тянет groovy-bom 5, а RA 5.5.x собран на Groovy 4 →
+             с этого мажора нужна rest-assured 6.x. См. docs/upgrade-checklist.md. -->
+        <rest-assured.version>6.0.1</rest-assured.version>
 
         <!-- ОБЪЯВЛЕННЫЕ ГРАНИЦЫ СОВМЕСТИМОСТИ — здесь и только здесь.
              README и AllureApiCanaryTest читают ЭТИ числа (канарейка — через
@@ -143,9 +143,19 @@
             <artifactId>spring-boot-autoconfigure</artifactId>
             <scope>provided</scope>
         </dependency>
+        <!-- Boot 4 разбил spring-boot-test-autoconfigure на модули по технологиям. Нам нужны
+             ровно два — те, где живут кастомайзеры билдеров (MockMvc и WebTestClient).
+             ⚠️ Компилируемся мы против них, но НЕ держим их типы: интерфейс поднимается по имени
+             из internal/MovedTypeNames, поэтому jar работает и на Boot 3, где эти классы лежали
+             в spring-boot-test-autoconfigure. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-test-autoconfigure</artifactId>
+            <artifactId>spring-boot-webmvc-test</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-webtestclient</artifactId>
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -265,10 +275,26 @@
             <artifactId>allure-junit5</artifactId>
             <scope>test</scope>
         </dependency>
-        <!-- для живого MockMvc-теста (поднять MVC-слой с тестовым контроллером) -->
+        <!-- для живого MockMvc-теста (поднять MVC-слой с тестовым контроллером).
+             В Boot 4 стартер разбит по технологиям: spring-boot-starter-web → …-webmvc. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
+            <artifactId>spring-boot-starter-webmvc</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- TestRestTemplate в Boot 4 переехал в отдельный модуль и БОЛЬШЕ НЕ ПОДАЁТСЯ САМ —
+             тесту нужна ещё и @AutoConfigureTestRestTemplate (см. demo/RestTemplateReportIT). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-resttestclient</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- RestTemplateBuilder (Boot 3.x: spring-boot / org.springframework.boot.web.client).
+             Нужен КАНАРЕЙКЕ unit/AllureRestTemplateInstrumentationTest: она стережёт допущение
+             нашего перехвата — билдер ДОБАВЛЯЕТ интерсепторы, а не заменяет список. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-restclient</artifactId>
             <scope>test</scope>
         </dependency>
         <!-- для живого БД-теста: JPA + AOP + H2 (без Docker) -->
@@ -279,10 +305,8 @@
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <!-- ⚠️ В Boot 4.x этот артефакт ПЕРЕИМЕНОВАН в spring-boot-starter-aspectj: в ветке
-                 апгрейда будет второй «version is missing». Пинить версию бессмысленно (артефакта
-                 с таким именем там нет) — правка принадлежит ветке апгрейда. -->
-            <artifactId>spring-boot-starter-aop</artifactId>
+            <!-- в Boot 3.x этот артефакт назывался spring-boot-starter-aop -->
+            <artifactId>spring-boot-starter-aspectj</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -290,10 +314,22 @@
             <artifactId>h2</artifactId>
             <scope>test</scope>
         </dependency>
-        <!-- для живого Kafka-теста: spring-kafka + встроенный брокер (без Docker) -->
+        <!-- для живого теста миграций: в Boot 4 автоконфигурация Liquibase уехала из
+             spring-boot-autoconfigure в отдельный модуль (как и Kafka). Без него бина
+             SpringLiquibase нет, миграции не идут — и наш снимок схемы нечему показывать.
+             Библиотеке по-прежнему нужен только liquibase-core (provided, выше). -->
         <dependency>
-            <groupId>org.springframework.kafka</groupId>
-            <artifactId>spring-kafka</artifactId>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-liquibase</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- для живого Kafka-теста: spring-kafka + встроенный брокер (без Docker).
+             ⚠️ Именно СТАРТЕР, а не голый spring-kafka: в Boot 4 автоконфигурация Kafka уехала
+             из spring-boot-autoconfigure в отдельный модуль spring-boot-kafka. С голым spring-kafka
+             контекст поднимается, но без бинов KafkaTemplate/kafkaListenerContainerFactory. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-kafka</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -565,6 +601,43 @@
                 <spring-boot.version>${compat.boot.min}</spring-boot.version>
                 <inventory.compare>off</inventory.compare>
             </properties>
+            <build>
+                <plugins>
+                    <!-- ⛔ ВНИМАНИЕ: после апгрейда на Boot 4.1 ЭТОТ ПРОФИЛЬ НЕ СОБИРАЕТСЯ.
+                         Падает на МОДЕЛИ Maven, до компиляции: восемь зависимостей ниже по файлу
+                         существуют только в Boot 4 и в BOM 3.2.12 не управляются. Список исключений
+                         ниже необходим, но НЕДОСТАТОЧЕН — чтобы вернуть точку, нужны два профильных
+                         набора зависимостей (имена Boot 4 и эквиваленты Boot 3).
+                         Подробности и честная формулировка того, что сейчас НЕ проверяется, —
+                         docs/compat-matrix.md. Список заморожен unit/PomCompatibilityTest.
+
+                         Зачем исключения. С Boot 4 часть тестов держит типы, которых на нижней
+                         границе (Boot 3.2.12) физически нет: кастомайзеры и аннотации переехали
+                         в модули по технологиям. Компиляция — всё или ничего, поэтому без этого
+                         списка профиль не собрался бы и после починки зависимостей.
+
+                         Что при этом НЕ проверяется на Boot 3: авто-регистрация кастомайзеров
+                         MockMvc/WebTestClient и демо-витрины MockMvc/WebTestClient/TestRestTemplate.
+                         Проверяется всё остальное — байткод-слой целиком, канарейки, диагностика,
+                         резолв переехавших имён (unit/MovedCustomizerRegistrarTest и
+                         unit/ActivationDiagnosticsTest держат имена СТРОКАМИ, поэтому собираются
+                         на обоих мажорах и остаются в профиле). См. docs/compat-matrix.md. -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <configuration>
+                            <testExcludes>
+                                <testExclude>**/autoconfig/AllureMockMvcAutoConfigurationTest.java</testExclude>
+                                <testExclude>**/autoconfig/AllureWebTestClientAutoConfigurationTest.java</testExclude>
+                                <testExclude>**/demo/MockMvcReportIT.java</testExclude>
+                                <testExclude>**/demo/RestTemplateReportIT.java</testExclude>
+                                <testExclude>**/demo/WebTestClientReportIT.java</testExclude>
+                                <testExclude>**/unit/AllureRestTemplateInstrumentationTest.java</testExclude>
+                            </testExcludes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
         </profile>
     </profiles>
 </project>

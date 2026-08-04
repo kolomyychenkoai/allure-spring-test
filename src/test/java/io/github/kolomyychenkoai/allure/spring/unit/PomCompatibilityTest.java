@@ -162,4 +162,60 @@ class PomCompatibilityTest {
                         + "ОСОЗНАННО обнови README и ADR 0002")
                 .isEqualTo("allure-java-commons");
     }
+
+    /**
+     * Список файлов, которые НЕ компилируются на нижней границе Boot. Каждая строка — это
+     * дырка в доказательстве «один jar работает на 3.x и на 4.x», поэтому список зафиксирован
+     * здесь: расширить его молча нельзя, только вместе с этим тестом и строкой в compat-matrix.
+     * <p>
+     * ⛔ Сам профиль сейчас НЕ СОБИРАЕТСЯ (зависимости Boot 4 не управляются BOM 3.2.12 —
+     * см. {@code docs/compat-matrix.md}). Список держим замороженным именно поэтому: когда точку
+     * будут чинить, он должен остаться ровно тем, что осознанно решили не проверять, а не
+     * разрастись за время простоя.
+     */
+    private static final java.util.List<String> BOOT4_ONLY_TESTS = java.util.List.of(
+            "AllureMockMvcAutoConfigurationTest",
+            "AllureWebTestClientAutoConfigurationTest",
+            "MockMvcReportIT",
+            "RestTemplateReportIT",
+            "WebTestClientReportIT",
+            "AllureRestTemplateInstrumentationTest");
+
+    @Test
+    @DisplayName("исключения нижней границы Boot зафиксированы — список не расширить молча")
+    void bootMinExclusionsAreFrozen() throws IOException {
+        assertThat(bootMinExclusions())
+                .as("список исключённых из нижней границы тестов изменился. Каждая строка — "
+                        + "непроверенный на Boot 3 кусок: обнови BOOT4_ONLY_TESTS и docs/compat-matrix.md "
+                        + "ОСОЗНАННО, а не чтобы позеленело")
+                .containsExactlyInAnyOrderElementsOf(BOOT4_ONLY_TESTS);
+    }
+
+    @Test
+    @DisplayName("резолв переехавших имён проверяется на ОБЕИХ границах — эти тесты не исключены")
+    void movedNameResolutionStaysOnBothMajors() throws IOException {
+        // Смысл MovedTypeNames в том, что имя резолвится СТРОКОЙ. Если тесты этого механизма
+        // попадут в исключения, доказательство кросс-версионности исчезнет незаметно.
+        // Сверяем РАЗОБРАННЫЕ записи <testExclude>, а не сырой текст профиля: имена этих тестов
+        // упомянуты там же в пояснительном комментарии, и проверка по подстроке краснела бы на нём.
+        assertThat(bootMinExclusions())
+                .as("эти тесты держат имена СТРОКАМИ и обязаны собираться на обоих мажорах — "
+                        + "исключив их, мы потеряли бы доказательство кросс-версионности")
+                .doesNotContain("MovedCustomizerRegistrarTest", "ActivationDiagnosticsTest");
+    }
+
+    /** Имена тестов из {@code <testExclude>} профиля нижней границы Boot (без пути и {@code .java}). */
+    private static java.util.List<String> bootMinExclusions() throws IOException {
+        String pom = pom();
+        int at = pom.indexOf("<id>compat-boot-min</id>");
+        assertThat(at).as("профиль compat-boot-min исчез").isNotNegative();
+        String profile = pom.substring(at, pom.indexOf("</profile>", at));
+        Matcher exclude = Pattern.compile("<testExclude>([^<]+)</testExclude>").matcher(profile);
+        java.util.List<String> names = new java.util.ArrayList<>();
+        while (exclude.find()) {
+            String path = exclude.group(1);
+            names.add(path.substring(path.lastIndexOf('/') + 1).replace(".java", ""));
+        }
+        return names;
+    }
 }

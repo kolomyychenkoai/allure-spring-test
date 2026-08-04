@@ -3,6 +3,7 @@ package io.github.kolomyychenkoai.allure.spring.rest.internal;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import io.qameta.allure.Allure;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpRequest;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.client.ClientHttpRequestExecution;
@@ -13,8 +14,6 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
-import java.util.Map;
 
 /**
  * Логирует вызовы {@code RestTemplate}/{@code TestRestTemplate} в Allure-отчёт шагом
@@ -65,8 +64,15 @@ public class AllureRestTemplateInterceptor implements ClientHttpRequestIntercept
         });
     }
 
-    /** Метаданные (строка статуса/URL + заголовки) БЕЗ тела — тело кладём отдельным вложением. */
-    private static String format(String firstLine, Map<String, List<String>> headers) {
+    /**
+     * Метаданные (строка статуса/URL + заголовки) БЕЗ тела — тело кладём отдельным вложением.
+     * <p>
+     * ⚠️ Тип параметра — {@code HttpHeaders}, а НЕ {@code Map<String, List<String>>}: в Spring
+     * Framework 7 {@code HttpHeaders} перестал быть {@code MultiValueMap} и в {@code Map} больше
+     * не приводится. Метод {@code forEach(BiConsumer)} с этой сигнатурой объявлен и в 6.1, и в
+     * 6.2, и в 7.0 (проверено по jar-ам), поэтому один и тот же jar работает на обоих мажорах.
+     */
+    private static String format(String firstLine, HttpHeaders headers) {
         StringBuilder sb = new StringBuilder(firstLine).append('\n');
         if (headers != null) {
             headers.forEach((name, values) -> values.forEach(v -> sb.append(name).append(": ").append(v).append('\n')));

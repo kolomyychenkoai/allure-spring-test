@@ -179,18 +179,22 @@ public final class AllureSpringAssertionsInstrumentation {
         }
 
         @Advice.OnMethodExit(suppress = Throwable.class, onThrowable = Throwable.class)
+        // Аргумент значения НАМЕРЕННО не связан: то, что не передано в advice, невозможно
+        // случайно отрендерить (см. комментарий ниже про побочный эффект toString()).
         public static void onExit(@Advice.Enter boolean outermost,
                                   @Advice.Argument(0) String message,
-                                  @Advice.Argument(1) Object actual,
                                   @Advice.Thrown Throwable thrown) {
             try {
                 exit();
                 if (!outermost) {
                     return;
                 }
-                AllureAdviceSupport.step("Проверка: " + message + (thrown == null
-                        ? " — значение null"
-                        : " — значение " + AllureAdviceSupport.safe(actual) + ", не null"), thrown);
+                // Значение не рендерим по той же причине, что и в AssertNotNullAdvice — побочный
+                // эффект чужого toString(). Путь ПРОВАЛА важен не меньше успешного: шага там не
+                // будет (step() выходит при thrown != null), но имя-строка вычисляется РАНЬШЕ
+                // вызова — то есть toString() всё равно бы сработал.
+                AllureAdviceSupport.step("Проверка: " + message
+                        + (thrown == null ? " — значение null" : " — значение не null"), thrown);
             } catch (Throwable t) {
                 AllureInstrumentationLogger.warn("SpringAssertNull", t);
             }
@@ -204,18 +208,26 @@ public final class AllureSpringAssertionsInstrumentation {
         }
 
         @Advice.OnMethodExit(suppress = Throwable.class, onThrowable = Throwable.class)
+        // Аргумент значения НАМЕРЕННО не связан: то, что не передано в advice, невозможно
+        // случайно отрендерить (см. комментарий ниже про побочный эффект toString()).
         public static void onExit(@Advice.Enter boolean outermost,
                                   @Advice.Argument(0) String message,
-                                  @Advice.Argument(1) Object actual,
                                   @Advice.Thrown Throwable thrown) {
             try {
                 exit();
                 if (!outermost) {
                     return;
                 }
-                AllureAdviceSupport.step("Проверка: " + message + (thrown == null
-                        ? " — значение " + AllureAdviceSupport.safe(actual) + " не null"
-                        : " — значение null"), thrown);
+                // ⚠️ Значение НЕ рендерим — проверяется только его наличие, а toString() чужого
+                // объекта может иметь ПОБОЧНЫЙ ЭФФЕКТ. Реальный случай (Spring 7): внутренняя
+                // проверка AbstractStatusAssertions.assertStatusAndReturn зовёт
+                // assertNotNull("exchangeResult unexpectedly null", exchangeResult), а
+                // ExchangeResult.toString() печатает тело ответа — и в Spring 7 тело клиентского
+                // ответа ОДНОРАЗОВОЕ. Отчёт выпивал его у теста: потребитель получал
+                // «The client response body can only be consumed once» на своём же expectBody().
+                // Стережёт unit/SpringAssertionsSideEffectTest.
+                AllureAdviceSupport.step("Проверка: " + message
+                        + (thrown == null ? " — значение не null" : " — значение null"), thrown);
             } catch (Throwable t) {
                 AllureInstrumentationLogger.warn("SpringAssertNotNull", t);
             }

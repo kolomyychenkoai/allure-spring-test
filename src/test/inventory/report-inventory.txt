@@ -134,7 +134,7 @@ SpringAssertionsReportIT | Проверка: значения нет — зна�
 SpringAssertionsReportIT | Проверка: имя продукта — ожидалось <V> = <V>  ×1  # AllureSpringAssertionsInstrumentation
 SpringAssertionsReportIT | Проверка: количество положительно — верно  ×1  # AllureSpringAssertionsInstrumentation
 SpringAssertionsReportIT | Проверка: разные имена — laptop ≠ phone  ×1  # AllureSpringAssertionsInstrumentation
-SpringAssertionsReportIT | Проверка: у заказа есть id — значение <V> не null  ×1  # AllureSpringAssertionsInstrumentation
+SpringAssertionsReportIT | Проверка: у заказа есть id — значение не null  ×1  # AllureSpringAssertionsInstrumentation
 WebTestClientReportIT | HTTP GET /api/hello/statusonly → 200  ×1  # AllureWebTestClientLogger
 WebTestClientReportIT | HTTP GET /api/hello/world → 200  ×1  # AllureWebTestClientLogger
 WebTestClientReportIT | HTTP POST /api/echo → 200  ×1  # AllureWebTestClientLogger
@@ -142,6 +142,7 @@ WebTestClientReportIT | Конфиги приложения  ×1  # AllureConfig
 WebTestClientReportIT | Проверка: JSON path "$.greeting" — ожидалось <V> = <V>  ×1  # AllureSpringAssertionsInstrumentation
 WebTestClientReportIT | Проверка: JSON path "$.productName" — ожидалось <V> = <V>  ×1  # AllureSpringAssertionsInstrumentation
 WebTestClientReportIT | Проверка: Status — ожидалось <V> = <V>  ×1  # AllureSpringAssertionsInstrumentation
+WebTestClientReportIT | Проверка: exchangeResult unexpectedly null — значение не null  ×1  # AllureSpringAssertionsInstrumentation (внутренняя проверка Spring 7, не пользовательская — шум в отчёте, см. docs/review-log.md)
 WireMockReportIT | Near-miss: GET /api/does-not-exist ≉ заглушка GET /api/flaky  ×2  # AllureWireMockSteps (near-miss)
 WireMockReportIT | Near-miss: GET /api/does-not-exist ≉ заглушка GET /api/prices  ×1  # AllureWireMockSteps (near-miss)
 WireMockReportIT | WireMock сценарий «retry»: состояние recovered  ×1  # AllureWireMockSteps (сценарии)
@@ -206,7 +207,7 @@ MockMvcReportIT | HTTP Exception | text/plain  ×1  # AllureMockMvcResultHandler
 MockMvcReportIT | HTTP Request Body | application/json  ×1  # AllureMockMvcResultHandler
 MockMvcReportIT | HTTP Request | text/plain  ×4  # AllureMockMvcResultHandler
 MockMvcReportIT | HTTP Response Body | application/json  ×3  ¶N  # AllureMockMvcResultHandler
-MockMvcReportIT | HTTP Response | text/plain  ×4  ¶N  # AllureMockMvcResultHandler
+MockMvcReportIT | HTTP Response | text/plain  ×4  # AllureMockMvcResultHandler
 MockMvcReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
 MockMvcStandaloneReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
 MockMvcStandaloneReportIT | HTTP Request | text/plain  ×1  # AllureMockMvcInstrumentation
