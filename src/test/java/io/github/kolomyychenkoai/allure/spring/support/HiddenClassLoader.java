@@ -30,8 +30,19 @@ public final class HiddenClassLoader extends URLClassLoader {
         this.hidden = hidden;
     }
 
-    /** Загрузчик, в котором не видно классов с указанными префиксами имени. */
+    /**
+     * Загрузчик, в котором не видно классов с указанными префиксами имени.
+     * <p>
+     * ⚠️ Перед созданием ОБЯЗАТЕЛЬНО ставим настоящую инструментацию
+     * ({@link ListenerLifecycle#ensureRealInstrumentationInstalled()}). Этот загрузчик тянет
+     * ВЕСЬ classpath, то есть заводит собственные копии AssertJ, WireMock, Spring и прочего.
+     * После закрытия эти классы остаются в JVM до сборки мусора, и если байткод-агент встанет
+     * ПОЗЖЕ, его обход загруженных классов сорвётся на них ({@code NoSuchTypeException}) —
+     * модули молча потеряют шаги на весь прогон. Гарантия висит здесь, а не в тестах: опасность
+     * создаёт этот класс, значит и страховка его. Подробности и замер — в javadoc того метода.
+     */
     public static HiddenClassLoader hiding(String... prefixes) {
+        ListenerLifecycle.ensureRealInstrumentationInstalled();
         return new HiddenClassLoader(classpath(), List.of(prefixes));
     }
 

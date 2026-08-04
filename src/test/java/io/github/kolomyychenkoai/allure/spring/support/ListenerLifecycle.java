@@ -2,16 +2,24 @@ package io.github.kolomyychenkoai.allure.spring.support;
 
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Array;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 /**
  * Прогоняет ВСЕ хуки {@code TestExecutionListener} в чужом загрузчике — чтобы проверить, что
@@ -32,7 +40,67 @@ public final class ListenerLifecycle {
             "beforeTestClass", "prepareTestInstance", "beforeTestMethod", "beforeTestExecution",
             "afterTestExecution", "afterTestMethod", "afterTestClass");
 
+    private static final String PACKAGE = "io.github.kolomyychenkoai.allure.spring.";
+
+    private static final AtomicBoolean REAL_INSTRUMENTATION = new AtomicBoolean();
+
     private ListenerLifecycle() {
+    }
+
+    /**
+     * Ставит НАСТОЯЩУЮ инструментацию в основном загрузчике — до того, как в JVM появятся
+     * временные загрузчики.
+     * <p>
+     * <b>Зачем.</b> Байткод-агент ставится один раз, при первом Spring-тест-классе, и обходит
+     * ВСЕ загруженные классы ({@code RedefinitionStrategy.Reiterating}). Если к этому моменту в
+     * JVM висят классы из уже ЗАКРЫТОГО загрузчика, ByteBuddy не может разрешить их описания —
+     * {@code NoSuchTypeException: Cannot resolve type description for org.assertj.core.api.Assert} —
+     * и трансформация этих типов срывается. Наши модули (ассерты, JDBC, WireMock, RestTemplate,
+     * MockMvc) молча теряют шаги на ВЕСЬ прогон.
+     * <p>
+     * Замерено: 20 полных прогонов со случайным порядком классов, ровно один красный — тот
+     * единственный, где {@code ListenerDegradationTest} отработал РАНЬШЕ первого Spring-теста
+     * (30 упавших тестов в семи классах). Корреляция 20/20.
+     * <p>
+     * Поэтому гарантия висит на {@link HiddenClassLoader#hiding}: опасность создаёт он, там же и
+     * страхуемся. Идемпотентно, один раз на JVM. Установка «на всякий случай» тест не роняет:
+     * если что-то пошло не так, настоящие листенеры всё равно поставят своё на первом
+     * Spring-классе, а сорванные трансформации поймает гейт {@code InstrumentationFailures}.
+     */
+    static void ensureRealInstrumentationInstalled() {
+        if (!REAL_INSTRUMENTATION.compareAndSet(false, true)) {
+            return;
+        }
+        ClassLoader app = ListenerLifecycle.class.getClassLoader();
+        for (String listener : registeredListeners(app)) {
+            try {
+                Class<?> listenerType = Class.forName(listener, true, app);
+                Class<?> contextType = Class.forName("org.springframework.test.context.TestContext", true, app);
+                listenerType.getMethod("beforeTestClass", contextType).invoke(
+                        listenerType.getDeclaredConstructor().newInstance(),
+                        proxy(app, contextType, new TestContextStub(app, listenerType)));
+            } catch (Throwable degraded) {
+                System.err.println("ПРЕДУСТАНОВКА ИНСТРУМЕНТАЦИИ: " + listener + " — " + degraded);
+            }
+        }
+    }
+
+    /** Наши листенеры из НАСТОЯЩЕГО {@code spring.factories} — источник правды один. */
+    public static Set<String> registeredListeners(ClassLoader loader) {
+        URL url = loader.getResource("META-INF/spring.factories");
+        if (url == null) {
+            return Set.of();
+        }
+        String text;
+        try (InputStream in = url.openStream()) {
+            text = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new IllegalStateException("не прочитать spring.factories", e);
+        }
+        return Arrays.stream(text.replace("\\", "").split("[\\r\\n,]+"))
+                .map(String::trim)
+                .filter(line -> line.startsWith(PACKAGE))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     /**

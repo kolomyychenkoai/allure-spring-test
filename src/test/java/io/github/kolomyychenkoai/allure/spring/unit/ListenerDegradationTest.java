@@ -8,12 +8,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -123,20 +117,11 @@ class ListenerDegradationTest {
                 .allSatisfy(listener -> assertThat(covered).contains(listener));
     }
 
-    /** Листенеры из настоящего {@code spring.factories} — источник правды один. */
+    /** Листенеры из настоящего {@code spring.factories} — источник правды один (живёт в support). */
     private static Set<String> registeredListeners() {
-        URL url = ListenerDegradationTest.class.getClassLoader()
-                .getResource("META-INF/spring.factories");
-        assertThat(url).as("META-INF/spring.factories должен быть на classpath").isNotNull();
-        String text;
-        try (InputStream in = url.openStream()) {
-            text = new String(in.readAllBytes(), StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            throw new IllegalStateException("не прочитать spring.factories", e);
-        }
-        return Arrays.stream(text.replace("\\", "").split("[\\r\\n,]+"))
-                .map(String::trim)
-                .filter(line -> line.startsWith(PACKAGE))
-                .collect(Collectors.toCollection(LinkedHashSet::new));
+        Set<String> listeners = ListenerLifecycle.registeredListeners(
+                ListenerDegradationTest.class.getClassLoader());
+        assertThat(listeners).as("META-INF/spring.factories должен быть на classpath").isNotEmpty();
+        return listeners;
     }
 }
