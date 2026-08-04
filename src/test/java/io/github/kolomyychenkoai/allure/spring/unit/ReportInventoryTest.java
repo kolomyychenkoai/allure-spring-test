@@ -419,17 +419,23 @@ class ReportInventoryTest {
         }
 
         @Test
-        @DisplayName("вложение без файла в гигиену тел не попадает (об этом говорит missingFiles)")
+        @DisplayName("вложение без файла: диагноз ровно ОДИН — про отсутствие файла, не про мусор")
         void missingBodyNotDiagnosedTwice(@TempDir Path dir) throws IOException {
+            // Рядом кладём вложение с настоящим мусором в теле: без него тест был бы
+            // демонстрацией — «пусто» получалось бы и от сломанной гигиены тоже.
+            Files.writeString(dir.resolve("dirty-attachment.txt"), "  [0]: [B@4a3f2b1c", StandardCharsets.UTF_8);
             Files.writeString(dir.resolve("a-result.json"), """
                     {"labels":[{"name":"testClass","value":"io.github.kolomyychenkoai.allure.spring.demo.KafkaReportIT"}],
-                     "attachments":[{"name":"DB Result","type":"text/plain","source":"нет-такого.txt"}]}
+                     "attachments":[{"name":"DB Result","type":"text/plain","source":"нет-такого.txt"},
+                                    {"name":"Mock Call","type":"text/plain","source":"dirty-attachment.txt"}]}
                     """, StandardCharsets.UTF_8);
 
             Scan scan = ReportInventory.scan(dir);
 
-            assertThat(scan.missingFiles()).hasSize(1);
-            assertThat(scan.dirtyBodies()).isEmpty();
+            assertThat(scan.missingFiles()).singleElement().asString().contains("DB Result");
+            // гигиена тел жива и видит соседа — но про пропавший файл второй раз не говорит
+            assertThat(scan.dirtyBodies()).singleElement().asString()
+                    .contains("Mock Call").doesNotContain("DB Result");
         }
 
         @Test
