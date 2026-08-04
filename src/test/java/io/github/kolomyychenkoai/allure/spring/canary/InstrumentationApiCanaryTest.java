@@ -421,20 +421,24 @@ class InstrumentationApiCanaryTest {
     }
 
     @Test
-    @DisplayName("прогон идёт на ТОЙ JVM, которую заказал профиль (compat-профиль обязан доказывать)")
+    @DisplayName("прогон идёт на ТОЙ JVM, под которую собираемся (иначе «проверено на 25» — слово)")
     void runsOnExpectedJvm() {
-        // Профиль java25 форкает surefire на другой JDK через <jvm>${java25.home}/bin/java.
-        // Ошибись путём — тесты пойдут на 21, профиль будет зелёным, и строка «проверено до 25»
-        // в README станет неправдой. Свойство приезжает из профиля; без него проверка не идёт
-        // (обычный прогон не заказывает конкретную версию и ничего про неё не обещает).
+        // Библиотека собирается под release=25, и свойство приезжает из ОБЩЕЙ конфигурации
+        // surefire — то есть проверка идёт в каждом прогоне, а не по особому профилю.
+        // Зачем: JAVA_HOME у Maven и <jvm> у surefire — разные вещи, собраться под 25 и
+        // прогнаться на другой JVM технически можно, и тогда весь прогон ничего не доказывает
+        // про заявленную границу. Версия JDK для проекта закреплена файлом .java-version (jenv).
+        //
+        // Пустое свойство НЕ считаем «всё хорошо»: ветки «не смог проверить → зелено» у
+        // детектора быть не должно (то же правило, что у проверки формата классов выше).
         String expected = System.getProperty("expected.java.feature");
-        if (expected == null || expected.isBlank()) {
-            return;
-        }
+        require(expected != null && !expected.isBlank(),
+                "expected.java.feature не задан → прогон не подтверждает версию JVM. "
+                        + "Свойство живёт в общей конфигурации surefire (стережёт unit/PomCompatibilityTest)");
         int actual = Runtime.version().feature();
         require(String.valueOf(actual).equals(expected.trim()),
-                "профиль заказывал Java " + expected + ", а тесты идут на " + actual
-                        + " → проверь java25.home (-Djava25.home=$(jenv prefix 25)). "
+                "собираемся под Java " + expected + ", а тесты идут на " + actual
+                        + " → проверь .java-version / jenv (`jenv local`). "
                         + "Пока не совпало, прогон НИЧЕГО не доказывает про заявленную границу");
     }
 
