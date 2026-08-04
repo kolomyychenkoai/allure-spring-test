@@ -68,6 +68,24 @@ class AllureMockitoReportIT {
     }
 
     @Test
+    @DisplayName("аргумент-МАССИВ печатается поэлементно, а не как [B@хэш")
+    void arrayArgumentIsRenderedElementwise() {
+        // Витрина ради ГЕЙТА: гигиена тел вложений стережёт структурный мусор, но доказать её
+        // сквозной мутацией можно только на значении, которое без чистки таким мусором и станет.
+        // Массив — самый частый такой случай (byte[] ключи, id, чек-суммы).
+        Pricing pricing = Mockito.mock(Pricing.class);
+        byte[] sku = {1, 2, 3};
+        Mockito.when(pricing.bulk(sku)).thenReturn(30.0);
+        new PricingCaller().callBulk(pricing, sku);
+
+        String call = CurrentReport.attachmentContent("Mock Call").orElse("");
+        CurrentReport.check(call.contains("[1, 2, 3]"),
+                () -> "аргумент-массив обязан быть поэлементным в теле вложения: " + call);
+        CurrentReport.check(!call.contains("[B@"),
+                () -> "в теле вложения toString массива — чинить AllureAdviceSupport.safeValue: " + call);
+    }
+
+    @Test
     @DisplayName("verify(times(2)): кратность вызова в имени шага проверки")
     void verifyCountTwo() {
         Pricing pricing = Mockito.mock(Pricing.class);

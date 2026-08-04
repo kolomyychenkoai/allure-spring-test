@@ -17,8 +17,10 @@
 
 [steps]
 AllureMockitoReportIT | Конфиги приложения  ×1  # AllureConfigurationListener
+AllureMockitoReportIT | Мок-вызов: Pricing.bulk(<ARGS>) → <V>  # AllureMockitoHandler (аргумент-массив для гейта гигиены тел)
 AllureMockitoReportIT | Мок-вызов: Pricing.price(<ARGS>) → <V>  # AllureMockitoHandler
 AllureMockitoReportIT | Мок-вызов: Pricing.total(<ARGS>) → <V>  ×1  # AllureMockitoHandler
+AllureMockitoReportIT | Мок-заглушка: Pricing.bulk(<ARGS>)  # AllureMockitoHandler (аргумент-массив для гейта гигиены тел)
 AllureMockitoReportIT | Мок-заглушка: Pricing.price(<ARGS>)  ×1  # AllureMockitoHandler
 AllureMockitoReportIT | Мок-заглушка: Pricing.total(<ARGS>)  ×1  # AllureMockitoHandler
 AllureMockitoReportIT | Мок-проверка: Pricing.price(<ARGS>) (ожидали ×<N>)  ×1  # AllureMockitoHandler

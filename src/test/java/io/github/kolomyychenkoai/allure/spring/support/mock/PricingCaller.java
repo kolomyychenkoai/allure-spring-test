@@ -13,4 +13,8 @@ public class PricingCaller {
     public double callTotal(Pricing pricing, String product, int quantity) {
         return pricing.total(product, quantity);
     }
+
+    public double callBulk(Pricing pricing, byte[] sku) {
+        return pricing.bulk(sku);
+    }
 }
