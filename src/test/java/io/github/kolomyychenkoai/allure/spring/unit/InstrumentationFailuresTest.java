@@ -54,7 +54,7 @@ class InstrumentationFailuresTest {
     void realFailureIsReported(@TempDir Path dir) throws Exception {
         dump(dir, "jvm-1.txt", """
                 installed=true
-                transformed=10
+                transformed=117
                 failures=1
                 failure: org.assertj.core.api.ListAssert → IllegalStateException: Cannot catch exception
                 """);
@@ -62,6 +62,26 @@ class InstrumentationFailuresTest {
         assertThat(report(dir))
                 .contains("org.assertj.core.api.ListAssert")
                 .contains("НЕ «матчер не совпал»");
+    }
+
+
+    @Test
+    @DisplayName("агент встал, ошибок нет, а трансформаций почти ноль — красный (позитивный сигнал)")
+    void transformedFloorIsGuarded(@TempDir Path dir) throws Exception {
+        // Самый тихий исход апгрейда: матчеры заданы СТРОКАМИ и просто перестают совпадать.
+        // Сбоев при этом нет, installed=true — без пола гейт молчал бы при мёртвом перехвате.
+        dump(dir, "jvm-1.txt", "installed=true\ntransformed=3\nfailures=0\n");
+
+        assertThat(report(dir)).contains("применено трансформаций 3").contains("матчеры почти ничего не нашли");
+    }
+
+    @Test
+    @DisplayName("трансформации СУММИРУЮТСЯ по JVM (у прогона инвентаря их ноль, и это норма)")
+    void transformedSumsAcrossJvms(@TempDir Path dir) throws Exception {
+        dump(dir, "jvm-1.txt", "installed=true\ntransformed=117\nfailures=0\n");
+        dump(dir, "jvm-2.txt", "installed=false\ntransformed=0\nfailures=0\n");
+
+        assertThat(report(dir)).isNull();
     }
 
     @Test
@@ -100,6 +120,7 @@ class InstrumentationFailuresTest {
         // проглатывать нельзя — иначе список-глушитель начнёт гасить реальные поломки
         dump(dir, "jvm-1.txt", """
                 installed=true
+                transformed=117
                 failures=1
                 failure: org.assertj.core.api.ListAssert → IllegalStateException: не удалось из-за MockMethodAdvice
                 """);
@@ -112,7 +133,7 @@ class InstrumentationFailuresTest {
     void suppressionCeilingIsGuarded(@TempDir Path dir) throws Exception {
         // подавление узкое, но если ту же причину начнут давать и абстрактные предки AssertJ
         // (сейчас они вплетаются успешно), картина изменится принципиально при зелёном гейте
-        StringBuilder dump = new StringBuilder("installed=true\n");
+        StringBuilder dump = new StringBuilder("installed=true\ntransformed=117\n");
         for (int i = 0; i < 200; i++) {
             dump.append("failure: org.mockito.internal.creation.bytebuddy.MockMethodAdvice")
                     .append(" → NoSuchTypeException: MockMethodDispatcher\n");

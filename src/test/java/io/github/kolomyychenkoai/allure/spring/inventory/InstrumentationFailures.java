@@ -56,6 +56,18 @@ final class InstrumentationFailures {
      */
     private static final int SUPPRESSED_CEILING = 5;
 
+    /**
+     * Пол реально применённых трансформаций. Сегодня их 145–151 (замер на трёх прогонах).
+     * <p>
+     * Зачем: сценарий «агент встал, ошибок нет, а матчеры не совпали ни разу» гейт сбоев
+     * пропускал — {@code transformed} писался в дамп и не проверялся ничем. Это самый тихий
+     * исход апгрейда: перехват формально жив, а в отчёт не попадает НИЧЕГО.
+     * <p>
+     * Порог с большим запасом: число зависит от того, какие классы успели загрузиться, и
+     * дрожит от прогона к прогону. Ловим обвал, а не дрожание.
+     */
+    private static final int TRANSFORMED_FLOOR = 50;
+
     private static final String ARROW = " → ";
 
     private InstrumentationFailures() {
@@ -72,6 +84,7 @@ final class InstrumentationFailures {
         }
         boolean installed = false;
         int suppressed = 0;
+        int transformed = 0;
         boolean truncated = false;
         Set<String> failures = new LinkedHashSet<>();
         for (Path dump : dumps) {
@@ -83,6 +96,7 @@ final class InstrumentationFailures {
             }
             installed |= lines.contains("installed=true");
             truncated |= lines.contains("sample_truncated=true");
+            transformed += number(lines, "transformed=");
             List<String> all = lines.stream()
                     .filter(line -> line.startsWith("failure: "))
                     .map(line -> line.substring("failure: ".length()))
@@ -90,13 +104,21 @@ final class InstrumentationFailures {
             all.stream().filter(InstrumentationFailures::ours).forEach(failures::add);
             suppressed += (int) all.stream().filter(failure -> !ours(failure)).count();
         }
-        if (installed && failures.isEmpty() && suppressed <= SUPPRESSED_CEILING && !truncated) {
+        if (installed && failures.isEmpty() && suppressed <= SUPPRESSED_CEILING && !truncated
+                && transformed >= TRANSFORMED_FLOOR) {
             return null;
         }
         StringBuilder out = new StringBuilder("СБОИ ПЕРЕХВАТА (байткод-агент):\n");
         if (!installed) {
             out.append("  ✗ агент НЕ установлен НИ В ОДНОЙ JVM — весь байткод-слой мёртв.\n")
                     .append("    Обычно это запрет self-attach: нужен -XX:+EnableDynamicAgentLoading (JEP 451).\n");
+        }
+        if (installed && transformed < TRANSFORMED_FLOOR) {
+            // Позитивный сигнал: агент может встать и не перехватить НИЧЕГО — матчеры заданы
+            // строками, и после апгрейда просто перестают совпадать. Ошибок при этом нет.
+            out.append("  ✗ применено трансформаций ").append(transformed).append(", а пол ")
+                    .append(TRANSFORMED_FLOOR).append(" — агент встал, но матчеры почти ничего не нашли.\n")
+                    .append("    Смотри канарейки: имена классов/методов чужих библиотек уехали.\n");
         }
         if (truncated) {
             // Ограниченный буфер, прочитанный как полная картина, — тихий отказ с отложенным
@@ -115,6 +137,22 @@ final class InstrumentationFailures {
             out.append("  Трансформация сорвалась — это НЕ «матчер не совпал», а падение внутри перехвата.\n");
         }
         return out.toString();
+    }
+
+    /** Число из строки вида {@code ключ=42}; ноль, если строки нет или она не число. */
+    private static int number(List<String> lines, String key) {
+        return lines.stream()
+                .filter(line -> line.startsWith(key))
+                .map(line -> line.substring(key.length()).trim())
+                .findFirst()
+                .map(value -> {
+                    try {
+                        return Integer.parseInt(value);
+                    } catch (NumberFormatException notANumber) {
+                        return 0;
+                    }
+                })
+                .orElse(0);
     }
 
     private static List<Path> dumps(Path dumpDir) {

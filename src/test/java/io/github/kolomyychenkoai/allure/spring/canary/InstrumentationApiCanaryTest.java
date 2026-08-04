@@ -417,6 +417,24 @@ class InstrumentationApiCanaryTest {
                         + "Подними версию byte-buddy (или включи -Dnet.bytebuddy.experimental=true ОСОЗНАННО)");
     }
 
+    @Test
+    @DisplayName("прогон идёт на ТОЙ JVM, которую заказал профиль (compat-профиль обязан доказывать)")
+    void runsOnExpectedJvm() {
+        // Профиль java25 форкает surefire на другой JDK через <jvm>${java25.home}/bin/java.
+        // Ошибись путём — тесты пойдут на 21, профиль будет зелёным, и строка «проверено до 25»
+        // в README станет неправдой. Свойство приезжает из профиля; без него проверка не идёт
+        // (обычный прогон не заказывает конкретную версию и ничего про неё не обещает).
+        String expected = System.getProperty("expected.java.feature");
+        if (expected == null || expected.isBlank()) {
+            return;
+        }
+        int actual = Runtime.version().feature();
+        require(String.valueOf(actual).equals(expected.trim()),
+                "профиль заказывал Java " + expected + ", а тесты идут на " + actual
+                        + " → проверь java25.home (-Djava25.home=$(jenv prefix 25)). "
+                        + "Пока не совпало, прогон НИЧЕГО не доказывает про заявленную границу");
+    }
+
     /** Объявлен ли метод ИМЕННО в этом классе иерархии (ByteBuddy вплетает только в объявителя). */
     private static boolean declaredIn(String className, String method, Class<?> paramType, String expectedDeclarer) {
         try {

@@ -525,6 +525,12 @@
                         <artifactId>maven-surefire-plugin</artifactId>
                         <configuration>
                             <jvm>${java25.home}/bin/java</jvm>
+                            <systemPropertyVariables>
+                                <!-- Без этого профиль ничего не ДОКАЗЫВАЕТ: укажи java25.home на
+                                     JDK 21 — и он зеленеет, а строка «проверено до 25» в README
+                                     врёт. Канарейка сверяет число с Runtime.version().feature(). -->
+                                <expected.java.feature>25</expected.java.feature>
+                            </systemPropertyVariables>
                         </configuration>
                     </plugin>
                 </plugins>

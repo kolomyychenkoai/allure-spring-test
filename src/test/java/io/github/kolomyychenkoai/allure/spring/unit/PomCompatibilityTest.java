@@ -79,6 +79,33 @@ class PomCompatibilityTest {
     }
 
     @Test
+    @DisplayName("maven.compiler.release=21 — объявленный минимум Java под стражем")
+    void compilerReleaseMatchesDeclaredMinimum() throws IOException {
+        // README объявляет минимумом Java 21, и это единственная граница совместимости,
+        // у которой не было стража: остальные (compat.*) сверяет тест выше, а release мог
+        // уехать на 25 незаметно — и молча поднять пол ВСЕМ потребителям. Компилятор об этом
+        // не скажет: сборка станет только зеленее.
+        assertThat(outsideProfiles(pom()))
+                .as("release задаёт нижнюю границу Java для потребителя — меняется вместе с "
+                        + "таблицей поддерживаемых версий в README, а не отдельно")
+                .contains("<maven.compiler.release>21</maven.compiler.release>");
+    }
+
+    @Test
+    @DisplayName("профиль java25 доказывает, на какой JVM он шёл (иначе граница держится на пути)")
+    void java25ProfileDeclaresExpectedJvm() throws IOException {
+        // Если java25.home указывает на другой JDK, профиль зеленеет НИЧЕГО не проверив,
+        // а строка «проверено до 25» в README врёт. Свойство едет в тест, канарейка сверяет
+        // его с Runtime.version() — тем же приёмом, что и границы Allure.
+        String pom = pom();
+        int profile = pom.indexOf("<id>java25</id>");
+        assertThat(profile).as("профиль java25 должен существовать").isNotNegative();
+        assertThat(pom.substring(profile, Math.min(pom.length(), profile + 2000)))
+                .as("профиль обязан объявлять ожидаемую версию JVM, иначе он ничего не доказывает")
+                .contains("<expected.java.feature>25</expected.java.feature>");
+    }
+
+    @Test
     @DisplayName("транзитивно навязываемая зависимость ровно ОДНА — allure-java-commons")
     void singleCompileScopeDependency() throws IOException {
         // Каждая compile-зависимость — это версия, которую мы навязываем чужому дереву. Сейчас
