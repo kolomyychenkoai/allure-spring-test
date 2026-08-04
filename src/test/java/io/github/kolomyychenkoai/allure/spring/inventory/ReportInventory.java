@@ -832,6 +832,14 @@ public final class ReportInventory {
     public static Map<Kind, Count> seedCounts(Scan scan, Baseline previous) {
         Map<Kind, Count> counts = new TreeMap<>(previous.counts());
         scan.perCase().forEach((kind, range) -> {
+            if (ANY_OWNER.equals(kind.owner())) {
+                // Маркеры на «*»-видах НЕ ставим. Технически counts/shapes ищут наблюдения по
+                // ТОЧНОМУ Kind, включая владельца, а скан ключует конкретным классом — для «*»
+                // поиск всегда промахнулся бы, и маркер молча не проверялся. Смыслово: «*» ставят
+                // там, где привязка вида к классу ПЛАВАЕТ, и требовать жёсткую кратность или форму
+                // от такого вида нечего. Мёртвых маркеров не заводим вовсе.
+                return;
+            }
             // Разброс МЕЖДУ кейсами → «×≥min»: число решает чужая библиотека (сколько SELECT сделает
             // Hibernate), жёстко пиннить нечего. Одинаковое число → «×N»: именно оно ловит ЗАДВОЕНИЕ,
             // ради которого кратность и заведена.
@@ -864,6 +872,14 @@ public final class ReportInventory {
     public static Map<Kind, Shape> seedShapes(Scan scan, Baseline previous) {
         Map<Kind, Shape> shapes = new TreeMap<>(previous.shapes());
         scan.shapes().forEach((kind, stat) -> {
+            if (ANY_OWNER.equals(kind.owner())) {
+                // Маркеры на «*»-видах НЕ ставим. Технически counts/shapes ищут наблюдения по
+                // ТОЧНОМУ Kind, включая владельца, а скан ключует конкретным классом — для «*»
+                // поиск всегда промахнулся бы, и маркер молча не проверялся. Смыслово: «*» ставят
+                // там, где привязка вида к классу ПЛАВАЕТ, и требовать жёсткую кратность или форму
+                // от такого вида нечего. Мёртвых маркеров не заводим вовсе.
+                return;
+            }
             boolean stable = stat.seen().size() == 1 && stat.observations() >= MIN_OBSERVATIONS;
             if (stable && stat.seen().contains(Shape.MULTILINE)) {
                 shapes.put(kind, Shape.MULTILINE);

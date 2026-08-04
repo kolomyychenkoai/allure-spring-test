@@ -35,6 +35,36 @@ class PomCompatibilityTest {
     }
 
     @Test
+    @DisplayName("профиль второго прогона на месте — иначе ВСЯ вторая половина сетки молчит")
+    void inventoryProfileIsWiredUp() throws IOException {
+        // Второй прогон surefire несёт самые сильные гейты проекта: сверку с эталоном, гигиену
+        // имён и ТЕЛ вложений, InstrumentationFailures, кратность, форму. Всё это выполняется
+        // только если профиль активировался — и всё это молча НЕ выполняется, если профиль
+        // сломать, удалить или просто гонять `mvn test -Dtest=…`. Сборка при этом зелёная.
+        //
+        // Проверка статическая: «прогон реально был» изнутри JVM не узнать (инвентарь живёт
+        // в ДРУГОЙ JVM и стартует после). Зато она ловит самый вероятный регресс — правку pom.
+        String pom = pom();
+        int at = pom.indexOf("<id>report-inventory</id>");
+        assertThat(at)
+                .as("профиль report-inventory исчез — вместе с ним пропали сверка с эталоном, "
+                        + "гигиена имён и тел, гейт сбоев перехвата, кратность и форма")
+                .isNotNegative();
+
+        String profile = pom.substring(at, Math.min(pom.length(), at + 2000));
+        assertThat(profile)
+                .as("активация по отсутствию `test`: иначе точечный `-Dtest=…` гонял бы инвентарь "
+                        + "на неполных данных, а полный прогон — дважды")
+                .contains("<name>!test</name>");
+        assertThat(profile)
+                .as("execution обязан включать сам детектор — без include профиль пустой")
+                .contains("ReportInventoryCheck.java");
+        assertThat(profile)
+                .as("детектор должен исполняться в фазе test, иначе результатов ещё нет")
+                .contains("<phase>test</phase>");
+    }
+
+    @Test
     @DisplayName("inventory.compare=off допустим ТОЛЬКО внутри compat-профилей")
     void compareOffOnlyInsideCompatProfiles() throws IOException {
         // Единственный флаг проекта, делающий детектор зеленее. Остальные (update/remove) всегда

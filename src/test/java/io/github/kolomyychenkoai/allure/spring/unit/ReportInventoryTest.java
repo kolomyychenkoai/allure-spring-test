@@ -625,6 +625,26 @@ class ReportInventoryTest {
         }
 
         @Test
+        @DisplayName("на «*»-виды маркеры НЕ сеются — иначе они были бы мёртвыми")
+        void noMarkersOnAnyOwner() {
+            // Ловушка была латентной: counts/shapes ищут наблюдения по ТОЧНОМУ Kind, включая
+            // владельца, а скан ключует конкретным классом. Значит маркер на «*»-виде никогда
+            // не проверялся бы — вечно-зелёный маркер, худший исход. Теперь их просто не сеют.
+            Kind any = kind(ReportInventory.ANY_OWNER, "Значение сообщения | application/json");
+            Scan scan = new Scan(new TreeSet<>(), new TreeSet<>(), Set.of("KafkaReportIT"), 1,
+                    List.of(), List.of(), List.of(),
+                    Map.of(any, new Range(1, 1)),
+                    List.of(),
+                    Map.of(any, stat(ReportInventory.Shape.MULTILINE, ReportInventory.Shape.MULTILINE)));
+            Baseline previous = new Baseline(Set.of(), Set.of(), Set.of(), Map.of());
+
+            assertThat(ReportInventory.seedCounts(scan, previous))
+                    .as("кратность на «*»-виде проверить нечем — не сеем").doesNotContainKey(any);
+            assertThat(ReportInventory.seedShapes(scan, previous))
+                    .as("форма на «*»-виде проверить нечем — не сеем").doesNotContainKey(any);
+        }
+
+        @Test
         @DisplayName("посев: стабильная форма получает маркер, плавающая — теряет")
         void seedMarksOnlyStable() {
             Kind stable = kind("KafkaReportIT", "Значение сообщения | application/json");

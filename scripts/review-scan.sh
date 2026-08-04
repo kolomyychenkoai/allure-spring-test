@@ -21,15 +21,24 @@ hdr() { printf '\n\033[1m%s\033[0m\n%s\n' "$1" "$(printf '─%.0s' $(seq 1 ${#1}
 # Это ровно та болезнь, которую проект зовёт вечно-зелёным детектором, поэтому пустота
 # ОБЪЯВЛЯЕТСЯ. Заодно считаем непустые секции: ноль находок на большом дифе — само по себе
 # подозрительно и стоит проверки скрипта, а не вывода.
-FOUND=0
+# Счётчик держим в ФАЙЛЕ, а не в переменной: show вызывается на конце пайпа, то есть в
+# подоболочке — присваивание в ней родителю не видно, и счётчик молча остался бы нулём.
+COUNTER=$(mktemp)
+printf '0 0' > "$COUNTER"
+trap 'rm -f "$COUNTER"' EXIT
+
 show() {
-    local out; out=$(cat)
+    local out total found
+    out=$(cat)
+    read -r total found < "$COUNTER"
+    total=$((total + 1))
     if [ -z "$out" ]; then
         printf '  (пусто)\n'
     else
         printf '%s\n' "$out"
-        FOUND=$((FOUND + 1))
+        found=$((found + 1))
     fi
+    printf '%s %s' "$total" "$found" > "$COUNTER"
 }
 
 echo "Скан ревью: $RANGE"
@@ -83,6 +92,13 @@ for f in src/test/inventory/report-inventory.txt README.md docs/upgrade-checklis
         printf '  %-42s ИЗМЕНЁН — проверь, что числа и обещания сходятся\n' "$f"
     fi
 done
+
+read -r TOTAL FOUND < "$COUNTER"
+printf '\n\033[1mИтог:\033[0m непустых секций %s из %s\n' "$FOUND" "$TOTAL"
+if [ "$FOUND" -eq 0 ]; then
+    echo "⚠️  НИ ОДНОЙ находки на всём дифе — так почти не бывает."
+    echo "    Сперва проверь сам скрипт (сбор мог сломаться), потом уже радуйся."
+fi
 
 cat <<'HINT'
 
