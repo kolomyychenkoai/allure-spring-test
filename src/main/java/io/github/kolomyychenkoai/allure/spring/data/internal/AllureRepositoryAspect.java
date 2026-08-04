@@ -178,6 +178,12 @@ public class AllureRepositoryAspect {
     /** Не раздуваем отчёт на больших выборках. */
     private static final int ITEMS_CAP = 20;
 
+    /**
+     * Потолок ОБХОДА (не показа): дальше не считаем даже элементы. Число в отчёте — справка,
+     * ради неё нельзя вычерпывать источник: он бывает ленивым и одноразовым.
+     */
+    private static final int COUNT_CAP = 1_000;
+
     private String formatResponse(Object result) {
         if (result == null) {
             return "void";
@@ -202,15 +208,25 @@ public class AllureRepositoryAspect {
         if (result instanceof Iterable<?> iterable) {
             List<Object> items = new ArrayList<>();
             int total = 0;
+            boolean capped = false;
             for (Object item : iterable) {
+                // Обход ОГРАНИЧЕН: пересчитывать источник целиком ради строчки «всего N» нельзя.
+                // Page/Slice/Window ограничены страницей, но ленивая обёртка — нет, и полный
+                // проход означал бы и лишнюю работу, и риск вычерпать чужой одноразовый источник
+                // (для BaseStream отдельный гейт выше, но Streamable вокруг потока им не ловится).
+                if (total >= COUNT_CAP) {
+                    capped = true;
+                    break;
+                }
                 total++;
                 if (items.size() < ITEMS_CAP) {
                     items.add(item);
                 }
             }
             String body = items.stream().map(this::describe).collect(Collectors.joining("\n"));
-            String more = total > items.size() ? "\n… и ещё " + (total - items.size()) : "";
-            return paging(result, total) + "\n\n" + body + more;
+            String more = total > items.size()
+                    ? "\n… и ещё " + (capped ? "≥" : "") + (total - items.size()) : "";
+            return paging(result, total, capped) + "\n\n" + body + more;
         }
         return describe(result);
     }
@@ -220,8 +236,8 @@ public class AllureRepositoryAspect {
      * УТИНОЙ типизацией (геттеры по имени) — чтобы не тащить spring-data в compile-classpath.
      * Нет таких геттеров (обычный Iterable/Streamable) — просто размер.
      */
-    private String paging(Object result, int total) {
-        StringBuilder head = new StringBuilder("Iterable size: " + total);
+    private String paging(Object result, int total, boolean capped) {
+        StringBuilder head = new StringBuilder("Iterable size: " + (capped ? "≥" : "") + total);
         try {
             Object number = invokeIfPresent(result, "getNumber");
             Object totalPages = invokeIfPresent(result, "getTotalPages");

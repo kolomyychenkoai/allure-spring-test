@@ -68,7 +68,7 @@ class MovedCustomizerRegistrarTest {
 
         assertThat(registry.getBeanDefinitionNames())
                 .as("на каждый доступный тип должен быть свой бин, иначе Boot соберёт не тот")
-                .containsExactlyInAnyOrder("allureCustomizer", "allureCustomizer#1");
+                .containsExactlyInAnyOrder("allureCustomizer", "allureCustomizerAlt1");
     }
 
     @Test

@@ -32,6 +32,14 @@ public final class AllureAdviceSupport {
     /** Предел длины значения в имени шага — чтобы тяжёлый toString не раздувал отчёт. */
     private static final int MAX_LEN = 500;
 
+    /**
+     * Предел длины значения во ВЛОЖЕНИИ. На три порядка больше, чем у имени шага: во вложение
+     * идут за содержанием, и резать его по 500 — это и была та деградация, из-за которой
+     * {@link #safeValue} появился. Но совсем без потолка одно поле {@code @Lob} превращает
+     * вложение в мегабайты, поэтому граница есть — просто далеко.
+     */
+    private static final int MAX_VALUE_LEN = 500_000;
+
     private AllureAdviceSupport() {
     }
 
@@ -102,7 +110,16 @@ public final class AllureAdviceSupport {
      * имени шага. Для СЫРОГО тела (JSON, payload) нужен {@link #render} — там чистка не нужна.
      */
     public static String safeValue(Object value) {
-        return clean(value);
+        String s = clean(value);
+        if (s.length() <= MAX_VALUE_LEN) {
+            return s;
+        }
+        // Потолок МЯГКИЙ и очень высокий: он не про читаемость (её решает содержание), а про
+        // то, чтобы одно жирное поле сущности (@Lob, JSON-колонка, blob-в-строке) не раздуло
+        // вложение на мегабайты. Обрезка НАЗВАНА, а не сделана молча.
+        return s.substring(0, MAX_VALUE_LEN)
+                + "\n… обрезано: значение " + s.length() + " символов, показан первый "
+                + MAX_VALUE_LEN;
     }
 
     /** Общий конвейер чистки для {@link #safe} и {@link #safeValue}. Никогда не бросает и не {@code null}. */

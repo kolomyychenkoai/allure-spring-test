@@ -101,14 +101,21 @@ public final class ActivationDiagnostics {
         if ("off".equalsIgnoreCase(System.getProperty(SWITCH)) || !REPORTED.compareAndSet(false, true)) {
             return;
         }
-        // ByteBuddyClassFormat трогаем ТОЛЬКО за гардом: он линкует типы byte-buddy, и без
-        // библиотеки обращение к нему уронило бы сам диагност.
-        boolean byteBuddy = ByteBuddyPresence.available();
-        boolean tooOld = byteBuddy && ByteBuddyClassFormat.tooNewForByteBuddy();
-        String version = byteBuddy ? ByteBuddyClassFormat.byteBuddyVersion() : "?";
-        problems(ClassPresence::isPresent, byteBuddy, tooOld, version).forEach(problem ->
-                AllureInstrumentationLogger.logger().warning(
-                        "[Allure Spring] модуль не активирован: " + problem
-                                + " (заглушить: -D" + SWITCH + "=off)"));
+        try {
+            // ByteBuddyClassFormat трогаем ТОЛЬКО за гардом: он линкует типы byte-buddy, и без
+            // библиотеки обращение к нему уронило бы сам диагност.
+            boolean byteBuddy = ByteBuddyPresence.available();
+            boolean tooOld = byteBuddy && ByteBuddyClassFormat.tooNewForByteBuddy();
+            String version = byteBuddy ? ByteBuddyClassFormat.byteBuddyVersion() : "?";
+            problems(ClassPresence::isPresent, byteBuddy, tooOld, version).forEach(problem ->
+                    AllureInstrumentationLogger.logger().warning(
+                            "[Allure Spring] модуль не активирован: " + problem
+                                    + " (заглушить: -D" + SWITCH + "=off)"));
+        } catch (Throwable diagnosticIsNotWorthATest) {
+            // Обещание «прогон не роняем никогда» теперь ГАРАНТИЯ, а не удача реализации:
+            // раньше оно держалось на том, что ClassPresence ловит Throwable внутри себя.
+            // Диагност — вспомогательный сигнал, ронять из-за него чужой тест недопустимо.
+            AllureInstrumentationLogger.warn("ActivationDiagnostics", diagnosticIsNotWorthATest);
+        }
     }
 }

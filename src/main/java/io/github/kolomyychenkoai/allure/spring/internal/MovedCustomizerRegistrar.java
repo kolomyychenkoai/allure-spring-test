@@ -46,9 +46,27 @@ public final class MovedCustomizerRegistrar {
         // «первое найденное» — это лотерея: Spring Boot собирает кастомайзеры строго СВОЕГО типа,
         // и бин чужого типа он просто не увидит. Модуль выключился бы молча — ровно та беда,
         // от которой уходили. Лишний бин безвреден: его тип никто не собирает.
-        List<Class<?>> types = resolveAll(loader, candidateNames);
-        for (int i = 0; i < types.size(); i++) {
-            registerProxy(registry, loader, i == 0 ? beanName : beanName + "#" + i, types.get(i), customize);
+        try {
+            List<Class<?>> types = resolveAll(loader, candidateNames);
+            for (int i = 0; i < types.size(); i++) {
+                // Суффикс БЕЗ «#»: у решётки в Spring особый смысл (внутренние бины,
+                // getBean("name#0")), и имя с ней однажды упрётся в чужой парсер.
+                String name = i == 0 ? beanName : beanName + "Alt" + i;
+                // Имя уже занято — НЕ трогаем: со старым @Bean побеждала пользовательская
+                // конфигурация, и поведение обязано остаться таким же. От МЁРТВОГО контекста
+                // спасает guard ниже (при запрете переопределения регистрация бросает, и он
+                // это съедает); эта проверка про другое — не затереть чужой бин там, где
+                // переопределение разрешено, и не сорить WARNING на ровном месте.
+                if (!registry.containsBeanDefinition(name)) {
+                    registerProxy(registry, loader, name, types.get(i), customize);
+                }
+            }
+        } catch (Throwable degraded) {
+            // Мы в разборе конфигурации: отсюда исключение уходит в старт контекста и роняет
+            // ВСЕ тесты потребителя. Библиотека отчётов не имеет права так делать — тот же
+            // инвариант, ради которого существует unit/ListenerDegradationTest. Модуль просто
+            // выключается, причина видна на WARNING.
+            AllureInstrumentationLogger.warn("CustomizerRegistrar/" + beanName, degraded);
         }
     }
 
