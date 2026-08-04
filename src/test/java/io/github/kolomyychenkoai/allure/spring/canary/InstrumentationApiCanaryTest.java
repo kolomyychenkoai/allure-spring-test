@@ -4,7 +4,10 @@ import io.qameta.allure.Epic;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import io.github.kolomyychenkoai.allure.spring.internal.MovedTypeNames;
+
 import java.lang.reflect.Method;
+import java.util.List;
 
 
 /**
@@ -309,18 +312,10 @@ class InstrumentationApiCanaryTest {
                 "AbstractAssert.actual уехал → обнови @Advice.FieldValue в AllureAssertJInstrumentation");
     }
 
-    /** Известные имена MockMvcBuilderCustomizer: Boot 3.x → Boot 4.x. Порядок = порядок поиска. */
-    private static final String[] MOCKMVC_CUSTOMIZER = {
-            // Boot 3.x, артефакт spring-boot-test-autoconfigure
-            "org.springframework.boot.test.autoconfigure.web.servlet.MockMvcBuilderCustomizer",
-            // Boot 4.x, артефакт org.springframework.boot:spring-boot-webmvc-test
-            "org.springframework.boot.webmvc.test.autoconfigure.MockMvcBuilderCustomizer"};
-
-    private static final String[] WEBTESTCLIENT_CUSTOMIZER = {
-            // Boot 3.x, артефакт spring-boot-test-autoconfigure
-            "org.springframework.boot.test.web.reactive.server.WebTestClientBuilderCustomizer",
-            // Boot 4.x, артефакт org.springframework.boot:spring-boot-webtestclient
-            "org.springframework.boot.webtestclient.autoconfigure.WebTestClientBuilderCustomizer"};
+    // Списки известных имён живут в main (MovedTypeNames) — там же, где их читают автоконфиги
+    // и диагност. Дублировать их здесь нельзя: разъедутся, и канарейка станет стеречь не то.
+    private static final List<String> MOCKMVC_CUSTOMIZER = MovedTypeNames.MOCKMVC_CUSTOMIZER;
+    private static final List<String> WEBTESTCLIENT_CUSTOMIZER = MovedTypeNames.WEBTESTCLIENT_CUSTOMIZER;
 
     @Test
     @DisplayName("Spring Boot: кастомайзеры MockMvc/WebTestClient есть под СТАРЫМ или НОВЫМ именем")
@@ -331,29 +326,25 @@ class InstrumentationApiCanaryTest {
         require(anyPresent(MOCKMVC_CUSTOMIZER),
                 "MockMvcBuilderCustomizer не найден НИ ПОД ОДНИМ известным именем — @ConditionalOnClass "
                         + "в AllureMockMvcAutoConfiguration ложен, кастомайзер МОЛЧА не регистрируется "
-                        + "(остаётся только байткод-канал MockMvc.perform).\n  Boot 3.x: " + MOCKMVC_CUSTOMIZER[0]
-                        + "\n  Boot 4.x: " + MOCKMVC_CUSTOMIZER[1] + "  [spring-boot-webmvc-test]");
+                        + "(остаётся только байткод-канал MockMvc.perform).\n  известные имена: " + MOCKMVC_CUSTOMIZER);
         require(anyPresent(WEBTESTCLIENT_CUSTOMIZER),
                 "WebTestClientBuilderCustomizer не найден НИ ПОД ОДНИМ известным именем — у WebTestClient "
-                        + "байткод-фолбэка НЕТ, шаги исчезнут ПОЛНОСТЬЮ.\n  Boot 3.x: " + WEBTESTCLIENT_CUSTOMIZER[0]
-                        + "\n  Boot 4.x: " + WEBTESTCLIENT_CUSTOMIZER[1] + "  [spring-boot-webtestclient]");
+                        + "байткод-фолбэка НЕТ, шаги исчезнут ПОЛНОСТЬЮ.\n  известные имена: " + WEBTESTCLIENT_CUSTOMIZER);
 
-        // Список имён — СТРОКИ, компилятор их не проверяет. Сверяем со ЗНАЧЕНИЕМ типа, против
-        // которого реально скомпилирован main: если main переедет на имя вне списка — красный
-        // здесь, а не «странно зелёная канарейка при мёртвом модуле».
-        require(java.util.List.of(MOCKMVC_CUSTOMIZER).contains(
-                        org.springframework.boot.test.autoconfigure.web.servlet.MockMvcBuilderCustomizer.class.getName()),
-                "AllureMockMvcAutoConfiguration скомпилирован против имени вне списка — обнови MOCKMVC_CUSTOMIZER");
-        require(java.util.List.of(WEBTESTCLIENT_CUSTOMIZER).contains(
-                        org.springframework.boot.test.web.reactive.server.WebTestClientBuilderCustomizer.class.getName()),
-                "AllureWebTestClientAutoConfiguration скомпилирован против имени вне списка — обнови WEBTESTCLIENT_CUSTOMIZER");
+        // Раньше здесь сверялось, что main скомпилирован против имени ИЗ списка. Теперь main не
+        // компилируется ни против одного: интерфейс поднимается по имени (MovedCustomizerRegistrar),
+        // чтобы один jar работал и на Boot 3, и на Boot 4. Стеречь надо другое — что список не
+        // разъехался с реальностью и наши бины реально зарегистрированы (autoconfig/*Test).
+        require(MOCKMVC_CUSTOMIZER.size() >= 2 && WEBTESTCLIENT_CUSTOMIZER.size() >= 2,
+                "в MovedTypeNames должно остаться хотя бы по два известных имени на кастомайзер "
+                        + "(Boot 3.x и Boot 4.x) — иначе кросс-версионность держится на одном имени");
 
         require(classPresent("org.springframework.test.web.servlet.ResultHandler"),
                 "ResultHandler уехал → AllureMockMvcAutoConfiguration вешает AllureMockMvcResultHandler через него");
     }
 
     /** Есть ли класс хотя бы под одним из известных имён (класс переезжает между мажорами). */
-    private static boolean anyPresent(String... classNames) {
+    private static boolean anyPresent(List<String> classNames) {
         for (String name : classNames) {
             if (classPresent(name)) {
                 return true;

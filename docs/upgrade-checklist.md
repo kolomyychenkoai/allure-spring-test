@@ -27,7 +27,7 @@ Boot 4.1 собран под JDK 17, поэтому оси разделимы. �
 | `installed=true` (self-attach, JEP 451) | да, 151 трансформация |
 | сбои трансформации | 0 (единственная запись — намеренная проба из `InstrumentationDiagnosticsTest`) |
 | WARNING «модуль не активирован» | нет ни одного |
-| уровни A и B (444 теста) | зелёные |
+| уровни A и B (451 тест) | зелёные |
 | инвентарь видов шагов | зелёный, **эталон не сдвинулся ни на строку** |
 
 Инвентарь тут работает как НАСТОЯЩИЙ гейт (в отличие от compat-профилей по версиям библиотек):
@@ -46,9 +46,29 @@ Boot 4.1 собран под JDK 17, поэтому оси разделимы. �
 - `Sharing is only supported for boot loader classes…` — CDS отключается, потому что агент
   дописывает bootstrap classpath. Ожидаемо для любого java-агента.
 
-## Заведомо ручные правки фазы 2
+## Сначала — автоматический рецепт, потом руки
 
-Это НЕ поломки, а известные переезды. Проверено по реальным BOM и jar-ам Boot 4.1.0:
+Механические переезды делает OpenRewrite, а не человек:
+
+```
+mvn -U org.openrewrite.maven:rewrite-maven-plugin:run \
+  -Drewrite.recipeArtifactCoordinates=org.openrewrite.recipe:rewrite-spring:RELEASE \
+  -Drewrite.activeRecipes=org.openrewrite.java.spring.boot4.UpgradeSpringBoot_4_0
+```
+
+Плагин в сборку НЕ добавляем: он нужен один раз за мажор, а постоянная зависимость — это
+ещё одна версия, которую мы навязываем. После прогона сверить результат со списком ниже
+и доделать то, чего рецепт не осилил.
+
+## Ручные правки фазы 2 — только pom
+
+**В `src/main` править нечего.** Оба автоконфига больше не привязаны к переехавшим типам на
+этапе компиляции: интерфейс кастомайзера поднимается ПО ИМЕНИ из
+`internal/MovedTypeNames` (`internal/MovedCustomizerRegistrar`), поэтому один и тот же jar
+работает и на Boot 3.x, и на Boot 4.x. Появится ТРЕТЬЕ имя — дописать его в список, и это
+единственное место.
+
+Остальное — известные переезды, проверено по реальным BOM и jar-ам Boot 4.1.0:
 
 - **`pom.xml`:**
   - `rest-assured` → **6.0.1** (пин уже есть; 5.5.6 собран на Groovy 4, а Boot 4.1 тянет
@@ -59,11 +79,7 @@ Boot 4.1 собран под JDK 17, поэтому оси разделимы. �
   - добавить `spring-boot-webmvc-test` и `spring-boot-webtestclient` (scope `provided`);
   - `spring-boot-test-autoconfigure` в 4.1 — почти пустой артефакт, нужных нам классов там
     больше нет; зависимость можно убрать.
-- **Два импорта в main:**
-  - `rest/AllureMockMvcAutoConfiguration` → `org.springframework.boot.webmvc.test.autoconfigure.MockMvcBuilderCustomizer`;
-  - `rest/AllureWebTestClientAutoConfiguration` → `org.springframework.boot.webtestclient.autoconfigure.WebTestClientBuilderCustomizer`;
-  - те же импорты — в тестах `autoconfig/*`.
-- **Канарейку править НЕ нужно** — `InstrumentationApiCanaryTest` знает оба имени и на Boot 4
+- **Канарейку править НЕ нужно** — `InstrumentationApiCanaryTest` читает список имён из `internal/MovedTypeNames` и на Boot 4
   зеленеет по новому. Если её всё же пришлось править — значит появилось ТРЕТЬЕ имя, добавь
   его в список.
 - **Surefire** поднять под JUnit Platform 6. Проверять `junit-platform.properties` руками больше

@@ -76,6 +76,7 @@ public class AllureConfigurationListener implements TestExecutionListener, Order
         }
     }
 
+
     /**
      * Безопасно резолвит значение свойства: {@code null} → {@code <unset>}, неразрешимый
      * плейсхолдер {@code ${...}} (бросает) → {@code <unresolved>}.

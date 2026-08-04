@@ -62,8 +62,7 @@ public final class ActivationDiagnostics {
         }
 
         boolean mockMvc = present.test("org.springframework.test.web.servlet.MockMvc");
-        boolean mockMvcHook = present.test("org.springframework.boot.test.autoconfigure.web.servlet.MockMvcBuilderCustomizer")
-                || present.test("org.springframework.boot.webmvc.test.autoconfigure.MockMvcBuilderCustomizer");
+        boolean mockMvcHook = MovedTypeNames.MOCKMVC_CUSTOMIZER.stream().anyMatch(present);
         if (mockMvc && !mockMvcHook) {
             problems.add("MockMvc есть на classpath, но MockMvcBuilderCustomizer не найден ни под одним "
                     + "известным именем — авто-кастомайзер не зарегистрирован. "
@@ -75,8 +74,7 @@ public final class ActivationDiagnostics {
         }
 
         boolean webTestClient = present.test("org.springframework.test.web.reactive.server.WebTestClient");
-        boolean webTestClientHook = present.test("org.springframework.boot.test.web.reactive.server.WebTestClientBuilderCustomizer")
-                || present.test("org.springframework.boot.webtestclient.autoconfigure.WebTestClientBuilderCustomizer");
+        boolean webTestClientHook = MovedTypeNames.WEBTESTCLIENT_CUSTOMIZER.stream().anyMatch(present);
         if (webTestClient && !webTestClientHook) {
             problems.add("WebTestClient есть на classpath, но WebTestClientBuilderCustomizer не найден "
                     + "ни под одним известным именем — обмены WebTestClient в отчёт НЕ ПОПАДУТ "
@@ -86,7 +84,19 @@ public final class ActivationDiagnostics {
         return problems;
     }
 
-    /** Один раз на JVM, WARNING в логгер библиотеки; прогон не роняем. */
+    /**
+     * Один раз на JVM, WARNING в логгер библиотеки; прогон не роняем.
+     * <p>
+     * <b>Отвергнутая альтернатива: проверять, зарегистрирован ли НАШ бин-кастомайзер</b>
+     * (по имени, через контекст). Идея была закрыть случай «класс-крючок есть, а наш автоконфиг
+     * собран против другого имени». Замерено — не годится: правило срабатывает на КАЖДОМ
+     * контексте без автоконфигурации ({@code @SpringBootConfiguration} без
+     * {@code @EnableAutoConfiguration} — обычное дело для узких тест-приложений), и WARNING
+     * появлялись в каждом прогоне. А после перехода на резолв интерфейса ПО ИМЕНИ
+     * ({@link MovedCustomizerRegistrar}) сама дыра закрыта конструктивно: имя из списка находится
+     * в любом мажоре. Остаточный риск — ТРЕТЬЕ, неизвестное нам имя — ловит проверка ниже,
+     * она читает тот же список {@link MovedTypeNames}.
+     */
     public static void reportOnce() {
         if ("off".equalsIgnoreCase(System.getProperty(SWITCH)) || !REPORTED.compareAndSet(false, true)) {
             return;
