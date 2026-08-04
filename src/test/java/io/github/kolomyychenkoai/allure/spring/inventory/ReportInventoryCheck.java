@@ -211,7 +211,7 @@ class ReportInventoryCheck {
             out.append("\nКРАТНОСТЬ РАЗЪЕХАЛАСЬ — либо перехват ЗАДВОИЛСЯ, либо витрина изменилась осознанно:\n");
             verdict.countMismatches().forEach(mismatch -> out.append("  × ").append(mismatch.kind())
                     .append(" — ждали ").append(mismatch.expected())
-                    .append(" в каждом кейсе, увидели ").append(mismatch.seen())
+                    .append(" в каждом кейсе, где вид встречался, увидели ").append(mismatch.seen())
                     .append(responsible(baseline, mismatch.kind())).append('\n'));
         }
 

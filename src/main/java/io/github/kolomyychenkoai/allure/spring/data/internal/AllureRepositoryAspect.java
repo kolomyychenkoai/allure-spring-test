@@ -220,8 +220,8 @@ public class AllureRepositoryAspect {
      * УТИНОЙ типизацией (геттеры по имени) — чтобы не тащить spring-data в compile-classpath.
      * Нет таких геттеров (обычный Iterable/Streamable) — просто размер.
      */
-    private String paging(Object result, int shown) {
-        StringBuilder head = new StringBuilder("Iterable size: " + shown);
+    private String paging(Object result, int total) {
+        StringBuilder head = new StringBuilder("Iterable size: " + total);
         try {
             Object number = invokeIfPresent(result, "getNumber");
             Object totalPages = invokeIfPresent(result, "getTotalPages");

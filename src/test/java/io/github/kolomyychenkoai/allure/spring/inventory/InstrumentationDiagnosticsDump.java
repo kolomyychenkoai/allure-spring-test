@@ -51,7 +51,14 @@ public class InstrumentationDiagnosticsDump implements LauncherSessionListener {
         }
     }
 
-    /** Номер форка surefire, если есть; иначе PID — лишь бы JVM не делили один файл. */
+    /**
+     * Идентификатор JVM для имени файла — лишь бы две JVM не делили один.
+     * <p>
+     * На практике работает PID: {@code surefire.forkNumber} — плейсхолдер для интерполяции в
+     * КОНФИГУРАЦИИ плагина ({@code argLine}, {@code systemPropertyVariables}), внутрь форка как
+     * системное свойство он не приезжает, и файлы у нас называются {@code jvm-<pid>.txt}.
+     * Ветку оставляем на случай, если её начнут прокидывать явно, — но рассчитывать надо на PID.
+     */
     private static String jvmId() {
         String fork = System.getProperty("surefire.forkNumber");
         return fork == null || fork.isBlank() ? String.valueOf(ProcessHandle.current().pid()) : fork;
