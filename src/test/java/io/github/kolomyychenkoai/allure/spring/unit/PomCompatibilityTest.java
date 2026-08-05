@@ -109,30 +109,35 @@ class PomCompatibilityTest {
     }
 
     @Test
-    @DisplayName("maven.compiler.release=21 — объявленный минимум Java под стражем")
+    @DisplayName("maven.compiler.release=25 — объявленный минимум Java под стражем")
     void compilerReleaseMatchesDeclaredMinimum() throws IOException {
-        // README объявляет минимумом Java 21, и это единственная граница совместимости,
+        // README объявляет минимумом Java 25, и это единственная граница совместимости,
         // у которой не было стража: остальные (compat.*) сверяет тест выше, а release мог
-        // уехать на 25 незаметно — и молча поднять пол ВСЕМ потребителям. Компилятор об этом
-        // не скажет: сборка станет только зеленее.
+        // уехать незаметно — и молча поднять или опустить пол ВСЕМ потребителям. Компилятор
+        // об этом не скажет: сборка станет только зеленее.
         assertThat(outsideProfiles(pom()))
                 .as("release задаёт нижнюю границу Java для потребителя — меняется вместе с "
                         + "таблицей поддерживаемых версий в README, а не отдельно")
-                .contains("<maven.compiler.release>21</maven.compiler.release>");
+                .contains("<maven.compiler.release>25</maven.compiler.release>");
     }
 
     @Test
-    @DisplayName("профиль java25 доказывает, на какой JVM он шёл (иначе граница держится на пути)")
-    void java25ProfileDeclaresExpectedJvm() throws IOException {
-        // Если java25.home указывает на другой JDK, профиль зеленеет НИЧЕГО не проверив,
-        // а строка «проверено до 25» в README врёт. Свойство едет в тест, канарейка сверяет
-        // его с Runtime.version() — тем же приёмом, что и границы Allure.
-        String pom = pom();
-        int profile = pom.indexOf("<id>java25</id>");
-        assertThat(profile).as("профиль java25 должен существовать").isNotNegative();
-        assertThat(pom.substring(profile, Math.min(pom.length(), profile + 2000)))
-                .as("профиль обязан объявлять ожидаемую версию JVM, иначе он ничего не доказывает")
+    @DisplayName("прогон обязан объявлять версию JVM — иначе «собрано под 25» держится на честном слове")
+    void runDeclaresExpectedJvm() throws IOException {
+        // Раньше это жило в профиле java25, который форкал surefire на другой JDK. Профиля больше
+        // нет: Java 25 — условие сборки, а не точка матрицы. Но сама проверка нужнее прежнего.
+        // Собраться под release=25 и ПРОГНАТЬСЯ на другой JVM технически можно (JAVA_HOME у maven
+        // и <jvm> у surefire — разные вещи), и тогда «проверено на 25» было бы неправдой.
+        // Свойство едет в canary/InstrumentationApiCanaryTest, тот сверяет с Runtime.version().
+        assertThat(outsideProfiles(pom()))
+                .as("expected.java.feature обязан быть в ОБЩЕЙ конфигурации surefire: проверка "
+                        + "версии JVM должна идти в каждом прогоне, а не по особому профилю")
                 .contains("<expected.java.feature>25</expected.java.feature>");
+
+        assertThat(pom())
+                .as("профиль java25 удалён вместе с переходом на release=25 — если он вернулся, "
+                        + "значит кто-то снова форкает тесты на чужой JDK, и это надо обсуждать")
+                .doesNotContain("<id>java25</id>");
     }
 
     @Test
@@ -161,5 +166,61 @@ class PomCompatibilityTest {
                 .as("появилась новая compile-зависимость — переведи её в provided/optional либо "
                         + "ОСОЗНАННО обнови README и ADR 0002")
                 .isEqualTo("allure-java-commons");
+    }
+
+    /**
+     * Список файлов, которые НЕ компилируются на нижней границе Boot. Каждая строка — это
+     * дырка в доказательстве «один jar работает на 3.x и на 4.x», поэтому список зафиксирован
+     * здесь: расширить его молча нельзя, только вместе с этим тестом и строкой в compat-matrix.
+     * <p>
+     * ⛔ Сам профиль сейчас НЕ СОБИРАЕТСЯ (зависимости Boot 4 не управляются BOM 3.2.12 —
+     * см. {@code docs/compat-matrix.md}). Список держим замороженным именно поэтому: когда точку
+     * будут чинить, он должен остаться ровно тем, что осознанно решили не проверять, а не
+     * разрастись за время простоя.
+     */
+    private static final java.util.List<String> BOOT4_ONLY_TESTS = java.util.List.of(
+            "AllureMockMvcAutoConfigurationTest",
+            "AllureWebTestClientAutoConfigurationTest",
+            "MockMvcReportIT",
+            "RestTemplateReportIT",
+            "WebTestClientReportIT",
+            "AllureRestTemplateInstrumentationTest");
+
+    @Test
+    @DisplayName("исключения нижней границы Boot зафиксированы — список не расширить молча")
+    void bootMinExclusionsAreFrozen() throws IOException {
+        assertThat(bootMinExclusions())
+                .as("список исключённых из нижней границы тестов изменился. Каждая строка — "
+                        + "непроверенный на Boot 3 кусок: обнови BOOT4_ONLY_TESTS и docs/compat-matrix.md "
+                        + "ОСОЗНАННО, а не чтобы позеленело")
+                .containsExactlyInAnyOrderElementsOf(BOOT4_ONLY_TESTS);
+    }
+
+    @Test
+    @DisplayName("резолв переехавших имён проверяется на ОБЕИХ границах — эти тесты не исключены")
+    void movedNameResolutionStaysOnBothMajors() throws IOException {
+        // Смысл MovedTypeNames в том, что имя резолвится СТРОКОЙ. Если тесты этого механизма
+        // попадут в исключения, доказательство кросс-версионности исчезнет незаметно.
+        // Сверяем РАЗОБРАННЫЕ записи <testExclude>, а не сырой текст профиля: имена этих тестов
+        // упомянуты там же в пояснительном комментарии, и проверка по подстроке краснела бы на нём.
+        assertThat(bootMinExclusions())
+                .as("эти тесты держат имена СТРОКАМИ и обязаны собираться на обоих мажорах — "
+                        + "исключив их, мы потеряли бы доказательство кросс-версионности")
+                .doesNotContain("MovedCustomizerRegistrarTest", "ActivationDiagnosticsTest");
+    }
+
+    /** Имена тестов из {@code <testExclude>} профиля нижней границы Boot (без пути и {@code .java}). */
+    private static java.util.List<String> bootMinExclusions() throws IOException {
+        String pom = pom();
+        int at = pom.indexOf("<id>compat-boot-min</id>");
+        assertThat(at).as("профиль compat-boot-min исчез").isNotNegative();
+        String profile = pom.substring(at, pom.indexOf("</profile>", at));
+        Matcher exclude = Pattern.compile("<testExclude>([^<]+)</testExclude>").matcher(profile);
+        java.util.List<String> names = new java.util.ArrayList<>();
+        while (exclude.find()) {
+            String path = exclude.group(1);
+            names.add(path.substring(path.lastIndexOf('/') + 1).replace(".java", ""));
+        }
+        return names;
     }
 }

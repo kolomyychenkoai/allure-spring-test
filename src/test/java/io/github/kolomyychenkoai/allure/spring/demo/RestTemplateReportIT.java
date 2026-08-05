@@ -7,15 +7,20 @@ import io.qameta.allure.Feature;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.resttestclient.TestRestTemplate;
+import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
 
 import java.util.List;
 
 /**
  * Уровень B: вызовы {@code TestRestTemplate} попадают в отчёт через интерсептор,
  * навешенный байткодом на конструктор RestTemplate. Раньше этого клиента не было видно.
+ * <p>
+ * ⚠️ С Boot 4 {@code TestRestTemplate} больше НЕ подаётся в контекст сам по факту
+ * {@code webEnvironment=RANDOM_PORT} — нужна {@code @AutoConfigureTestRestTemplate}.
  */
+@AutoConfigureTestRestTemplate
 @SpringBootTest(classes = WebTestApp.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Epic("allure-spring-test")
 @Feature("HTTP-вызовы (TestRestTemplate)")

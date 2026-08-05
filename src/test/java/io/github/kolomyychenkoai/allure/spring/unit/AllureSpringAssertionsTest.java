@@ -57,7 +57,63 @@ class AllureSpringAssertionsTest {
         });
 
         assertThat(allure.hasStep(result, "Проверка: количество положительно — верно")).isTrue();
-        assertThat(allure.hasStep(result, "Проверка: есть id — значение id-1 не null")).isTrue();
+        assertThat(allure.hasStep(result, "Проверка: есть id — значение не null")).isTrue();
+    }
+
+    /** Считает обращения к своему {@code toString()} — как реальный объект с побочным эффектом. */
+    private static final class ToStringProbe {
+        private int calls;
+
+        @Override
+        public String toString() {
+            calls++;
+            return "тело-ответа-выпито";
+        }
+    }
+
+    @Test
+    @DisplayName("внутренний инвариант Spring шага НЕ даёт, а обычная проверка — даёт")
+    void springInternalCheckIsFilteredOut() {
+        // Spring 7 сам зовёт assertNotNull("exchangeResult unexpectedly null", …) внутри
+        // WebTestClient. Для ручного тестировщика это шум: английский жаргон посреди русского
+        // отчёта, стоящий ПЕРВЫМ шагом в каждом WebTestClient-тесте.
+        TestResult result = allure.run("internal", () -> {
+            AssertionErrors.assertNotNull("exchangeResult unexpectedly null", "не важно");
+            AssertionErrors.assertNotNull("у заказа есть id", "id-1");
+        });
+
+        assertThat(result.getSteps().stream()
+                .noneMatch(s -> s.getName().contains("exchangeResult unexpectedly null")))
+                .as("инвариант Spring не должен попадать в отчёт (мутация: убери фильтр → появится)")
+                .isTrue();
+        // АНТИ-правило: фильтр не должен съедать обычные проверки
+        assertThat(allure.hasStep(result, "Проверка: у заказа есть id — значение не null"))
+                .as("отфильтровано лишнее — пользовательская проверка пропала вместе с мусором")
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("null-проверки НЕ зовут toString() значения (иначе отчёт крадёт одноразовое тело ответа)")
+    void nullAssertionsDoNotTouchValueToString() {
+        // Реальный случай (Spring 7): AbstractStatusAssertions зовёт
+        // assertNotNull("exchangeResult unexpectedly null", exchangeResult), а
+        // ExchangeResult.toString() читает тело ответа — одноразовое. Если вернуть сюда
+        // рендер значения, у ПОТРЕБИТЕЛЯ упадёт его собственный expectBody().
+        ToStringProbe notNull = new ToStringProbe();
+        ToStringProbe alsoNotNull = new ToStringProbe();
+
+        allure.run("side-effect", () -> {
+            AssertionErrors.assertNotNull("значение есть", notNull);
+            // assertNull с НЕ-null значением падает — путь провала тоже не должен трогать toString
+            assertThrows(AssertionError.class, () -> AssertionErrors.assertNull("пусто", alsoNotNull));
+        });
+
+        assertThat(notNull.calls)
+                .as("assertNotNull не должен рендерить значение (мутация: верни safe(actual) → станет 1)")
+                .isZero();
+        assertThat(alsoNotNull.calls)
+                .as("assertNull на провале не должен рендерить значение")
+                .isZero();
     }
 
     @Test

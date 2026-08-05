@@ -52,7 +52,7 @@ Kafka, ассерты (ByteBuddy), Mockito, WireMock. Технологии бу�
 
 Как получить факты: читай код (`src/`), `pom.xml`, `META-INF/spring.factories`;
 при необходимости собери и сгенерируй отчёт (`mvn test`, `mvn allure:report`) и
-читай `target/allure-results/*.json`. **JDK рулит jenv, дефолт — Java 21; в фоновом
+читай `target/allure-results/*.json`. **JDK рулит jenv; у ЭТОГО проекта закреплена Java 25 (.java-version), глобальный дефолт машины — 21; в фоновом
 шелле Maven может цеплять не ту JDK — запускай через `zsh -lic 'mvn ...'`.**
 Не доверяй описанию — проверяй в коде/отчёте.
 

@@ -37,17 +37,23 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.release>21</maven.compiler.release>
-        <spring-boot.version>3.5.8</spring-boot.version>
+        <!-- Библиотека собирается ПОД Java 25 → у потребителя нужна JVM 25+.
+             Держать в синхроне с таблицей версий в README (стережёт unit/PomCompatibilityTest).
+             ⚠️ Следствие, которое легко упустить: байткод-слою нужен byte-buddy, знающий формат
+             class-файлов этой JVM, а его версию потребитель получает из BOM Spring Boot. Java 25
+             знает byte-buddy 1.17 — то есть Boot 3.5+. Значит объявленный минимум Boot 3.2
+             живёт только на старых JVM, а на 25 фактический минимум — 3.5. -->
+        <maven.compiler.release>25</maven.compiler.release>
+        <spring-boot.version>4.1.0</spring-boot.version>
         <allure.version>2.25.0</allure.version>
         <allure-maven.version>2.12.0</allure-maven.version>
         <!-- Версия ЯВНАЯ, не из Boot BOM: в spring-boot-dependencies 4.1 rest-assured больше
              НЕ УПРАВЛЯЕТСЯ (в 3.5.8 был 5.5.6). Без пина ветка апгрейда падает на построении
              модели Maven («version is missing») ЕЩЁ ДО компиляции — то есть раньше всех наших
              сигналов, и разбираться будет не с чем. Значение равно тому, что даёт BOM 3.5.8,
-             поэтому здесь это no-op. ⚠️ В ветке апгрейда пина МАЛО: Boot 4.1 тянет groovy-bom 5,
-             а RA 5.5.6 собран на Groovy 4 → там нужна rest-assured 6.x. См. docs/upgrade-checklist.md. -->
-        <rest-assured.version>5.5.6</rest-assured.version>
+             поэтому здесь это no-op. Boot 4.1 тянет groovy-bom 5, а RA 5.5.x собран на Groovy 4 →
+             с этого мажора нужна rest-assured 6.x. См. docs/upgrade-checklist.md. -->
+        <rest-assured.version>6.0.1</rest-assured.version>
 
         <!-- ОБЪЯВЛЕННЫЕ ГРАНИЦЫ СОВМЕСТИМОСТИ — здесь и только здесь.
              README и AllureApiCanaryTest читают ЭТИ числа (канарейка — через
@@ -55,7 +61,15 @@
              Меняешь число → обязан прогнать соответствующий compat-профиль. -->
         <compat.allure.min>2.20.0</compat.allure.min>
         <compat.allure.max>2.35.4</compat.allure.max>
-        <compat.boot.min>3.2.12</compat.boot.min>
+        <!-- Поднято 3.2.12 → 3.5.8 вместе с переходом на Java 25, и это НЕ косметика.
+             Байткод-слою нужен byte-buddy, знающий формат class-файлов JVM, а его версию
+             потребитель получает из BOM Boot. ЗАМЕРЕНО по jar-ам:
+               Boot 3.2.12 → bb 1.14.19, знает классы до Java 23; ofJavaVersion(25) БРОСАЕТ
+                             IllegalArgumentException — байткод-слой на Java 25 мёртв;
+               Boot 3.4.10 → bb 1.15.11, знает до Java 24 — тоже мимо;
+               Boot 3.5.8  → bb 1.17.8,  знает Java 25 и 26 — первый пригодный.
+             Значит объявлять минимумом 3.2 после перехода на Java 25 было бы неправдой. -->
+        <compat.boot.min>3.5.8</compat.boot.min>
 
         <!-- Версия CLI-генератора отчёта РАСЦЕПЛЕНА с версией библиотеки: матрица меняет
              allure.version, и без расцепления она заодно меняла бы генератор — а это разные
@@ -143,9 +157,19 @@
             <artifactId>spring-boot-autoconfigure</artifactId>
             <scope>provided</scope>
         </dependency>
+        <!-- Boot 4 разбил spring-boot-test-autoconfigure на модули по технологиям. Нам нужны
+             ровно два — те, где живут кастомайзеры билдеров (MockMvc и WebTestClient).
+             ⚠️ Компилируемся мы против них, но НЕ держим их типы: интерфейс поднимается по имени
+             из internal/MovedTypeNames, поэтому jar работает и на Boot 3, где эти классы лежали
+             в spring-boot-test-autoconfigure. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-test-autoconfigure</artifactId>
+            <artifactId>spring-boot-webmvc-test</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-webtestclient</artifactId>
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -265,10 +289,26 @@
             <artifactId>allure-junit5</artifactId>
             <scope>test</scope>
         </dependency>
-        <!-- для живого MockMvc-теста (поднять MVC-слой с тестовым контроллером) -->
+        <!-- для живого MockMvc-теста (поднять MVC-слой с тестовым контроллером).
+             В Boot 4 стартер разбит по технологиям: spring-boot-starter-web → …-webmvc. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
+            <artifactId>spring-boot-starter-webmvc</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- TestRestTemplate в Boot 4 переехал в отдельный модуль и БОЛЬШЕ НЕ ПОДАЁТСЯ САМ —
+             тесту нужна ещё и @AutoConfigureTestRestTemplate (см. demo/RestTemplateReportIT). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-resttestclient</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- RestTemplateBuilder (Boot 3.x: spring-boot / org.springframework.boot.web.client).
+             Нужен КАНАРЕЙКЕ unit/AllureRestTemplateInstrumentationTest: она стережёт допущение
+             нашего перехвата — билдер ДОБАВЛЯЕТ интерсепторы, а не заменяет список. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-restclient</artifactId>
             <scope>test</scope>
         </dependency>
         <!-- для живого БД-теста: JPA + AOP + H2 (без Docker) -->
@@ -279,10 +319,8 @@
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <!-- ⚠️ В Boot 4.x этот артефакт ПЕРЕИМЕНОВАН в spring-boot-starter-aspectj: в ветке
-                 апгрейда будет второй «version is missing». Пинить версию бессмысленно (артефакта
-                 с таким именем там нет) — правка принадлежит ветке апгрейда. -->
-            <artifactId>spring-boot-starter-aop</artifactId>
+            <!-- в Boot 3.x этот артефакт назывался spring-boot-starter-aop -->
+            <artifactId>spring-boot-starter-aspectj</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -290,10 +328,22 @@
             <artifactId>h2</artifactId>
             <scope>test</scope>
         </dependency>
-        <!-- для живого Kafka-теста: spring-kafka + встроенный брокер (без Docker) -->
+        <!-- для живого теста миграций: в Boot 4 автоконфигурация Liquibase уехала из
+             spring-boot-autoconfigure в отдельный модуль (как и Kafka). Без него бина
+             SpringLiquibase нет, миграции не идут — и наш снимок схемы нечему показывать.
+             Библиотеке по-прежнему нужен только liquibase-core (provided, выше). -->
         <dependency>
-            <groupId>org.springframework.kafka</groupId>
-            <artifactId>spring-kafka</artifactId>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-liquibase</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- для живого Kafka-теста: spring-kafka + встроенный брокер (без Docker).
+             ⚠️ Именно СТАРТЕР, а не голый spring-kafka: в Boot 4 автоконфигурация Kafka уехала
+             из spring-boot-autoconfigure в отдельный модуль spring-boot-kafka. С голым spring-kafka
+             контекст поднимается, но без бинов KafkaTemplate/kafkaListenerContainerFactory. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-kafka</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -336,6 +386,12 @@
                         <allure.compat.min>${compat.allure.min}</allure.compat.min>
                         <allure.compat.max>${compat.allure.max}</allure.compat.max>
                         <inventory.compare>${inventory.compare}</inventory.compare>
+                        <!-- Тесты ОБЯЗАНЫ идти на той же мажорной версии, под которую собираемся.
+                             Раньше это проверял отдельный профиль java25 (форкал surefire на другой
+                             JDK); теперь Java 25 — не «точка матрицы», а условие сборки, и проверка
+                             стала безусловной: сверяет canary/InstrumentationApiCanaryTest.
+                             Соберётся на JDK 25, а прогонится на другой JVM — красный, а не молчание. -->
+                        <expected.java.feature>25</expected.java.feature>
                     </systemPropertyVariables>
                     <!-- Self-attach byte-buddy-агента (ByteBuddyAgent.install) на JDK 21+ печатает
                          предупреждение, а в будущих JDK может быть запрещён по умолчанию (JEP 451).
@@ -508,34 +564,13 @@
              Гоняются перед релизом и при любой правке compat.* — одной командой
              scripts/compat-matrix.sh. Подробности: docs/compat-matrix.md. -->
 
-        <!-- Java 25 на нашей комбинации библиотек. Форкаем ТОЛЬКО тесты, компиляция остаётся
-             release=21: проверяем ровно то, что получит потребитель — jar под 21 на JVM 25.
-             Maven и его плагины остаются на 21, поэтому при поломке подозреваемый один.
-             <jvm> стоит в общей <configuration> → наследуется и прогоном инвентаря. -->
-        <profile>
-            <id>java25</id>
-            <properties>
-                <!-- brew install openjdk@25. Перебить: -Djava25.home=$(jenv prefix 25) -->
-                <java25.home>/opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk/Contents/Home</java25.home>
-            </properties>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-surefire-plugin</artifactId>
-                        <configuration>
-                            <jvm>${java25.home}/bin/java</jvm>
-                            <systemPropertyVariables>
-                                <!-- Без этого профиль ничего не ДОКАЗЫВАЕТ: укажи java25.home на
-                                     JDK 21 — и он зеленеет, а строка «проверено до 25» в README
-                                     врёт. Канарейка сверяет число с Runtime.version().feature(). -->
-                                <expected.java.feature>25</expected.java.feature>
-                            </systemPropertyVariables>
-                        </configuration>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
+        <!-- ⚠️ Профиля java25 здесь БОЛЬШЕ НЕТ. Он форкал тесты на другой JDK, пока библиотека
+             собиралась под release=21 — то есть проверял «jar под 21 на JVM 25». Теперь Java 25
+             это не точка матрицы, а условие сборки (maven.compiler.release=25), и проверять
+             отдельным профилем стало нечего: тесты и так идут на 25.
+             Гарантия не потеряна, а усилена — expected.java.feature переехал в ОБЩУЮ конфигурацию
+             surefire и сверяется канарейкой в КАЖДОМ прогоне, а не только в профиле.
+             Версия JDK для проекта закреплена файлом .java-version (jenv). -->
 
         <!-- Нижняя граница Allure. Пересобирает main против неё → компилятор первая линия,
              AllureApiCanaryTest вторая, а его проверка рантайм-версии убеждается, что
@@ -565,6 +600,43 @@
                 <spring-boot.version>${compat.boot.min}</spring-boot.version>
                 <inventory.compare>off</inventory.compare>
             </properties>
+            <build>
+                <plugins>
+                    <!-- ⛔ ВНИМАНИЕ: после апгрейда на Boot 4.1 ЭТОТ ПРОФИЛЬ НЕ СОБИРАЕТСЯ.
+                         Падает на МОДЕЛИ Maven, до компиляции: восемь зависимостей ниже по файлу
+                         существуют только в Boot 4 и в BOM 3.2.12 не управляются. Список исключений
+                         ниже необходим, но НЕДОСТАТОЧЕН — чтобы вернуть точку, нужны два профильных
+                         набора зависимостей (имена Boot 4 и эквиваленты Boot 3).
+                         Подробности и честная формулировка того, что сейчас НЕ проверяется, —
+                         docs/compat-matrix.md. Список заморожен unit/PomCompatibilityTest.
+
+                         Зачем исключения. С Boot 4 часть тестов держит типы, которых на нижней
+                         границе (Boot 3.2.12) физически нет: кастомайзеры и аннотации переехали
+                         в модули по технологиям. Компиляция — всё или ничего, поэтому без этого
+                         списка профиль не собрался бы и после починки зависимостей.
+
+                         Что при этом НЕ проверяется на Boot 3: авто-регистрация кастомайзеров
+                         MockMvc/WebTestClient и демо-витрины MockMvc/WebTestClient/TestRestTemplate.
+                         Проверяется всё остальное — байткод-слой целиком, канарейки, диагностика,
+                         резолв переехавших имён (unit/MovedCustomizerRegistrarTest и
+                         unit/ActivationDiagnosticsTest держат имена СТРОКАМИ, поэтому собираются
+                         на обоих мажорах и остаются в профиле). См. docs/compat-matrix.md. -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <configuration>
+                            <testExcludes>
+                                <testExclude>**/autoconfig/AllureMockMvcAutoConfigurationTest.java</testExclude>
+                                <testExclude>**/autoconfig/AllureWebTestClientAutoConfigurationTest.java</testExclude>
+                                <testExclude>**/demo/MockMvcReportIT.java</testExclude>
+                                <testExclude>**/demo/RestTemplateReportIT.java</testExclude>
+                                <testExclude>**/demo/WebTestClientReportIT.java</testExclude>
+                                <testExclude>**/unit/AllureRestTemplateInstrumentationTest.java</testExclude>
+                            </testExcludes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
         </profile>
     </profiles>
 </project>

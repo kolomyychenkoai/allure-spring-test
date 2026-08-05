@@ -51,7 +51,7 @@ class JUnitJupiterAssertionsReportIT {
     }
 
     @Test
-    @DisplayName("остальные семейства ассертов Jupiter (12 из 17 матчера) тоже дают шаги")
+    @DisplayName("остальные семейства ассертов Jupiter (все 17 имён матчера) тоже дают шаги")
     void remainingAssertionFamiliesAppearInReport() {
         // Матчер перехватывает 17 имён, витрина показывала 5 — то есть 12 веток разбора
         // не проверялись НИЧЕМ на живой цепочке. Там же живёт хрупкая эвристика «сообщение —
@@ -69,6 +69,11 @@ class JUnitJupiterAssertionsReportIT {
                 () -> { throw new IllegalArgumentException("точный тип"); });
         String value = Assertions.assertDoesNotThrow(() -> "ок");
         Assertions.assertTimeout(java.time.Duration.ofSeconds(5), () -> "успели");
+        // ⚠️ assertTimeoutPreemptively единственный из 17 имён матчера НЕ был в витрине —
+        // значит инвентарь его не стерёг: сломался бы разбор именно этой перегрузки, и сигнала
+        // бы не было. Отличается от assertTimeout тем, что гоняет лямбду на ДРУГОМ потоке —
+        // сам ассерт при этом возвращается на тест-потоке, поэтому шаг привязывается верно.
+        Assertions.assertTimeoutPreemptively(java.time.Duration.ofSeconds(5), () -> "успели и тут");
 
         List<String> steps = CurrentReport.stepNames();
         CurrentReport.check(value.equals("ок"), () -> "assertDoesNotThrow не вернул значение");
@@ -90,5 +95,50 @@ class JUnitJupiterAssertionsReportIT {
                 () -> "сообщение assertFalse не попало в шаг: " + steps);
         CurrentReport.check(steps.stream().anyMatch(n -> n.contains("значения нет")),
                 () -> "сообщение assertNull не попало в шаг: " + steps);
+    }
+
+    @Test
+    @DisplayName("ВИТРИНА ПОЛНА: каждое имя из матчера Jupiter демонстрируется живым вызовом")
+    void everyHookedAssertionFamilyIsShowcased() {
+        // Структурный предел инвентаря: он стережёт ТОЛЬКО то, что показывает витрина.
+        // Найдено ревью: assertTimeoutPreemptively перехватывался, но не демонстрировался —
+        // сломайся его разбор, ни один гейт бы не покраснел. Этот тест держит витрину полной,
+        // читая список имён из САМОГО матчера, а не из копии.
+        java.util.Set<String> hooked = namesFromMatcherSource();
+        java.util.Set<String> shown = namesUsedInThisShowcase();
+
+        java.util.Set<String> missing = new java.util.TreeSet<>(hooked);
+        missing.removeAll(shown);
+        CurrentReport.check(missing.isEmpty(),
+                () -> "перехватывается, но НЕ демонстрируется витриной → инвентарь это не стережёт: " + missing);
+    }
+
+    /** Имена ассертов из матчера в src/main — единственный источник правды. */
+    private static java.util.Set<String> namesFromMatcherSource() {
+        return extract(java.nio.file.Path.of("src/main/java/io/github/kolomyychenkoai/allure/spring"
+                        + "/assertion/internal/AllureJUnitJupiterAssertionsInstrumentation.java"),
+                "named\\(\"(assert[A-Za-z]+)\"\\)");
+    }
+
+    /** Имена, реально вызванные в этом демо-классе. */
+    private static java.util.Set<String> namesUsedInThisShowcase() {
+        return extract(java.nio.file.Path.of("src/test/java/io/github/kolomyychenkoai/allure/spring"
+                        + "/demo/JUnitJupiterAssertionsReportIT.java"),
+                "Assertions\\.(assert[A-Za-z]+)");
+    }
+
+    private static java.util.Set<String> extract(java.nio.file.Path file, String regex) {
+        try {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile(regex)
+                    .matcher(java.nio.file.Files.readString(file));
+            java.util.Set<String> found = new java.util.TreeSet<>();
+            while (m.find()) {
+                found.add(m.group(1));
+            }
+            CurrentReport.check(!found.isEmpty(), () -> "сбор имён сломался на " + file + " — пусто");
+            return found;
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("не прочитать " + file, e);
+        }
     }
 }

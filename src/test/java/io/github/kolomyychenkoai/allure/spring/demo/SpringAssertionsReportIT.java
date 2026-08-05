@@ -32,7 +32,9 @@ class SpringAssertionsReportIT {
         List<String> steps = CurrentReport.stepNames();
         CurrentReport.assertStep("Проверка: имя продукта — ожидалось laptop = laptop");
         CurrentReport.assertStep("Проверка: количество положительно — верно");
-        CurrentReport.assertStep("Проверка: у заказа есть id — значение id-1 не null");
+        // значение в имени шага НЕ рендерим: toString() чужого объекта может иметь побочный
+        // эффект (см. AllureSpringAssertionsInstrumentation.AssertNotNullAdvice)
+        CurrentReport.assertStep("Проверка: у заказа есть id — значение не null");
     }
 
     @Test

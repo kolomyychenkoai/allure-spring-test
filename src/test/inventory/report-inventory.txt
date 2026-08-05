@@ -74,7 +74,7 @@ JUnitJupiterAssertionsReportIT | Проверка: ожидалось <V> = <V> 
 JUnitJupiterAssertionsReportIT | Проверка: разные объекты: <Object> ≠ <Object>  ×1  # AllureJUnitJupiterAssertionsInstrumentation
 JUnitJupiterAssertionsReportIT | Проверка: строки совпали  ×1  # AllureJUnitJupiterAssertionsInstrumentation
 JUnitJupiterAssertionsReportIT | Проверка: тот же объект: <JUnitJupiterAssertionsReportIT>  ×1  # AllureJUnitJupiterAssertionsInstrumentation
-JUnitJupiterAssertionsReportIT | Проверка: уложились в таймаут  ×1  # AllureJUnitJupiterAssertionsInstrumentation
+JUnitJupiterAssertionsReportIT | Проверка: уложились в таймаут  ×2  # AllureJUnitJupiterAssertionsInstrumentation (assertTimeout + assertTimeoutPreemptively дают ОДНО имя — кратность и стережёт второй)
 JdbcReportIT | DB JdbcTemplate.batchUpdate  ×1  # AllureJdbcInstrumentation
 JdbcReportIT | DB JdbcTemplate.batchUpdate ▸ SQL INSERT widget  ×1  # AllureDataSourceListener (шаг на каждый запрос пакета)
 JdbcReportIT | DB JdbcTemplate.batchUpdate ▸ SQL UPDATE widget  ×1  # AllureDataSourceListener (шаг на каждый запрос пакета)
@@ -134,7 +134,7 @@ SpringAssertionsReportIT | Проверка: значения нет — зна�
 SpringAssertionsReportIT | Проверка: имя продукта — ожидалось <V> = <V>  ×1  # AllureSpringAssertionsInstrumentation
 SpringAssertionsReportIT | Проверка: количество положительно — верно  ×1  # AllureSpringAssertionsInstrumentation
 SpringAssertionsReportIT | Проверка: разные имена — laptop ≠ phone  ×1  # AllureSpringAssertionsInstrumentation
-SpringAssertionsReportIT | Проверка: у заказа есть id — значение <V> не null  ×1  # AllureSpringAssertionsInstrumentation
+SpringAssertionsReportIT | Проверка: у заказа есть id — значение не null  ×1  # AllureSpringAssertionsInstrumentation
 WebTestClientReportIT | HTTP GET /api/hello/statusonly → 200  ×1  # AllureWebTestClientLogger
 WebTestClientReportIT | HTTP GET /api/hello/world → 200  ×1  # AllureWebTestClientLogger
 WebTestClientReportIT | HTTP POST /api/echo → 200  ×1  # AllureWebTestClientLogger
@@ -206,7 +206,7 @@ MockMvcReportIT | HTTP Exception | text/plain  ×1  # AllureMockMvcResultHandler
 MockMvcReportIT | HTTP Request Body | application/json  ×1  # AllureMockMvcResultHandler
 MockMvcReportIT | HTTP Request | text/plain  ×4  # AllureMockMvcResultHandler
 MockMvcReportIT | HTTP Response Body | application/json  ×3  ¶N  # AllureMockMvcResultHandler
-MockMvcReportIT | HTTP Response | text/plain  ×4  ¶N  # AllureMockMvcResultHandler
+MockMvcReportIT | HTTP Response | text/plain  ×4  # AllureMockMvcResultHandler
 MockMvcReportIT | Свойства | text/plain  ×1  # AllureConfigurationListener
 MockMvcStandaloneReportIT | Application Logs | text/plain  ×1  # AllureApplicationLogsListener
 MockMvcStandaloneReportIT | HTTP Request | text/plain  ×1  # AllureMockMvcInstrumentation
