@@ -74,7 +74,7 @@ JUnitJupiterAssertionsReportIT | Проверка: ожидалось <V> = <V> 
 JUnitJupiterAssertionsReportIT | Проверка: разные объекты: <Object> ≠ <Object>  ×1  # AllureJUnitJupiterAssertionsInstrumentation
 JUnitJupiterAssertionsReportIT | Проверка: строки совпали  ×1  # AllureJUnitJupiterAssertionsInstrumentation
 JUnitJupiterAssertionsReportIT | Проверка: тот же объект: <JUnitJupiterAssertionsReportIT>  ×1  # AllureJUnitJupiterAssertionsInstrumentation
-JUnitJupiterAssertionsReportIT | Проверка: уложились в таймаут  ×1  # AllureJUnitJupiterAssertionsInstrumentation
+JUnitJupiterAssertionsReportIT | Проверка: уложились в таймаут  ×2  # AllureJUnitJupiterAssertionsInstrumentation (assertTimeout + assertTimeoutPreemptively дают ОДНО имя — кратность и стережёт второй)
 JdbcReportIT | DB JdbcTemplate.batchUpdate  ×1  # AllureJdbcInstrumentation
 JdbcReportIT | DB JdbcTemplate.batchUpdate ▸ SQL INSERT widget  ×1  # AllureDataSourceListener (шаг на каждый запрос пакета)
 JdbcReportIT | DB JdbcTemplate.batchUpdate ▸ SQL UPDATE widget  ×1  # AllureDataSourceListener (шаг на каждый запрос пакета)
