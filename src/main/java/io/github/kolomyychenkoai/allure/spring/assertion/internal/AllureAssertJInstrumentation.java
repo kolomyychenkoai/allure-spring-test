@@ -114,7 +114,7 @@ public final class AllureAssertJInstrumentation {
                         // не только листовые (StringAssert), но и АБСТРАКТНЫЕ AbstractObjectAssert /
                         // AbstractDoubleAssert / AbstractFloatAssert — а на них ОБЪЯВЛЕНЫ isCloseTo,
                         // hasFieldOrPropertyWithValue, returns: наследовать их неоткуда, и шага
-                        // не было вовсе. Витрина это теперь показывает (AssertJReportIT), сбои 47 → 2.
+                        // не было вовсе. Эти проверки держит витрина AssertJReportIT.
                         // ⚠️ Правка отменяет «отвергнутую альтернативу» из ADR 0001 — перед тем как
                         // трогать матчер снова, прочитай там раздел с замерами.
                         .on(isPublic().and(not(isStatic())).and(not(isConstructor()))

@@ -21,7 +21,7 @@ import static net.bytebuddy.matcher.ElementMatchers.whereAny;
  * ByteBuddy-инструментирование ПРОВЕРОК RestAssured ({@code .then().statusCode(...).body(...)}):
  * каждая УСПЕШНАЯ проверка {@code ValidatableResponse} даёт в отчёте шаг «Проверка ответа: …» —
  * без кода в тестах. HTTP-шаг запроса/ответа пишет фильтр ({@code AllureRestAssuredFilter});
- * этот модуль добавляет к нему сами проверки, которых у нас раньше не было.
+ * этот модуль добавляет к нему сами проверки.
  * <p>
  * Почему байткодом: RestAssured валидирует своим внутренним путём (мимо {@code MatcherAssert.assertThat},
  * на который завязан наш Hamcrest-перехват), поэтому listener/фильтром эти проверки не поймать.

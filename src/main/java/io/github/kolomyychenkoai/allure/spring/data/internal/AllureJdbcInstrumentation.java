@@ -43,7 +43,7 @@ import static net.bytebuddy.matcher.ElementMatchers.not;
  * логируется на WARNING, тест не затрагивается. Установка идемпотентна (CAS-гард) — один раз на JVM.
  * <p>
  * ⚠️ Дедуп держится на том, что {@code NamedParameterJdbcTemplate} делегирует ВНУТРЬ обычного
- * {@code JdbcTemplate} (проверено на Spring 6.2.x) — внешний Named-вызов открывает шаг, внутренний
+ * {@code JdbcTemplate} (проверено на Spring 6.2 и 7.0) — внешний Named-вызов открывает шаг, внутренний
  * Jdbc-делегат подавлён счётчиком глубины. Имена методов и оба класса закреплены канарейкой
  * {@code InstrumentationApiCanaryTest#jdbcMatchers}. By-design НЕ покрыты {@code JdbcClient}
  * (новый fluent-API Spring 6.1+), {@code SimpleJdbcInsert}/{@code SimpleJdbcCall}, jOOQ/MyBatis,

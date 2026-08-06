@@ -25,7 +25,7 @@ import static net.bytebuddy.matcher.ElementMatchers.named;
  * поэтому добавляем без дублей. Сбой инструментирования логируется на WARNING и не роняет тест.
  * <p>
  * ⚠️ <b>Версионно-хрупкое допущение.</b> {@code DefaultRestClientBuilder} —
- * package-private ВНУТРЕННИЙ класс Spring (НЕ публичный API), проверено на Spring 6.2.x. Это
+ * package-private ВНУТРЕННИЙ класс Spring (НЕ публичный API), проверено на Spring 6.2 и 7.0. Это
  * единственная реализация {@code RestClient.Builder}, через неё строятся и {@code RestClient.create()},
  * и {@code RestClient.builder()}, и Spring-инжектируемый билдер — поэтому одной точки достаточно.
  * При апгрейде Spring класс могут переименовать/убрать молча → перехват отвалится. Это допущение

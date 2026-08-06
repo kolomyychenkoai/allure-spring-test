@@ -74,7 +74,7 @@ public class AllureDataSourceListener implements QueryExecutionListener {
                 return;
             }
             // Шаг НА КАЖДЫЙ запрос пакета: batchUpdate(String...) и multi-statement execute отдают
-            // несколько QueryInfo, и раньше все, кроме первого, молча исчезали из отчёта.
+            // несколько QueryInfo — возьмёшь только первый, остальные молча исчезнут из отчёта.
             // Шаг на запрос (а не один общий) — потому что имя «SQL <OP> <таблица>» и есть
             // единица, по которой человек читает отчёт, а инвентарь стережёт виды.
             int total = queryInfoList.size();

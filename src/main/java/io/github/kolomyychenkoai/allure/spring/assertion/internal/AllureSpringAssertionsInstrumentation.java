@@ -248,15 +248,13 @@ public final class AllureSpringAssertionsInstrumentation {
                 if (!outermost || internalSpringCheck(message)) {
                     return; // инвариант самого Spring — тестировщику он ничего не говорит
                 }
-                // ⚠️ Значение НЕ рендерим — проверяется только его наличие, а toString() чужого
-                // объекта может иметь ПОБОЧНЫЙ ЭФФЕКТ. Реальный случай (Spring 7): внутренняя
-                // проверка AbstractStatusAssertions.assertStatusAndReturn зовёт
+                // ⚠️ Значение НЕ рендерим: проверяется только его наличие, а toString() чужого
+                // объекта — ПОБОЧНЫЙ ЭФФЕКТ, а не чтение. Живой пример: WebTestClient зовёт
                 // assertNotNull("exchangeResult unexpectedly null", exchangeResult), а
-                // ExchangeResult.toString() печатает тело ответа — и в Spring 7 тело клиентского
-                // ответа ОДНОРАЗОВОЕ. Отчёт выпивал его у теста: потребитель получал
+                // ExchangeResult.toString() печатает тело ответа — одноразовое с Spring 7.
+                // Отрендеришь — выпьешь тело у теста потребителя, и он получит
                 // «The client response body can only be consumed once» на своём же expectBody().
-                // Стережёт unit/AllureSpringAssertionsTest#nullAssertionsDoNotTouchValueToString
-                // (мутация: вернуть сюда safe(actual) → красный).
+                // Стережёт unit/AllureSpringAssertionsTest#nullAssertionsDoNotTouchValueToString.
                 AllureAdviceSupport.step("Проверка: " + message
                         + (thrown == null ? " — значение не null" : " — значение null"), thrown);
             } catch (Throwable t) {
