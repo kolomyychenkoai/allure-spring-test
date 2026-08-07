@@ -1,6 +1,8 @@
 /**
- * Внутренняя кухня библиотеки allure-spring-test: общая база байткод-инструментирования
- * ({@link io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation}), логгер
+ * Внутренние общие механизмы allure-spring-test: база байткод-инструментирования
+ * ({@link io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation}), гарды
+ * наличия опциональных библиотек, диагностика активации и перехвата, логгер, рендер
+ * значений для шагов и вложений.
  * <p>
  * Классы здесь объявлены {@code public} лишь потому, что их зовут другие модули из соседних
  * пакетов, — это <b>НЕ публичный API</b>. Не использовать из кода потребителя: обратная

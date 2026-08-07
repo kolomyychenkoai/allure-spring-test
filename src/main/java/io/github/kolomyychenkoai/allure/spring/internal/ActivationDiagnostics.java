@@ -49,9 +49,8 @@ public final class ActivationDiagnostics {
                                         boolean byteBuddyTooOld, String byteBuddyVersion) {
         List<String> problems = new ArrayList<>();
 
-        // Самая тихая из всех поломок: агент ставится, а трансформация падает на КАЖДОМ типе.
-        // Версию byte-buddy потребитель обычно не выбирает — она приходит из BOM Spring Boot,
-        // поэтому «Boot 3.4 на Java 25» выглядит рабочей комбинацией с мёртвым перехватом.
+        // Механика и версионные эпохи — в javadoc ByteBuddyClassFormat. Здесь важно одно:
+        // комбинация вроде «Boot 3.4 на Java 25» выглядит рабочей, а перехват в ней мёртв.
         if (byteBuddyPresent && byteBuddyTooOld) {
             problems.add("byte-buddy " + byteBuddyVersion + " не знает формат классов Java "
                     + Runtime.version().feature() + " → байткод-перехват (ассерты, JDBC, Kafka, "
