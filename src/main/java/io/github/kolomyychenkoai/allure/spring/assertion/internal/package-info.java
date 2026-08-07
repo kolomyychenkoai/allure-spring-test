@@ -1,5 +1,6 @@
 /**
- * Внутреннее байткод-инструментирование ассертов (AssertJ / Hamcrest / Spring AssertionErrors).
+ * Внутреннее байткод-инструментирование ассертов: AssertJ, Hamcrest, Spring
+ * {@code AssertionErrors} и JUnit Jupiter {@code Assertions}.
  * <p>
  * Классы здесь объявлены {@code public} лишь потому, что ByteBuddy инлайнит advice и зовёт их
  * {@code public static} методы, — это <b>НЕ публичный API</b>. Не использовать из кода

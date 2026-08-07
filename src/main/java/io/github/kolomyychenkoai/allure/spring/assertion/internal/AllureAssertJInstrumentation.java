@@ -28,13 +28,12 @@ import static net.bytebuddy.matcher.ElementMatchers.not;
  * ({@code as}, {@code describedAs}, {@code withFailMessage}, {@code usingComparator}…),
  * извлечение/навигация ({@code extracting}, {@code filteredOn}, {@code first}, {@code last},
  * {@code element}…) — они возвращают производный/тот же assert, сами ничего не проверяют,
- * и шаг по ним был бы ложным. ВАЖНО: настоящие проверки {@code satisfies}/{@code returns}/
- * {@code matches} в blacklist НЕ входят — они логируются. При добавлении новых
- * fluent/navigation-методов в AssertJ их, возможно, нужно дописать сюда.
+ * и шаг по ним был бы ложным. Новые fluent/navigation-методы AssertJ дописывать в те же
+ * списки.
  * <p>
  * Шаг пишется ТОЛЬКО для успешного ассерта; упавший ассерт шага не создаёт — его падение
- * Allure показывает из коробки на уровне теста. Ставится один раз на JVM —
- * см. {@link AllureAssertionsListener}.
+ * Allure показывает из коробки на уровне теста. Ставится один раз на JVM — см.
+ * {@code assertion.AllureAssertionsListener}.
  * <p>
  * <b>Дизайн и хрупкость этого узла</b> (порядок загрузки классов, дедуп по глубине,
  * отвергнутые альтернативы, что проверять при апгрейде) — ADR
@@ -108,15 +107,15 @@ public final class AllureAssertJInstrumentation {
         AllureInstrumentation.retransform(
                 isSubTypeOf(AbstractAssert.class),
                 (builder, type, cl, module, pd) -> builder.visit(Advice.to(AssertJAdvice.class)
-                        // not(isConstructor()): наш advice ловит исключения (onThrowable), а вокруг
+                        // not(isConstructor()): advice ловит исключения (onThrowable), а вокруг
                         // конструктора try/catch не ставится — ByteBuddy бросает «Cannot catch
-                        // exception during constructor call» и НЕ трансформирует ВЕСЬ тип. Падали
-                        // не только листовые (StringAssert), но и АБСТРАКТНЫЕ AbstractObjectAssert /
-                        // AbstractDoubleAssert / AbstractFloatAssert — а на них ОБЪЯВЛЕНЫ isCloseTo,
-                        // hasFieldOrPropertyWithValue, returns: наследовать их неоткуда, и шага
-                        // не было вовсе. Эти проверки держит витрина AssertJReportIT.
-                        // ⚠️ Правка отменяет «отвергнутую альтернативу» из ADR 0001 — перед тем как
-                        // трогать матчер снова, прочитай там раздел с замерами.
+                        // exception during constructor call» и НЕ трансформирует ВЕСЬ тип. Без
+                        // этого исключения выпадают и листовые (StringAssert), и АБСТРАКТНЫЕ
+                        // AbstractObjectAssert / AbstractDoubleAssert / AbstractFloatAssert, на
+                        // которых ОБЪЯВЛЕНЫ isCloseTo, hasFieldOrPropertyWithValue, returns:
+                        // наследовать их неоткуда, шага нет вовсе. Держит витрина AssertJReportIT.
+                        // ⚠️ Матчер трогать только после раздела с замерами в ADR 0001: нынешний
+                        // вид отменяет записанную там «отвергнутую альтернативу».
                         .on(isPublic().and(not(isStatic())).and(not(isConstructor()))
                                 .and(not(namedOneOf(NON_ASSERTION_METHODS))))));
     }
@@ -145,7 +144,7 @@ public final class AllureAssertJInstrumentation {
                         .append(" — ").append(methodName);
                 if (args != null) {
                     for (int i = 0; i < args.length; i++) {
-                        // varargs приходят массивом — safe() печатает элементы (deepToString), не [Ljava…
+                        // varargs приходят массивом — safe() печатает его поэлементно, не [Ljava…
                         sb.append(i == 0 ? " " : ", ").append(AllureAdviceSupport.safe(args[i]));
                     }
                 }

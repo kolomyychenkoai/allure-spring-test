@@ -15,7 +15,7 @@ import java.util.Optional;
  * {@code mockito-extensions/org.mockito.plugins.MockMaker} в корне test-classpath —
  * код в тестах не нужен (opt-in, см. README).
  * <p>
- * ВНИМАНИЕ (радиус): SPI-файл делает этот maker глобальным для ВСЕХ моков в JVM
+ * ⚠️ <b>Радиус:</b> SPI-файл делает этот maker глобальным для ВСЕХ моков в JVM
  * потребителя. Поведение моков не меняется (делегируем всё дефолтному maker'у),
  * добавляется только логирование. Выключается удалением SPI-файла (maker — opt-in).
  */

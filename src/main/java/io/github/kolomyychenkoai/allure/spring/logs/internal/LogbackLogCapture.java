@@ -15,7 +15,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Вся работа с Logback вынесена в этот класс отдельно — чтобы листенер
+ * Вся работа с Logback изолирована здесь — чтобы листенер
  * {@code AllureApplicationLogsListener} НЕ линковал типы {@code ch.qos.logback.*} в своих
  * сигнатурах/полях и трогал их только ПОСЛЕ гейта присутствия. Этот класс загружается
  * (и тянет {@code ch.qos.logback.*}) лишь когда активный SLF4J-бэкенд — Logback. На
@@ -63,7 +63,6 @@ public final class LogbackLogCapture {
             loggerContext.getLogger(Logger.ROOT_LOGGER_NAME).detachAppender(appender);
             appender.stop();
         } finally {
-            // вложение пишем даже если detach/stop бросили — и снятие, и аттач не теряются
             List<String> lines = appender.getLines();
             Allure.addAttachment("Application Logs", "text/plain",
                     lines.isEmpty() ? "No logs captured" : String.join("\n", lines));
