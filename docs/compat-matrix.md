@@ -24,7 +24,7 @@
 ## ⛔ Нижняя граница Boot временно не проверяется (с апгрейда на Boot 4.1)
 
 Профиль `compat-boot-min` падает на **модели Maven, до компиляции**: восемь артефактов
-появились только в Boot 4 и в BOM 3.2.12 не управляются —
+появились только в Boot 4, и BOM нижней границы (сейчас 3.5.8) их не управляет —
 `spring-boot-webmvc-test`, `spring-boot-webtestclient`, `spring-boot-starter-webmvc`,
 `spring-boot-resttestclient`, `spring-boot-restclient`, `spring-boot-starter-aspectj`,
 `spring-boot-starter-liquibase`, `spring-boot-starter-kafka`.
