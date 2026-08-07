@@ -10,7 +10,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Подключает логирование Awaitility-ожиданий один раз перед первым тест-классом: ставит наш
- * {@link AllureAwaitilityConditionListener} глобальным слушателем через официальный SPI
+ * {@code AllureAwaitilityConditionListener} глобальным слушателем через официальный SPI
  * ({@code Awaitility.setDefaultConditionEvaluationListener}). Регистрируется через
  * {@code META-INF/spring.factories}. Код в тестах не нужен.
  * <p>

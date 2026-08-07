@@ -117,7 +117,7 @@ public class AllureWireMockTestListener implements TestExecutionListener, Ordere
                     }
                     // Фильтруем по ЗНАЧЕНИЮ, а не по объявленному типу поля: WireMockExtension
                     // (@RegisterExtension) наследует DslWrapper, а не WireMockServer, и держит
-                    // сервер внутри — по типу поля он не находился, и половина модуля молчала.
+                    // сервер внутри — по типу поля он не находится, и модуль замолчал бы на нём.
                     collect(field.get(isStatic ? null : instance), servers, seen, 1);
                 } catch (Throwable ignored) {
                     // недоступное поле — пропускаем
@@ -140,7 +140,7 @@ public class AllureWireMockTestListener implements TestExecutionListener, Ordere
      * Глубже НЕ идём осознанно: обход графа объектов дорог и способен разбудить ленивые прокси.
      * Пакеты JDK пропускаем — там серверов нет, а полей много.
      * <p>
-     * <b>Стоимость ЗАМЕРЕНА</b> (а не прикинута): на полном сьюте 90 вызовов, 457 чтений полей,
+     * <b>Стоимость замерена:</b> на полном сьюте 90 вызовов, 457 чтений полей,
      * 7,8 мс СУММАРНО — около 5 полей и 86 мкс на вызов. Дёшево, потому что сканируются поля
      * ТЕСТ-КЛАССА (их единицы), а вглубь идём ровно на один уровень. Сужать по префиксу пакета
      * не стали: выигрыш в пределах шума, а любой фильтр рискует потерять сервер в чужой обёртке.
@@ -194,7 +194,7 @@ public class AllureWireMockTestListener implements TestExecutionListener, Ordere
             return new ArrayList<>(testContext.getApplicationContext()
                     .getBeansOfType(WireMockServer.class).values());
         } catch (Throwable noContext) {
-            return List.of(); // у теста может не быть контекста или он упал — это не наша беда
+            return List.of(); // контекста у теста может не быть или он упал — серверов-бинов тогда нет
         }
     }
 

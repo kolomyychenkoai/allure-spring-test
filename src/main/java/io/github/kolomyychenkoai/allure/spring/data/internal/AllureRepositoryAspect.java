@@ -203,7 +203,7 @@ public class AllureRepositoryAspect {
         }
         // Page / Slice / Window / Streamable — ВСЕ они Iterable, поэтому одна ветка закрывает
         // семейство, и тянуть spring-data в compile-classpath не нужно (её там нет намеренно:
-        // поинткат аспекта задан строкой). Без этой ветки Page уходил в toString и давал
+        // поинткат аспекта задан строкой). Без этой ветки Page уходит в toString и даёт
         // «Page 1 of 5 containing …Widget instances» вместо самих сущностей.
         if (result instanceof Iterable<?> iterable) {
             List<Object> items = new ArrayList<>();
