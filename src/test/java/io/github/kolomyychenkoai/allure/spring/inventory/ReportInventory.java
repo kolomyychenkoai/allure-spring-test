@@ -873,12 +873,7 @@ public final class ReportInventory {
         Map<Kind, Shape> shapes = new TreeMap<>(previous.shapes());
         scan.shapes().forEach((kind, stat) -> {
             if (ANY_OWNER.equals(kind.owner())) {
-                // Маркеры на «*»-видах НЕ ставим. Технически counts/shapes ищут наблюдения по
-                // ТОЧНОМУ Kind, включая владельца, а скан ключует конкретным классом — для «*»
-                // поиск всегда промахнулся бы, и маркер молча не проверялся. Смыслово: «*» ставят
-                // там, где привязка вида к классу ПЛАВАЕТ, и требовать жёсткую кратность или форму
-                // от такого вида нечего. Мёртвых маркеров не заводим вовсе.
-                return;
+                return; // маркеры на «*»-видах не ставим — причина в seedCounts
             }
             boolean stable = stat.seen().size() == 1 && stat.observations() >= MIN_OBSERVATIONS;
             if (stable && stat.seen().contains(Shape.MULTILINE)) {

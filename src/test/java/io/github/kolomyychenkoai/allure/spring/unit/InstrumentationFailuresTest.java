@@ -157,7 +157,7 @@ class InstrumentationFailuresTest {
     @DisplayName("несколько JVM: агент установлен хотя бы в одной, сбои — объединением")
     void mergesDumpsFromSeveralJvms(@TempDir Path dir) throws Exception {
         // JVM инвентаря и форки surefire пишут свои дампы; «последний закрывшийся» не должен
-        // решать за всех — раньше он затирал общий файл и давал ложный «агент не установлен»
+        // решать за всех — с общим файлом он затёр бы чужой и дал ложный «агент не установлен»
         dump(dir, "jvm-1.txt", "installed=true\ntransformed=117\nfailures=0\n");
         dump(dir, "jvm-2.txt", "installed=false\ntransformed=0\nfailures=0\n");
 

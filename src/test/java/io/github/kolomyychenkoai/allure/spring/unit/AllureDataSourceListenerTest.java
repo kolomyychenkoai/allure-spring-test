@@ -91,7 +91,7 @@ class AllureDataSourceListenerTest {
     @DisplayName("пакет из НЕСКОЛЬКИХ запросов даёт шаг НА КАЖДЫЙ, а не только на первый")
     void logsEveryQueryOfBatch() {
         // JdbcTemplate.batchUpdate(String...) и multi-statement execute отдают несколько QueryInfo;
-        // раньше брался queryInfoList.get(0), остальные молча исчезали из отчёта
+        // возьмёшь только queryInfoList.get(0) — остальные молча исчезнут из отчёта
         TestResult result = allure.run("sql-batch", () -> listener.afterQuery(exec(), List.of(
                 query("insert into widget (name) values ('b1')"),
                 query("update widget set name='b2' where name='b1'"),

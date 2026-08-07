@@ -253,7 +253,7 @@ class AllureWireMockVerifyTest {
 
             assertThat(stepNames(result)).anyMatch(n -> n.startsWith("Near-miss:") && n.contains("/api/wrong"));
             assertThat(stepNames(result)).anyMatch(n -> n.contains("сценарий") && n.contains("retry"));
-            // имя шага сброса теперь несёт порт сервера: «WireMock: сброс заглушек (:<port>)»
+            // имя шага сброса несёт порт сервера: «WireMock: сброс заглушек (:<port>)»
             assertThat(stepNames(result)).contains("WireMock: сброс заглушек (:" + server.port() + ")");
 
             // near-miss — ИНФОРМАЦИОННЫЙ PASSED-шаг (тест им не роняем) и несёт diff во вложении
