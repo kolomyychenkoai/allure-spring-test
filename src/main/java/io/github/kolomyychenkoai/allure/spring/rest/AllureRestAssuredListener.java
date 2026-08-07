@@ -10,7 +10,7 @@ import org.springframework.test.context.TestContext;
 import org.springframework.test.context.TestExecutionListener;
 
 /**
- * Ставит {@link AllureRestAssuredFilter} в глобальные фильтры RestAssured —
+ * Ставит {@code AllureRestAssuredFilter} в глобальные фильтры RestAssured —
  * чтобы все RestAssured-вызовы попадали в отчёт без кода в тестах.
  * <p>
  * Регистрация идёт в {@code beforeTestExecution} (а не {@code beforeTestClass}):

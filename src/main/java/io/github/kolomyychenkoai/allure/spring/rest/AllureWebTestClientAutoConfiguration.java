@@ -22,11 +22,11 @@ import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
  * Регистрируется через {@code META-INF/spring/...AutoConfiguration.imports}.
  * <p>
  * <b>Почему бин регистрируется программно, а не через {@code @Bean}.</b>
- * {@code WebTestClientBuilderCustomizer} между Boot 3.x и 4.x ПЕРЕЕХАЛ, а кастомайзер —
- * ЕДИНСТВЕННЫЙ канал этого модуля: байткод-фолбэка, как у MockMvc, у него нет. Значит
- * компайл-тайм привязка к одному имени означала бы полную потерю шагов у потребителя с
- * другим мажором, причём молча. Интерфейс поднимается по имени из
- * {@link MovedTypeNames#WEBTESTCLIENT_CUSTOMIZER} — артефакт работает на обоих.
+ * {@code WebTestClientBuilderCustomizer} между Boot 3.x и 4.x ПЕРЕЕХАЛ, поэтому интерфейс
+ * поднимается по имени из {@link MovedTypeNames#WEBTESTCLIENT_CUSTOMIZER} (общий разбор — в
+ * javadoc {@link MovedCustomizerRegistrar}). Здесь цена ошибки максимальная: кастомайзер —
+ * ЕДИНСТВЕННЫЙ канал этого модуля, байткод-фолбэка, как у MockMvc, у него нет, то есть
+ * привязка к одному имени означала бы полную и молчаливую потерю шагов.
  */
 @AutoConfiguration
 // ExchangeFilterFunction (webflux) ОБЯЗАТЕЛЕН: WebTestClient есть в spring-test и в чисто

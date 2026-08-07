@@ -57,7 +57,7 @@ import static net.bytebuddy.matcher.ElementMatchers.whereAny;
  * как и все RAM-обёртки (не инструментируем), отдельным шагом не выходит — HTTP-шаг при этом на месте.
  * {@code content(...)} — deprecated-алиас {@code body(...)}, отражается меткой «тело».
  * <p>
- * ⚠️ <b>Завязано на внутренности RestAssured 5.5.x</b> ({@code io.restassured.internal.
+ * ⚠️ <b>Завязано на внутренности RestAssured 6.0.x</b> ({@code io.restassured.internal.
  * ValidatableResponseOptionsImpl} — носитель всех перегрузок {@code .then()}). При апгрейде проверить
  * (см. канарейку в {@code InstrumentationApiCanaryTest}): (1) класс всё ещё impl проверок {@code .then()}
  * и несёт {@code statusCode}/{@code body}; (2) log-варианты по-прежнему 0-арг/{@code boolean}; (3) перечень

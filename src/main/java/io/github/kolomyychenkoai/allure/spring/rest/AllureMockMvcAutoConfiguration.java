@@ -25,10 +25,9 @@ import org.springframework.test.web.servlet.setup.ConfigurableMockMvcBuilder;
  * (для него есть байткод-канал {@code MockMvc.perform}).
  * <p>
  * <b>Почему бин регистрируется программно, а не через {@code @Bean}.</b>
- * {@code MockMvcBuilderCustomizer} между Boot 3.x и 4.x ПЕРЕЕХАЛ. Типизированная сигнатура
- * {@code @Bean} — это компайл-тайм привязка к одному имени, и jar, собранный под него, у
- * потребителя с другим мажором молча не активировался бы. Интерфейс поднимается по имени
- * из {@link MovedTypeNames#MOCKMVC_CUSTOMIZER}, поэтому артефакт работает на обоих.
+ * {@code MockMvcBuilderCustomizer} между Boot 3.x и 4.x ПЕРЕЕХАЛ, поэтому интерфейс поднимается
+ * по имени из {@link MovedTypeNames#MOCKMVC_CUSTOMIZER} — разбор цены типизированной сигнатуры
+ * в javadoc {@link MovedCustomizerRegistrar}.
  */
 @AutoConfiguration
 // Оба типа НЕ переезжали между мажорами, поэтому здесь литералы безопасны. Наличие самого

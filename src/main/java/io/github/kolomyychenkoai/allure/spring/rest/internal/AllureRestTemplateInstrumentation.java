@@ -18,10 +18,8 @@ import static net.bytebuddy.matcher.ElementMatchers.takesArguments;
  * (байткод на конструкторах) — ловит и {@code TestRestTemplate} (внутри него RestTemplate),
  * и ручной {@code new RestTemplate()}. Код в тестах не нужен.
  * <p>
- * Второй вход — {@code setInterceptors(...)}: он ЗАМЕНЯЕТ список и выбрасывал наш интерсептор
- * (так делают прикладной код и {@code RestTemplateCustomizer}-бины). Advice вешается на
- * {@code InterceptingHttpAccessor} — именно там метод ОБЪЯВЛЕН; матчер по {@code RestTemplate}
- * не сматчил бы ничего и стал бы тихим no-op.
+ * Второй вход — {@code setInterceptors(...)}, который заменяет список целиком; подробности
+ * и требования к матчеру — у самого вызова в {@link #install()}.
  * <p>
  * Установка идемпотентна (CAS-гард), ставится из {@code AllureRestTemplateListener}. Сбой
  * инструментирования логируется на WARNING и не роняет тест. RestTemplate, созданные ДО

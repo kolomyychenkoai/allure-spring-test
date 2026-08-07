@@ -8,17 +8,17 @@ import java.util.List;
 /**
  * Единственное место, где мы трогаем типы RestAssured из хука жизненного цикла.
  * <p>
- * Вынесено из {@code AllureRestAssuredListener} НЕ ради красоты. Гранулярность линковки в JVM —
- * класс, а не метод: верификатор байткода проверяет, что {@link AllureRestAssuredFilter}
+ * ⚠️ Не переноси этот код обратно в {@code AllureRestAssuredListener}. Гранулярность линковки
+ * в JVM — класс, а не метод: верификатор байткода проверяет, что {@link AllureRestAssuredFilter}
  * присваивается к {@link Filter}, и ради этого грузит {@code Filter} ещё до того, как гейт
- * «RestAssured на classpath?» успеет выполниться. Пока этот код жил в листенере, весь листенер
- * без RestAssured не линковался — гейт внутри был мёртвым.
+ * «RestAssured на classpath?» успеет выполниться. В листенере такой гейт мёртв — без RestAssured
+ * не линкуется весь листенер целиком.
  * <p>
- * Полагаться на то, что Spring молча пропустит незагрузившийся листенер, не хочется: это
- * недокументированная деталь {@code SpringFactoriesLoader}, и она молчаливо превращает «модуль
- * выключен» в поведение, которое мы не выбирали. Проще держать листенер линкуемым всегда.
- * То же правило уже записано в {@code ByteBuddyPresence} и {@code AllureAwaitilityRegistrar}.
- * Закреплено тестом {@code unit/ListenerDegradationTest}.
+ * Незагрузившийся листенер Spring, скорее всего, молча пропустит, но это недокументированная
+ * деталь {@code SpringFactoriesLoader}: опираться на неё значит отдать ей решение «модуль
+ * выключен». Дешевле держать листенер линкуемым всегда. То же правило — в
+ * {@code ByteBuddyPresence} и {@code AllureAwaitilityRegistrar}, закреплено тестом
+ * {@code unit/ListenerDegradationTest}.
  */
 public final class AllureRestAssuredRegistrar {
 
