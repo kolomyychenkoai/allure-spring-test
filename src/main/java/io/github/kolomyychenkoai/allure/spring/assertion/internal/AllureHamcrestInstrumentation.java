@@ -17,7 +17,7 @@ import static net.bytebuddy.matcher.ElementMatchers.takesArguments;
  * {@code assertThat(actual, matcher)} внутри зовёт его (reason=""), поэтому ловятся оба
  * без двойного шага. Шаг пишется ТОЛЬКО для успешной проверки; упавшая шага не создаёт —
  * её падение Allure показывает из коробки на уровне теста.
- * Ставится один раз на JVM — см. {@link AllureAssertionsListener}.
+ * Ставится один раз на JVM — см. {@code assertion.AllureAssertionsListener}.
  * <p>
  * Перегрузка {@code assertThat(String, boolean)} (без матчера) намеренно НЕ
  * перехватывается — это не matcher-проверка (просто boolean + reason), её аналог в отчёте

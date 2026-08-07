@@ -15,7 +15,7 @@ import java.util.List;
 
 /**
  * Уровень B: вызовы {@code TestRestTemplate} попадают в отчёт через интерсептор,
- * навешенный байткодом на конструктор RestTemplate. Раньше этого клиента не было видно.
+ * навешенный байткодом на конструктор RestTemplate: другого канала у этого клиента нет.
  * <p>
  * ⚠️ С Boot 4 {@code TestRestTemplate} больше НЕ подаётся в контекст сам по факту
  * {@code webEnvironment=RANDOM_PORT} — нужна {@code @AutoConfigureTestRestTemplate}.

@@ -39,7 +39,7 @@ import static net.bytebuddy.matcher.ElementMatchers.takesArguments;
  * Database)} (3 аргумента). Упавший changeset шага не даёт — падение Allure покажет на уровне
  * теста. Всё в try/catch, сбой не роняет тест. Установка идемпотентна (CAS-гард) — раз на JVM.
  * <p>
- * ⚠️ <b>Версионно-хрупкие допущения</b> (проверено на Liquibase 4.x; закреплено канарейкой
+ * ⚠️ <b>Версионно-хрупкие допущения</b> (проверено на Liquibase 5.x; закреплено канарейкой
  * {@code InstrumentationApiCanaryTest#liquibaseMatchers}):
  * <ul>
  *   <li>2-арг overload {@code execute} делегирует в 3-арг — поэтому матчим ТОЛЬКО 3-арг и не

@@ -17,8 +17,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Уровень B: собранный РУКАМИ MockMvc ({@code standaloneSetup}, мимо кастомайзера Spring Boot)
- * попадает в отчёт через байткод-перехват {@code perform()}. Этого раньше не было —
- * standalone был «слепой зоной». Тест в Spring-контексте, т.к. установка инструментирования
+ * попадает в отчёт через байткод-перехват {@code perform()} — без него standalone остаётся
+ * слепой зоной. Тест в Spring-контексте, т.к. установка инструментирования
  * идёт из TestExecutionListener (типичный кейс: @SpringBootTest + ручной MockMvc).
  */
 @SpringBootTest(classes = WebTestApp.class)

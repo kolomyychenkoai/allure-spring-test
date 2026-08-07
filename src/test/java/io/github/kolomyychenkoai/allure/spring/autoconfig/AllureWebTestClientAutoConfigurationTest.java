@@ -13,9 +13,9 @@ import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Уровень A: авто-активация WebTestClient-модуля. Раньше её не проверял НИ ОДИН тест, хотя
- * кастомайзер — ЕДИНСТВЕННЫЙ канал этого модуля: байткод-фолбэка, как у MockMvc, у него нет,
- * поэтому тихое выключение означает полную потерю его шагов.
+ * Уровень A: авто-активация WebTestClient-модуля. Кастомайзер — ЕДИНСТВЕННЫЙ канал этого
+ * модуля: байткод-фолбэка, как у MockMvc, у него нет, поэтому тихое выключение означает
+ * полную потерю его шагов — проверять активацию обязательно.
  */
 @Epic("Внутренние проверки библиотеки")
 class AllureWebTestClientAutoConfigurationTest {

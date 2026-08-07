@@ -56,10 +56,9 @@ public final class AllureInstrumentation {
     /**
      * Есть ли byte-buddy на classpath.
      *
-     * @deprecated звать ОТСЮДА бессмысленно: чтобы добраться до этого метода, JVM должна
-     * загрузить {@code AllureInstrumentation}, а он без byte-buddy не линкуется
+     * @deprecated всегда возвращает {@code true} либо не вызывается вовсе: чтобы добраться сюда,
+     * JVM должна загрузить {@code AllureInstrumentation}, а он без byte-buddy не линкуется
      * ({@link NoClassDefFoundError} до входа в метод). Гард — {@link ByteBuddyPresence#available()}.
-     * Метод оставлен, чтобы не ломать потребителей, ссылавшихся на него.
      */
     @Deprecated(since = "0.1.0")
     public static boolean available() {
@@ -118,14 +117,10 @@ public final class AllureInstrumentation {
 
     /**
      * Копит сбои трансформации в {@link InstrumentationDiagnostics}. Переопределяем РОВНО два
-     * колбэка: {@code onError} (ради чего всё) и {@code onTransformation} (позитивный сигнал
+     * колбэка: {@code onError} (главная цель) и {@code onTransformation} (позитивный сигнал
      * «типы реально перехвачены»). {@code onDiscovery}/{@code onIgnored}/{@code onComplete}
      * намеренно оставлены no-op: они дёргаются на КАЖДЫЙ загружаемый класс JVM — это горячий
      * путь загрузки классов, а полезной информации там нет.
-     * <p>
-     * Класс вложенный и создаётся ЛОКАЛЬНО внутри {@link #retransform}: статическим полем его
-     * делать нельзя — {@code <clinit>} потянул бы типы byte-buddy и сломал {@link #available()},
-     * который обязан работать и без byte-buddy на classpath.
      */
     private static final class FailureListener extends AgentBuilder.Listener.Adapter {
 

@@ -7,7 +7,7 @@ import org.springframework.test.context.TestExecutionListener;
 
 /**
  * Проигрывает буфер статус-онли обменов {@code WebTestClient}, снятых
- * {@link AllureWebTestClientFilter} на реактивном потоке: чистит буфер в
+ * {@code AllureWebTestClientFilter} на реактивном потоке: чистит буфер в
  * {@code beforeTestMethod}, выкладывает шаги на тест-потоке в {@code afterTestMethod}
  * (см. {@link AllureWebTestClientLogger}). Регистрируется через {@code META-INF/spring.factories}.
  * <p>

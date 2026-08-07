@@ -131,8 +131,8 @@ class AllureAssertJTest {
     @DisplayName("проверки из АБСТРАКТНЫХ классов дают ровно один шаг (размен ADR 0001 закреплён)")
     void assertsDeclaredInAbstractClassesGiveExactlyOneStep() {
         // Эти три семьи — предмет пересмотра ADR 0001. isCloseTo объявлен в AbstractDoubleAssert,
-        // hasFieldOrPropertyWithValue — в AbstractObjectAssert: пока конструкторы были в матчере,
-        // сами эти классы не трансформировались и шага НЕ БЫЛО. isBetween — та проверка, которую
+        // hasFieldOrPropertyWithValue — в AbstractObjectAssert: с конструкторами в матчере сами
+        // эти классы не трансформируются и шага НЕ БУДЕТ. isBetween — та проверка, которую
         // ADR считал ломающейся от not(isConstructor()); она обязана остаться ровно одним шагом.
         // Уберут not(isConstructor()) — красным станут первые два, и по имени теста будет ясно,
         // что это осознанный размен, а не находка.

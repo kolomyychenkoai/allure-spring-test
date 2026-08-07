@@ -40,9 +40,9 @@ class SpringAssertionsReportIT {
     @Test
     @DisplayName("остальные три advice (assertNotEquals/assertFalse/assertNull) тоже дают шаги")
     void remainingAdvicesAppearInReport() {
-        // Модуль вешает 6 advice, витрина показывала 3: у трёх матчеры takesArguments(N)
-        // не проверялись на живой цепочке ни разу. Заодно пиннится дедуп по глубине —
-        // assertNull внутри делегирует в assertTrue, и шаг должен остаться ОДИН.
+        // Модуль вешает 6 advice — витрина обязана показывать все шесть, иначе матчеры
+        // takesArguments(N) у части из них не проверяются на живой цепочке. Заодно пиннится
+        // дедуп по глубине: assertNull внутри делегирует в assertTrue, шаг должен остаться ОДИН.
         AssertionErrors.assertNotEquals("разные имена", "laptop", "phone");
         AssertionErrors.assertFalse("единица не больше двух", 1 > 2);
         AssertionErrors.assertNull("значения нет", null);

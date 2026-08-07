@@ -49,9 +49,8 @@ public final class ActivationDiagnostics {
                                         boolean byteBuddyTooOld, String byteBuddyVersion) {
         List<String> problems = new ArrayList<>();
 
-        // Самая тихая из всех поломок: агент ставится, а трансформация падает на КАЖДОМ типе.
-        // Версию byte-buddy потребитель обычно не выбирает — она приходит из BOM Spring Boot,
-        // поэтому «Boot 3.4 на Java 25» выглядит рабочей комбинацией с мёртвым перехватом.
+        // Механика и версионные эпохи — в javadoc ByteBuddyClassFormat. Здесь важно одно:
+        // комбинация вроде «Boot 3.4 на Java 25» выглядит рабочей, а перехват в ней мёртв.
         if (byteBuddyPresent && byteBuddyTooOld) {
             problems.add("byte-buddy " + byteBuddyVersion + " не знает формат классов Java "
                     + Runtime.version().feature() + " → байткод-перехват (ассерты, JDBC, Kafka, "
@@ -87,15 +86,14 @@ public final class ActivationDiagnostics {
     /**
      * Один раз на JVM, WARNING в логгер библиотеки; прогон не роняем.
      * <p>
-     * <b>Отвергнутая альтернатива: проверять, зарегистрирован ли НАШ бин-кастомайзер</b>
-     * (по имени, через контекст). Идея была закрыть случай «класс-крючок есть, а наш автоконфиг
-     * собран против другого имени». Замерено — не годится: правило срабатывает на КАЖДОМ
-     * контексте без автоконфигурации ({@code @SpringBootConfiguration} без
-     * {@code @EnableAutoConfiguration} — обычное дело для узких тест-приложений), и WARNING
-     * появлялись в каждом прогоне. А после перехода на резолв интерфейса ПО ИМЕНИ
-     * ({@link MovedCustomizerRegistrar}) сама дыра закрыта конструктивно: имя из списка находится
-     * в любом мажоре. Остаточный риск — ТРЕТЬЕ, неизвестное нам имя — ловит проверка ниже,
-     * она читает тот же список {@link MovedTypeNames}.
+     * ⚠️ <b>НЕ добавляй сюда проверку «зарегистрирован ли наш бин-кастомайзер»</b> (по имени,
+     * через контекст). Замерено: она срабатывает на КАЖДОМ контексте без автоконфигурации
+     * ({@code @SpringBootConfiguration} без {@code @EnableAutoConfiguration} — обычное дело
+     * для узких тест-приложений), то есть сыплет WARNING в каждом прогоне.
+     * Случай, который она закрывала бы («крючок есть, а наш автоконфиг собран против другого
+     * имени»), закрыт конструктивно: интерфейс резолвится ПО ИМЕНИ
+     * ({@link MovedCustomizerRegistrar}), а имя из списка находится в любом мажоре. Остаток —
+     * ТРЕТЬЕ, неизвестное имя — ловит проверка ниже по тому же списку {@link MovedTypeNames}.
      */
     public static void reportOnce() {
         if ("off".equalsIgnoreCase(System.getProperty(SWITCH)) || !REPORTED.compareAndSet(false, true)) {
@@ -112,9 +110,10 @@ public final class ActivationDiagnostics {
                             "[Allure Spring] модуль не активирован: " + problem
                                     + " (заглушить: -D" + SWITCH + "=off)"));
         } catch (Throwable diagnosticIsNotWorthATest) {
-            // Обещание «прогон не роняем никогда» теперь ГАРАНТИЯ, а не удача реализации:
-            // раньше оно держалось на том, что ClassPresence ловит Throwable внутри себя.
-            // Диагност — вспомогательный сигнал, ронять из-за него чужой тест недопустимо.
+            // Ловим здесь, а не полагаемся на то, что Throwable съест ClassPresence внутри себя:
+            // обещание «прогон не роняем никогда» обязано принадлежать этому методу, иначе оно
+            // держится на реализации чужого хелпера. Диагност — вспомогательный сигнал, ронять
+            // из-за него чужой тест недопустимо.
             AllureInstrumentationLogger.warn("ActivationDiagnostics", diagnosticIsNotWorthATest);
         }
     }

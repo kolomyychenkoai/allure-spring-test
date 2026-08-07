@@ -8,8 +8,8 @@ import org.awaitility.Awaitility;
  * Вынесено из {@code AllureAwaitilityListener} по той же причине, что и
  * {@code AllureRestAssuredRegistrar}: верификатор байткода проверяет присваиваемость
  * {@link AllureAwaitilityConditionListener} к {@code ConditionEvaluationListener} и грузит
- * этот интерфейс ЕЩЁ ДО выполнения гейта «Awaitility на classpath?». Пока код жил в листенере,
- * весь листенер без Awaitility не линковался, а его гейт был мёртвым.
+ * этот интерфейс ЕЩЁ ДО выполнения гейта «Awaitility на classpath?». Вернёшь код в листенер —
+ * листенер без Awaitility перестанет линковаться, а его гейт станет мёртвым.
  * Закреплено тестом {@code unit/ListenerDegradationTest}.
  */
 public final class AllureAwaitilityRegistrar {

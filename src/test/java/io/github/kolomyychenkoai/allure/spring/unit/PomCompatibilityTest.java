@@ -124,8 +124,7 @@ class PomCompatibilityTest {
     @Test
     @DisplayName("прогон обязан объявлять версию JVM — иначе «собрано под 25» держится на честном слове")
     void runDeclaresExpectedJvm() throws IOException {
-        // Раньше это жило в профиле java25, который форкал surefire на другой JDK. Профиля больше
-        // нет: Java 25 — условие сборки, а не точка матрицы. Но сама проверка нужнее прежнего.
+        // Проверка безусловная, а не в профиле: Java 25 — условие сборки, а не точка матрицы.
         // Собраться под release=25 и ПРОГНАТЬСЯ на другой JVM технически можно (JAVA_HOME у maven
         // и <jvm> у surefire — разные вещи), и тогда «проверено на 25» было бы неправдой.
         // Свойство едет в canary/InstrumentationApiCanaryTest, тот сверяет с Runtime.version().

@@ -14,8 +14,8 @@ import java.util.List;
 
 /**
  * Уровень B: вызовы {@code RestClient} (новый текучий клиент Spring) попадают в отчёт через
- * интерсептор, навешенный байткодом на {@code DefaultRestClientBuilder.build()}. Раньше этого
- * клиента не было видно. {@code RestClient} строим обычным {@code RestClient.create(baseUrl)} —
+ * интерсептор, навешенный байткодом на {@code DefaultRestClientBuilder.build()}: другого канала
+ * у этого клиента нет. {@code RestClient} строим обычным {@code RestClient.create(baseUrl)} —
  * именно так его создаёт прикладной код, и именно эту цепочку проверяем.
  */
 @SpringBootTest(classes = WebTestApp.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)

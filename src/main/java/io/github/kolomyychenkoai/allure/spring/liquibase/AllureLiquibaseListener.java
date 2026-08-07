@@ -20,9 +20,7 @@ import org.springframework.test.context.TestExecutionListener;
  * <p>
  * Кроме установки, в {@code beforeTestMethod} рисует снимок стартовой схемы БД — в НАЧАЛЕ каждого
  * теста, чтобы любой тест был самодостаточен (см.
- * {@link AllureLiquibaseInstrumentation#emitStartupSnapshot()}). Кейс уже активен: платформенный
- * слушатель Allure {@code AllureJunitPlatform.executionStarted} стартует кейс до фазы {@code before}
- * узла JUnit-Platform.
+ * {@link AllureLiquibaseInstrumentation#emitStartupSnapshot()}).
  * <p>
  * Снимок рисуем ТОЛЬКО если контекст ИМЕННО ЭТОГО теста реально применял стартовые миграции —
  * проверяем наличие бина {@link SpringLiquibase} ({@link #contextRanLiquibase}). Иначе JVM-широкий
@@ -61,8 +59,7 @@ public class AllureLiquibaseListener implements TestExecutionListener, Ordered {
         if (!LIQUIBASE_PRESENT) {
             return; // нет liquibase на classpath — не трогаем liquibase-типы
         }
-        // снимок стартовой схемы — в НАЧАЛЕ каждого теста, но только там, где БД реально поднималась;
-        // кейс уже активен (AllureJunitPlatform.executionStarted стартует его до фазы before узла)
+        // снимок стартовой схемы — в НАЧАЛЕ каждого теста, но только там, где БД реально поднималась
         if (!contextRanLiquibase(testContext.getApplicationContext())) {
             return;
         }

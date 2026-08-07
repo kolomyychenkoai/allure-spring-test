@@ -46,11 +46,11 @@ class AssertJReportIT {
     @Test
     @DisplayName("проверки, объявленные в абстрактных классах AssertJ (isBetween/isCloseTo/поля объекта)")
     void assertjFamiliesDeclaredInAbstractClassesAppearInReport() {
-        // Эти семьи объявлены в АБСТРАКТНЫХ классах, которые сами падали при трансформации
-        // (публичный конструктор): isCloseTo — в AbstractDoubleAssert, hasFieldOrPropertyWithValue —
-        // в AbstractObjectAssert. Наследовать их неоткуда, поэтому шага не было ВООБЩЕ.
-        // Пока витрина их не показывала, вопрос «ломает ли not(isConstructor())» был неразрешим
-        // прогоном: зелёная сборка ничего не доказывала. Теперь разрешим — см. ADR 0001.
+        // Эти семьи объявлены в АБСТРАКТНЫХ классах, которые срываются при трансформации, если
+        // матчер цепляет конструкторы: isCloseTo — в AbstractDoubleAssert,
+        // hasFieldOrPropertyWithValue — в AbstractObjectAssert. Наследовать их неоткуда, поэтому
+        // шага не будет ВООБЩЕ. Убери их отсюда — и вопрос «ломает ли not(isConstructor())»
+        // снова станет неразрешимым прогоном: зелёная сборка ничего не докажет. См. ADR 0001.
         assertThat(5).isBetween(1, 10);                                   // AbstractComparableAssert
         assertThat(1.5).isCloseTo(1.4, within(0.2));                      // AbstractDoubleAssert
         assertThat(new Order("laptop")).hasFieldOrPropertyWithValue("name", "laptop"); // AbstractObjectAssert
@@ -65,7 +65,7 @@ class AssertJReportIT {
     void arraysAndLambdasRenderReadably() {
         // satisfies/returns/matches намеренно перехватываются (это настоящие проверки), но их
         // аргумент — лямбда: без общего фикса рендера в имени шага был бы «$$Lambda/0x…@1a2b».
-        // Массивы: примитивные раньше печатались как «[I@6d06d69c».
+        // Массивы: примитивные без чистки печатаются как «[I@6d06d69c».
         assertThat(new int[]{1, 2, 3}).containsExactly(1, 2, 3);
         assertThat(new Order("laptop")).satisfies(order -> {
         });

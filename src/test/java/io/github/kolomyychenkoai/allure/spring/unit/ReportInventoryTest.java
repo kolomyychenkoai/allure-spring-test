@@ -325,8 +325,8 @@ class ReportInventoryTest {
         @Test
         @DisplayName("скан СЧИТАЕТ кратность по кейсам: два файла с 1 и 2 вхождениями → 1..2")
         void scanCountsPerCase(@TempDir Path dir) throws IOException {
-            // Звено «scan → perCase» раньше не проверял никто: убери local.merge — все маркеры
-            // становятся инертными, и сборка остаётся зелёной.
+            // Звено «scan → perCase»: убери local.merge — все маркеры кратности станут
+            // инертными, а сборка останется зелёной.
             Files.writeString(dir.resolve("a-result.json"), """
                     {"labels":[{"name":"testClass","value":"io.github.kolomyychenkoai.allure.spring.demo.KafkaReportIT"}],
                      "steps":[{"name":"Kafka: отправлено → t [k]"}]}
@@ -484,8 +484,8 @@ class ReportInventoryTest {
         @Test
         @DisplayName("маркер кратности переживает круг «запись → чтение» (иначе белый список пуст)")
         void countMarkerRoundTrip(@TempDir Path dir) throws IOException {
-            // Звено «формат файла» раньше не проверял никто: сломанный COUNT_MARKER тихо обнулял
-            // ВЕСЬ белый список, и гейт кратности становился декоративным при зелёной сборке.
+            // Звено «формат файла»: сломанный COUNT_MARKER тихо обнуляет ВЕСЬ белый список,
+            // и гейт кратности становится декоративным при зелёной сборке.
             Path file = dir.resolve("inventory/baseline.txt");
             Kind exact = kind("A", "Шаг ровно один");
             Kind atLeast = kind("A", "Шаг не меньше трёх");
@@ -627,9 +627,9 @@ class ReportInventoryTest {
         @Test
         @DisplayName("на «*»-виды маркеры НЕ сеются — иначе они были бы мёртвыми")
         void noMarkersOnAnyOwner() {
-            // Ловушка была латентной: counts/shapes ищут наблюдения по ТОЧНОМУ Kind, включая
-            // владельца, а скан ключует конкретным классом. Значит маркер на «*»-виде никогда
-            // не проверялся бы — вечно-зелёный маркер, худший исход. Теперь их просто не сеют.
+            // Ловушка латентная: counts/shapes ищут наблюдения по ТОЧНОМУ Kind, включая
+            // владельца, а скан ключует конкретным классом. Маркер на «*»-виде не проверялся бы
+            // никогда — вечно-зелёный маркер, худший исход. Поэтому на такие виды их не сеют.
             Kind any = kind(ReportInventory.ANY_OWNER, "Значение сообщения | application/json");
             Scan scan = new Scan(new TreeSet<>(), new TreeSet<>(), Set.of("KafkaReportIT"), 1,
                     List.of(), List.of(), List.of(),

@@ -37,7 +37,7 @@ import static net.bytebuddy.matcher.ElementMatchers.named;
  * Перехватываются и static {@code client.WireMock.*}, и {@code WireMockServer.*}.
  * Дубля шага НЕТ: {@code verify}-перегрузки делегируют в {@code verifyThat} (не в {@code verify}),
  * {@code stubFor} — в {@code register}, статический {@code reset()} — в инстансный
- * {@code resetMappings()} (мы их не матчим). Проверено на WireMock 3.9/3.13.
+ * {@code resetMappings()} (мы их не матчим). Проверено на WireMock 3.13.x.
  * <p>
  * ЧАСТИЧНЫЕ и дефолт-сбросы намеренно НЕ логируются (логируем только полный «сброс заглушек»):
  * инстансные {@code resetMappings/resetRequests/resetScenarios/resetToDefaultMappings} и статические
@@ -46,8 +46,8 @@ import static net.bytebuddy.matcher.ElementMatchers.named;
  * ⚠️ Инстансный {@code resetAll} и статический {@code WireMock.reset()} — РАЗНЫЕ точки входа с разными
  * ключами дедупа, поэтому если один teardown зовёт ОБА на один сервер (так делает Spring Cloud Contract:
  * {@code WireMockConfiguration.resetMappings()} каскадит {@code resetAll()}+{@code WireMock.reset()}+
- * частичные), в отчёте будет ДВА шага «сброс заглушек» (инстансный с портом + статический без) — это не
- * 10×-баг, а честное отражение двух вызовов; связать статику с конкретным сервером нечем (у неё нет ссылки).
+ * частичные), в отчёте будет ДВА шага «сброс заглушек» (инстансный с портом + статический без). Это не
+ * дубль, а честное отражение двух вызовов; связать статику с конкретным сервером нечем (у неё нет ссылки).
  * Установка идемпотентна (CAS-гард {@code INSTALLED}, потокобезопасно) — один раз на JVM.
  */
 public final class AllureWireMockVerifyInstrumentation {

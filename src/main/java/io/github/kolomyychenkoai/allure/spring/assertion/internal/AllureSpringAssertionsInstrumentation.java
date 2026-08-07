@@ -21,11 +21,12 @@ import static net.bytebuddy.matcher.ElementMatchers.takesArguments;
  * {@code assertNull}/{@code assertNotNull} → {@code assertTrue}: один пользовательский ассерт
  * проходит через несколько инструментированных методов. Чтобы НЕ задвоить шаг, считаем
  * глубину вложенности (как в AssertJ): шаг пишет только ВНЕШНИЙ (пользовательский) вызов.
- * На пути ПАДЕНИЯ ({@code fail}, и т.п.) шага нет в любом случае, поэтому {@code fail} не
+ * На пути ПАДЕНИЯ ({@code fail} и т.п.) шага нет в любом случае, поэтому {@code fail} не
  * инструментируем.
  * <p>
  * Advice инлайнится в байткод AssertionErrors, поэтому ссылается только на хелперы
- * {@code internal} + j.u.l-логгер. Ставится один раз на JVM — см. {@link AllureAssertionsListener}.
+ * {@code internal} + j.u.l-логгер. Ставится один раз на JVM — см.
+ * {@code assertion.AllureAssertionsListener}.
  */
 public final class AllureSpringAssertionsInstrumentation {
 
@@ -64,8 +65,8 @@ public final class AllureSpringAssertionsInstrumentation {
      * ({@code org.springframework.test.web.support.AbstractStatusAssertions}). Разница не в
      * вызывающем, а в том, говорит ли сообщение что-то тестировщику.
      * <p>
-     * ⚠️ Список по определению неполон: Spring может добавить свои инварианты. Ловушкой служит
-     * эталон инвентаря — новый мусорный ВИД шага в нём виден сразу (`src/test/inventory`).
+     * ⚠️ Список по определению неполон: Spring может добавить свои инварианты. Ловушка на это —
+     * эталон инвентаря ({@code src/test/inventory}): новый мусорный ВИД шага виден в нём сразу.
      */
     private static final String[] SPRING_INTERNAL_CHECKS = {
             // WebTestClient/RestTestClient, Spring 7: AbstractStatusAssertions.assertStatusAndReturn
@@ -209,8 +210,8 @@ public final class AllureSpringAssertionsInstrumentation {
         }
 
         @Advice.OnMethodExit(suppress = Throwable.class, onThrowable = Throwable.class)
-        // Аргумент значения НАМЕРЕННО не связан: то, что не передано в advice, невозможно
-        // случайно отрендерить (см. комментарий ниже про побочный эффект toString()).
+        // Аргумент значения НАМЕРЕННО не связан — побочный эффект чужого toString(),
+        // см. AssertNotNullAdvice.
         public static void onExit(@Advice.Enter boolean outermost,
                                   @Advice.Argument(0) String message,
                                   @Advice.Thrown Throwable thrown) {
@@ -219,10 +220,6 @@ public final class AllureSpringAssertionsInstrumentation {
                 if (!outermost) {
                     return;
                 }
-                // Значение не рендерим по той же причине, что и в AssertNotNullAdvice — побочный
-                // эффект чужого toString(). Путь ПРОВАЛА важен не меньше успешного: шага там не
-                // будет (step() выходит при thrown != null), но имя-строка вычисляется РАНЬШЕ
-                // вызова — то есть toString() всё равно бы сработал.
                 AllureAdviceSupport.step("Проверка: " + message
                         + (thrown == null ? " — значение null" : " — значение не null"), thrown);
             } catch (Throwable t) {
@@ -238,8 +235,15 @@ public final class AllureSpringAssertionsInstrumentation {
         }
 
         @Advice.OnMethodExit(suppress = Throwable.class, onThrowable = Throwable.class)
-        // Аргумент значения НАМЕРЕННО не связан: то, что не передано в advice, невозможно
-        // случайно отрендерить (см. комментарий ниже про побочный эффект toString()).
+        // ⚠️ Аргумент значения НАМЕРЕННО не связан: непереданное невозможно случайно отрендерить.
+        // toString() чужого объекта — ПОБОЧНЫЙ ЭФФЕКТ, а не чтение. Живой пример: WebTestClient
+        // зовёт assertNotNull("exchangeResult unexpectedly null", exchangeResult), а
+        // ExchangeResult.toString() печатает тело ответа — одноразовое с Spring 7. Отрендеришь —
+        // выпьешь тело у теста потребителя, и он получит «The client response body can only be
+        // consumed once» на своём же expectBody(). Связать значение мало и на пути ПРОВАЛА: шага
+        // там не будет (step() выходит при thrown != null), но имя-строка вычисляется РАНЬШЕ
+        // вызова, то есть toString() уже сработает.
+        // Стережёт unit/AllureSpringAssertionsTest#nullAssertionsDoNotTouchValueToString.
         public static void onExit(@Advice.Enter boolean outermost,
                                   @Advice.Argument(0) String message,
                                   @Advice.Thrown Throwable thrown) {
@@ -248,15 +252,6 @@ public final class AllureSpringAssertionsInstrumentation {
                 if (!outermost || internalSpringCheck(message)) {
                     return; // инвариант самого Spring — тестировщику он ничего не говорит
                 }
-                // ⚠️ Значение НЕ рендерим — проверяется только его наличие, а toString() чужого
-                // объекта может иметь ПОБОЧНЫЙ ЭФФЕКТ. Реальный случай (Spring 7): внутренняя
-                // проверка AbstractStatusAssertions.assertStatusAndReturn зовёт
-                // assertNotNull("exchangeResult unexpectedly null", exchangeResult), а
-                // ExchangeResult.toString() печатает тело ответа — и в Spring 7 тело клиентского
-                // ответа ОДНОРАЗОВОЕ. Отчёт выпивал его у теста: потребитель получал
-                // «The client response body can only be consumed once» на своём же expectBody().
-                // Стережёт unit/AllureSpringAssertionsTest#nullAssertionsDoNotTouchValueToString
-                // (мутация: вернуть сюда safe(actual) → красный).
                 AllureAdviceSupport.step("Проверка: " + message
                         + (thrown == null ? " — значение не null" : " — значение null"), thrown);
             } catch (Throwable t) {

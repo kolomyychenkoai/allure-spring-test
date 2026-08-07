@@ -97,6 +97,10 @@ public final class AllureJUnitJupiterAssertionsInstrumentation {
             case "assertSame" -> "тот же объект: " + v(vals, 1);
             case "assertNotSame" -> "разные объекты: " + v(vals, 0) + " ≠ " + v(vals, 1);
             case "assertNull" -> "значение null";
+            // ⚠️ Здесь значение РЕНДЕРИТСЯ, в отличие от одноимённого Spring-ассерта, где это
+            // запрещено: toString() чужого объекта — побочный эффект (разбор — в
+            // AllureSpringAssertionsInstrumentation.AssertNotNullAdvice). Риск тот же и здесь,
+            // просто не закрыт: значение нужно в имени шага, а немого способа его показать нет.
             case "assertNotNull" -> "значение " + v(vals, 0) + " не null";
             case "assertArrayEquals" -> "массивы равны";
             case "assertIterableEquals" -> "коллекции равны";
