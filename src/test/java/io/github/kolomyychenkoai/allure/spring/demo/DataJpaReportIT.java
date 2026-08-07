@@ -39,7 +39,8 @@ class DataJpaReportIT {
         widgets.save(new Widget("paged"));
         widgets.findAll(org.springframework.data.domain.PageRequest.of(0, 1));
 
-        // Page — не Collection, поэтому раньше уходил в toString: «Page 1 of N containing … instances».
+        // Page — не Collection, поэтому без отдельной ветки уходит в toString:
+        // «Page 1 of N containing … instances» вместо самих сущностей.
         // Имя шага и вложения при этом не менялись — инвентарь такую деградацию не видит by design.
         String dbResult = CurrentReport.attachmentOfStep("DB WidgetRepository.findAll", "DB Result").orElse("");
         CurrentReport.check(dbResult.contains("Widget{"),

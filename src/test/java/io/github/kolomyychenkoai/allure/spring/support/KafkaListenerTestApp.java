@@ -10,8 +10,9 @@ import java.util.concurrent.CountDownLatch;
 
 /**
  * Приложение для живого теста приёма через {@code @KafkaListener}: обработчик ловит
- * сообщение на потоке контейнера-слушателя (НЕ на тест-потоке) — это путь, который
- * раньше не давал ни одного consumer-шага. Брокер — встроенный ({@code @EmbeddedKafka}).
+ * сообщение на потоке контейнера-слушателя (НЕ на тест-потоке) — без буфера и проигрывания
+ * в {@code afterTestMethod} этот путь не даёт ни одного consumer-шага.
+ * Брокер — встроенный ({@code @EmbeddedKafka}).
  */
 @SpringBootConfiguration
 @EnableAutoConfiguration

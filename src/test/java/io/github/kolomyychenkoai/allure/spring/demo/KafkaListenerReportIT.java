@@ -64,8 +64,8 @@ class KafkaListenerReportIT {
         // краснеет, если replay-путь @KafkaListener (буфер на потоке контейнера → flush в
         // afterTestMethod) сломан. (Имя шага «Kafka: получено» лежит в result.json, а topic/
         // payload — в отдельном файле-вложении, поэтому co-located маркеры берём из вложения.)
-        // Мета приёма (topic/partition/offset) и VALUE теперь в РАЗНЫХ файлах-вложениях (value вынесен
-        // отдельным «Значение сообщения», как у producer). Проверяем оба отдельно.
+        // Мета приёма (topic/partition/offset) и VALUE лежат в РАЗНЫХ файлах-вложениях (value —
+        // отдельным «Значение сообщения», как у producer), поэтому проверяем их по отдельности.
         // Мета: «Offset:» есть ТОЛЬКО у consumer (у producer нет) + наш уникальный topic listener-events
         // (producer-тест шлёт в order-events) → доказывает, что это ПРИЁМ этого теста.
         CurrentReport.check(CurrentReport.anyResultFileContainsAll("Topic: listener-events", "Offset:"),

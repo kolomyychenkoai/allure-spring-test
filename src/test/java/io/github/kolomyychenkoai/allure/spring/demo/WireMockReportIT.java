@@ -43,8 +43,8 @@ class WireMockReportIT {
 
     /**
      * Второй способ регистрации, которым пользуется половина потребителей. WireMockExtension
-     * наследует DslWrapper, а НЕ WireMockServer, поэтому поиск по типу поля его не находил:
-     * байткод (stubFor/verify) работал, а «сервер поднят», «Запрос к заглушке» и вложения — нет.
+     * наследует DslWrapper, а НЕ WireMockServer, поэтому поиск по ТИПУ поля его не находит:
+     * байткод (stubFor/verify) работал бы, а «сервер поднят», «Запрос к заглушке» и вложения — нет.
      * Обязательно static: нестатический @RegisterExtension стартует в beforeEach ПОСЛЕ
      * SpringExtension, и к моменту beforeTestMethod сервер ещё не поднят.
      */

@@ -15,7 +15,7 @@ import java.util.List;
 /**
  * Уровень B: ожидание Awaitility попадает в отчёт через слушатель, навешенный
  * {@code AllureAwaitilityListener} (официальный SPI). Ожидание идёт на тест-потоке (активный
- * кейс) → шаг виден сразу, без @AfterAll. Раньше Awaitility-ожидания в отчёт не попадали.
+ * кейс) → шаг виден сразу, без @AfterAll. Без этого слушателя ожидания в отчёт не попадают.
  */
 @SpringBootTest(classes = TestApp.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @Epic("allure-spring-test")

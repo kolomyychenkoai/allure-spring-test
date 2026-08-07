@@ -86,7 +86,7 @@ class JdbcReportIT {
                 () -> "нет шага DB JdbcTemplate.batchUpdate: " + steps);
         CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("SQL INSERT") && n.contains("widget")),
                 () -> "нет SQL INSERT из пакета: " + steps);
-        // второй запрос пакета раньше молча терялся: брался queryInfoList.get(0)
+        // возьмёшь queryInfoList.get(0) — второй запрос пакета молча потеряется
         CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("SQL UPDATE") && n.contains("widget")),
                 () -> "второй запрос пакета потерян: " + steps);
     }

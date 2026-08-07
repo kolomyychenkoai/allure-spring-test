@@ -48,8 +48,8 @@ class HamcrestReportIT {
     @Test
     @DisplayName("описание матчера в шаге — РЕАЛЬНОЕ (describeTo), а не Класс@хэш")
     void matcherDescriptionIsRendered() {
-        // Раньше проверялось только начало имени («… ожидалось»), поэтому деградация
-        // «печатаем org.hamcrest.core.Is@1a2b вместо is "laptop"» проходила мимо.
+        // Проверяем имя ЦЕЛИКОМ, а не начало («… ожидалось»): иначе деградация
+        // «печатаем org.hamcrest.core.Is@1a2b вместо is "laptop"» пройдёт мимо.
         // Ожидаемый хвост вычисляет САМ Hamcrest — при смене формулировок в новой версии
         // обе стороны едут вместе, флака не будет.
         org.hamcrest.Matcher<String> matcher = org.hamcrest.Matchers.is("laptop");
