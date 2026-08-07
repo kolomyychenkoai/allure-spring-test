@@ -18,7 +18,8 @@ import java.util.List;
  * <p>
  * Этот тест — ЕДИНЫЙ инвентарь «что мы предполагаем про API каждой инструментируемой
  * библиотеки». При апгрейде он краснеет ТОЧЕЧНО, с указанием, какой матчер в каком
- * {@code *Instrumentation} обновить — человеку не нужно реверсить причину по вагуэ-падению IT.
+ * {@code *Instrumentation} обновить, — вместо того чтобы восстанавливать причину по
+ * невнятному падению интеграционного теста.
  * <p>
  * Внутренние ПОЛЯ Mockito (рефлексия по приватным полям, иной механизм) канареятся
  * отдельно — см. {@code mock.AllureMockitoTest#mockitoInternalFieldsExist}.
@@ -92,7 +93,7 @@ class InstrumentationApiCanaryTest {
     @Test
     @DisplayName("RestClient: внутренний DefaultRestClientBuilder.build() (матчер RestClient-модуля)")
     void restClientMatchers() {
-        // ВНИМАНИЕ: DefaultRestClientBuilder — package-private ВНУТРЕННИЙ класс Spring (не публичный
+        // ⚠️ DefaultRestClientBuilder — package-private ВНУТРЕННИЙ класс Spring (не публичный
         // API). Самое хрупкое допущение ветки: при апгрейде Spring его могут переименовать/убрать молча.
         require(classPresent("org.springframework.web.client.DefaultRestClientBuilder"),
                 "DefaultRestClientBuilder уехал (внутренний класс Spring!) → обнови матчер в AllureRestClientInstrumentation");
@@ -103,7 +104,7 @@ class InstrumentationApiCanaryTest {
     @Test
     @DisplayName("RestAssured: внутренний ValidatableResponseOptionsImpl и его проверки (матчер RA-валидации)")
     void restAssuredValidationMatchers() {
-        // ВНИМАНИЕ: ValidatableResponseOptionsImpl — ВНУТРЕННИЙ класс RestAssured (io.restassured.internal,
+        // ⚠️ ValidatableResponseOptionsImpl — ВНУТРЕННИЙ класс RestAssured (io.restassured.internal,
         // без гарантий совместимости) и носитель всех перегрузок проверок .then(). Самое хрупкое допущение
         // ветки: апгрейд RestAssured может переименовать класс/метод молча → шаги «Проверка ответа» исчезнут.
         String vroi = "io.restassured.internal.ValidatableResponseOptionsImpl";
@@ -142,7 +143,7 @@ class InstrumentationApiCanaryTest {
     void liquibaseMatchers() {
         String cs = "liquibase.changelog.ChangeSet";
         // Матчим ТОЛЬКО 3-арг execute(DatabaseChangeLog, ChangeExecListener, Database): 2-арг overload
-        // делегирует в него (проверено на Liquibase 4.x) — одна точка покрывает старт и ручной update без дублей.
+        // делегирует в него (проверено на Liquibase 5.x) — одна точка покрывает старт и ручной update без дублей.
         require(hasMethod(cs, "execute", 3, null),
                 "ChangeSet.execute(3-арг) уехал → обнови матчер в AllureLiquibaseInstrumentation");
         require(hasMethod(cs, "getId", 0, null), "ChangeSet.getId уехал → AllureLiquibaseInstrumentation.details");
