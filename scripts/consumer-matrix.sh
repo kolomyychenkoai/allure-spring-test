@@ -76,6 +76,7 @@ for svc in "${services[@]}"; do
     # python3 не отработал, каталог не тот — и «✅ идентично» означало бы «мы ничего не измерили».
     # Тот же урок, что в consumer-attribution.py: пустой результат обязан быть красным, а не «✅».
     empty=0
+    tests=0
     for phase in without with; do
         snapshot=$svc-$MODE-$phase.snapshot
         tests=$(grep -c '^TEST | ' "$snapshot")
@@ -95,8 +96,8 @@ for svc in "${services[@]}"; do
     fi
 
     if diff -u "$svc-$MODE-without.snapshot" "$svc-$MODE-with.snapshot" > "$svc-$MODE.diff"; then
-        n=$(grep -c '^TEST | ' "$svc-$MODE-without.snapshot")
-        echo "  ✅ снимки идентичны ($n тестов) — библиотека ничего не изменила"
+        # $tests — из проверки порога выше (снимки уже признаны совпавшими, число одно на обе стороны)
+        echo "  ✅ снимки идентичны ($tests тестов) — библиотека ничего не изменила"
         rm -f "$svc-$MODE.diff"
     else
         echo "  ❌ РАСХОЖДЕНИЕ — разбирать: $svc-$MODE.diff"

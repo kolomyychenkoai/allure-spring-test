@@ -168,9 +168,12 @@ public final class AllureAdviceSupport {
      * {@code toString()} не переопределён и в имя шага течёт хэш.
      * <p>
      * Сначала дешёвая проверка ФОРМЫ по префиксу, и только потом {@code hashCode()} — и он
-     * в своём try: у неинициализированного Hibernate-прокси он и бросает
-     * ({@code LazyInitializationException}), и будит прокси. Исправный {@code toString()}
-     * из-за сломанного {@code hashCode()} терять нельзя.
+     * в своём try: у неинициализированного прокси он и бросает, и будит связь. Исправный
+     * {@code toString()} из-за сломанного {@code hashCode()} терять нельзя.
+     * <p>
+     * Прокси Hibernate и EclipseLink сюда уже не доходят — их отсекает страж
+     * {@link JpaLaziness} выше по {@code clean}. Try остаётся ради прочих провайдеров
+     * (OpenJPA и т.п.), которых страж не знает, и ради чужого сломанного {@code hashCode}.
      */
     private static boolean isIdentityToString(String text, Object value, Class<?> type) {
         String name = type.getName();

@@ -64,10 +64,21 @@ public final class JpaLaziness {
     /** Маркер вместо значения: обращаться к нему нельзя, а сказать о нём в отчёте нужно. */
     public static final String NOT_LOADED = "<не загружено: ленивая связь>";
 
-    private static final String HIBERNATE_PROXY_NAME = "org.hibernate.proxy.HibernateProxy";
-    private static final String HIBERNATE_COLLECTION_NAME = "org.hibernate.collection.spi.PersistentCollection";
-    private static final String ECLIPSELINK_HOLDER_NAME = "org.eclipse.persistence.indirection.ValueHolderInterface";
-    private static final String ECLIPSELINK_CONTAINER_NAME = "org.eclipse.persistence.indirection.IndirectContainer";
+    // Имена ПУБЛИЧНЫЕ, потому что их читает канарейка (canary/InstrumentationApiCanaryTest).
+    // Копировать их туда строками нельзя: разъедутся, и канарейка станет стеречь чужой API,
+    // а не НАШУ связь с ним — переименуй здесь с опечаткой, и она останется зелёной.
+    // Тот же приём, что у MovedTypeNames.
+    public static final String HIBERNATE_PROXY_NAME = "org.hibernate.proxy.HibernateProxy";
+    public static final String HIBERNATE_INITIALIZER_NAME = "org.hibernate.proxy.LazyInitializer";
+    public static final String HIBERNATE_COLLECTION_NAME = "org.hibernate.collection.spi.PersistentCollection";
+    public static final String ECLIPSELINK_HOLDER_NAME = "org.eclipse.persistence.indirection.ValueHolderInterface";
+    public static final String ECLIPSELINK_CONTAINER_NAME = "org.eclipse.persistence.indirection.IndirectContainer";
+
+    /** Предикаты состояния, которые зовём рефлексией: их имена канарейка стережёт так же. */
+    public static final String PROXY_INITIALIZER_METHOD = "getHibernateLazyInitializer";
+    public static final String HIBERNATE_PROXY_PROBE = "isUninitialized";
+    public static final String HIBERNATE_COLLECTION_PROBE = "wasInitialized";
+    public static final String ECLIPSELINK_PROBE = "isInstantiated";
 
     /**
      * Кэш «класс значения → как у него спросить»: рефлексия на каждое поле сущности дорога.
@@ -110,8 +121,8 @@ public final class JpaLaziness {
         try {
             return switch (PROBES.get(value.getClass())) {
                 case HIBERNATE_PROXY -> uninitializedProxy(value);
-                case HIBERNATE_COLLECTION -> !invokeBoolean(value, "wasInitialized");
-                case ECLIPSELINK -> !invokeBoolean(value, "isInstantiated");
+                case HIBERNATE_COLLECTION -> !invokeBoolean(value, HIBERNATE_COLLECTION_PROBE);
+                case ECLIPSELINK -> !invokeBoolean(value, ECLIPSELINK_PROBE);
                 case NONE -> false;
             };
         } catch (Throwable unknown) {
@@ -150,10 +161,10 @@ public final class JpaLaziness {
     }
 
     private static boolean uninitializedProxy(Object proxy) throws Exception {
-        Method getInitializer = proxy.getClass().getMethod("getHibernateLazyInitializer");
+        Method getInitializer = proxy.getClass().getMethod(PROXY_INITIALIZER_METHOD);
         getInitializer.setAccessible(true);
         Object initializer = getInitializer.invoke(proxy);
-        return initializer != null && invokeBoolean(initializer, "isUninitialized");
+        return initializer != null && invokeBoolean(initializer, HIBERNATE_PROXY_PROBE);
     }
 
     private static boolean invokeBoolean(Object target, String method) throws Exception {

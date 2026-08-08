@@ -25,7 +25,7 @@ public class WidgetService {
         this.widgets = widgets;
     }
 
-    /** Возвращает заказ с НЕинициализированной связью, пока транзакция ещё открыта. */
+    /** Возвращает {@link Widget} с НЕинициализированным {@code owner}, пока транзакция открыта. */
     @Transactional(readOnly = true)
     public Widget loadWithinTransaction(Long id) {
         return widgets.findById(id).orElseThrow();

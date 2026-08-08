@@ -4,6 +4,7 @@ import io.qameta.allure.Epic;
 
 import io.github.kolomyychenkoai.allure.spring.mock.internal.MockitoInternals;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
+import io.github.kolomyychenkoai.allure.spring.support.LazyProxies;
 import io.github.kolomyychenkoai.allure.spring.support.mock.Pricing;
 import io.github.kolomyychenkoai.allure.spring.support.mock.PricingCaller;
 import io.github.kolomyychenkoai.allure.spring.support.mock.PricingService;
@@ -178,20 +179,7 @@ class AllureMockitoTest {
     @DisplayName("мок вернул ЛЕНИВЫЙ прокси — во вложении маркер, toString() не позван")
     void lazyProxyReturnedByMockIsNotWokenUp() {
         boolean[] touched = {false};
-        Object initializer = java.lang.reflect.Proxy.newProxyInstance(getClass().getClassLoader(),
-                new Class<?>[]{org.hibernate.proxy.LazyInitializer.class}, (p, m, a) ->
-                        "isUninitialized".equals(m.getName()) ? Boolean.TRUE : null);
-        Object lazy = java.lang.reflect.Proxy.newProxyInstance(getClass().getClassLoader(),
-                new Class<?>[]{org.hibernate.proxy.HibernateProxy.class}, (p, m, a) -> {
-                    if ("toString".equals(m.getName())) {
-                        touched[0] = true; // в реальности это поход в БД
-                        return "разбудили!";
-                    }
-                    if ("getHibernateLazyInitializer".equals(m.getName())) {
-                        return initializer;
-                    }
-                    return "hashCode".equals(m.getName()) ? 1 : null;
-                });
+        Object lazy = LazyProxies.uninitializedEntity(touched);
 
         Pricing pricing = Mockito.mock(Pricing.class);
         Mockito.when(pricing.entity()).thenReturn(lazy);

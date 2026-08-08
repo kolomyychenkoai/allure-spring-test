@@ -320,7 +320,9 @@ public class AllureRepositoryAspect {
                 // Многострочное значение поля разорвало бы этот формат.
                 sj.add(field.getName() + "=" + AllureAdviceSupport.safe(field.get(obj)));
             } catch (Throwable e) {
-                // напр. LazyInitializationException по ленивой связи — не теряем остальные поля
+                // Ленивая связь Hibernate/EclipseLink сюда не приводит — её помечает маркером
+                // страж JpaLaziness. Ловим ОСТАЛЬНОЕ: недоступное под module-системой поле,
+                // ленивое у незнакомого провайдера, сломанный getter — не теряем прочие поля.
                 sj.add(field.getName() + "=?");
             }
         }

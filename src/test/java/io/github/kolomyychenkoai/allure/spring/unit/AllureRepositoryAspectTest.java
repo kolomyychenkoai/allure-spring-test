@@ -4,11 +4,9 @@ import io.qameta.allure.Epic;
 
 import io.github.kolomyychenkoai.allure.spring.data.internal.AllureRepositoryAspect;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
+import io.github.kolomyychenkoai.allure.spring.support.LazyProxies;
 import io.github.kolomyychenkoai.allure.spring.support.jpa.Widget;
 import io.qameta.allure.model.TestResult;
-import org.hibernate.collection.spi.PersistentCollection;
-import org.hibernate.proxy.HibernateProxy;
-import org.hibernate.proxy.LazyInitializer;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.Signature;
 import org.junit.jupiter.api.AfterEach;
@@ -16,7 +14,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Proxy;
 import java.util.List;
 import java.util.Optional;
 
@@ -114,27 +111,7 @@ class AllureRepositoryAspectTest {
     @DisplayName("ленивая КОЛЛЕКЦИЯ помечена маркером и НЕ обойдена (иначе N+1 у потребителя)")
     void doesNotWalkLazyCollection() throws Throwable {
         boolean[] walked = {false};
-        Object lazyCollection = Proxy.newProxyInstance(getClass().getClassLoader(),
-                new Class<?>[]{PersistentCollection.class, List.class}, (proxy, method, args) -> {
-                    switch (method.getName()) {
-                        case "wasInitialized":
-                            return Boolean.FALSE;
-                        case "size":
-                        case "iterator":
-                        case "stream":
-                            walked[0] = true; // в реальности это загрузка коллекции из БД
-                            return "size".equals(method.getName()) ? 0 : List.of().iterator();
-                        case "toString":
-                            walked[0] = true;
-                            return "разбудили!";
-                        case "hashCode":
-                            return 1;
-                        case "equals":
-                            return false;
-                        default:
-                            return null;
-                    }
-                });
+        Object lazyCollection = LazyProxies.uninitializedCollection(walked);
 
         ProceedingJoinPoint joinPoint = pjp("findAll", new Object[]{}, lazyCollection);
         TestResult result = allure.run("db-lazy-collection", () -> proceed(joinPoint));
@@ -150,22 +127,9 @@ class AllureRepositoryAspectTest {
     @DisplayName("ВЕРХНЕУРОВНЕВЫЙ ленивый прокси помечен маркером, а не отрендерен через toString")
     void doesNotRenderTopLevelLazyProxy() throws Throwable {
         boolean[] touched = {false};
-        Object initializer = Proxy.newProxyInstance(getClass().getClassLoader(),
-                new Class<?>[]{LazyInitializer.class}, (proxy, method, args) ->
-                        "isUninitialized".equals(method.getName()) ? Boolean.TRUE : null);
         // Класс прокси НЕ несёт @Entity (аннотация не @Inherited), поэтому без стража
         // значение уходило бы в safeValue → String.valueOf → toString() → SELECT.
-        Object lazyEntity = Proxy.newProxyInstance(getClass().getClassLoader(),
-                new Class<?>[]{HibernateProxy.class}, (proxy, method, args) -> {
-                    if ("toString".equals(method.getName())) {
-                        touched[0] = true;
-                        return "разбудили!";
-                    }
-                    if ("getHibernateLazyInitializer".equals(method.getName())) {
-                        return initializer;
-                    }
-                    return "hashCode".equals(method.getName()) ? 1 : null;
-                });
+        Object lazyEntity = LazyProxies.uninitializedEntity(touched);
 
         ProceedingJoinPoint joinPoint = pjp("getReferenceById", new Object[]{1L}, lazyEntity);
         TestResult result = allure.run("db-lazy-top", () -> proceed(joinPoint));

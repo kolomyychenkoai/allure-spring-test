@@ -4,6 +4,7 @@ import io.qameta.allure.Epic;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import io.github.kolomyychenkoai.allure.spring.internal.JpaLaziness;
 import io.github.kolomyychenkoai.allure.spring.internal.MovedTypeNames;
 
 import java.lang.reflect.Method;
@@ -385,16 +386,23 @@ class InstrumentationApiCanaryTest {
         // Переименуют — он молча перестанет срабатывать, и вернётся дефект: лишний SELECT
         // на каждую ленивую связь. Компилятор этого не поймает, отчёт тоже — он выглядит
         // здоровым, просто в БД идут лишние запросы.
-        require(classPresent("org.hibernate.proxy.HibernateProxy"),
+        //
+        // Имена берём ИЗ САМОГО СТРАЖА (JpaLaziness), а не строками: копия разъехалась бы,
+        // и канарейка стерегла бы API Hibernate вместо НАШЕЙ связи с ним — опечатка в страже
+        // оставила бы её зелёной. Тот же приём, что с MovedTypeNames ниже.
+        require(classPresent(JpaLaziness.HIBERNATE_PROXY_NAME),
                 "HibernateProxy уехал → обнови имена в internal/JpaLaziness");
-        require(hasMethod("org.hibernate.proxy.HibernateProxy", "getHibernateLazyInitializer", 0, null),
-                "HibernateProxy.getHibernateLazyInitializer уехал → страж не сможет спросить состояние");
-        require(hasMethod("org.hibernate.proxy.LazyInitializer", "isUninitialized", 0, null),
-                "LazyInitializer.isUninitialized уехал → страж не отличит загруженное от ленивого");
-        require(classPresent("org.hibernate.collection.spi.PersistentCollection"),
+        require(hasMethod(JpaLaziness.HIBERNATE_PROXY_NAME, JpaLaziness.PROXY_INITIALIZER_METHOD, 0, null),
+                "HibernateProxy." + JpaLaziness.PROXY_INITIALIZER_METHOD
+                        + " уехал → страж не сможет спросить состояние");
+        require(hasMethod(JpaLaziness.HIBERNATE_INITIALIZER_NAME, JpaLaziness.HIBERNATE_PROXY_PROBE, 0, null),
+                "LazyInitializer." + JpaLaziness.HIBERNATE_PROXY_PROBE
+                        + " уехал → страж не отличит загруженное от ленивого");
+        require(classPresent(JpaLaziness.HIBERNATE_COLLECTION_NAME),
                 "PersistentCollection уехал → ленивые КОЛЛЕКЦИИ снова будут обходиться (N+1)");
-        require(hasMethod("org.hibernate.collection.spi.PersistentCollection", "wasInitialized", 0, null),
-                "PersistentCollection.wasInitialized уехал → страж коллекций мёртв");
+        require(hasMethod(JpaLaziness.HIBERNATE_COLLECTION_NAME, JpaLaziness.HIBERNATE_COLLECTION_PROBE, 0, null),
+                "PersistentCollection." + JpaLaziness.HIBERNATE_COLLECTION_PROBE
+                        + " уехал → страж коллекций мёртв");
     }
 
     @Test
@@ -402,14 +410,16 @@ class InstrumentationApiCanaryTest {
     void eclipseLinkLazinessInterfaces() {
         // ⚠️ У EclipseLink риск в другом месте, чем у Hibernate (разбор — javadoc
         // JpaLaziness): опасен не toString(), а size(), который и зовёт ветка Collection.
-        require(classPresent("org.eclipse.persistence.indirection.ValueHolderInterface"),
+        require(classPresent(JpaLaziness.ECLIPSELINK_HOLDER_NAME),
                 "ValueHolderInterface уехал → обнови имена в internal/JpaLaziness");
-        require(hasMethod("org.eclipse.persistence.indirection.ValueHolderInterface", "isInstantiated", 0, null),
-                "ValueHolderInterface.isInstantiated уехал → страж не отличит загруженное от ленивого");
-        require(classPresent("org.eclipse.persistence.indirection.IndirectContainer"),
+        require(hasMethod(JpaLaziness.ECLIPSELINK_HOLDER_NAME, JpaLaziness.ECLIPSELINK_PROBE, 0, null),
+                "ValueHolderInterface." + JpaLaziness.ECLIPSELINK_PROBE
+                        + " уехал → страж не отличит загруженное от ленивого");
+        require(classPresent(JpaLaziness.ECLIPSELINK_CONTAINER_NAME),
                 "IndirectContainer уехал → ленивые коллекции EclipseLink снова будут грузиться в size()");
-        require(hasMethod("org.eclipse.persistence.indirection.IndirectContainer", "isInstantiated", 0, null),
-                "IndirectContainer.isInstantiated уехал → страж коллекций EclipseLink мёртв");
+        require(hasMethod(JpaLaziness.ECLIPSELINK_CONTAINER_NAME, JpaLaziness.ECLIPSELINK_PROBE, 0, null),
+                "IndirectContainer." + JpaLaziness.ECLIPSELINK_PROBE
+                        + " уехал → страж коллекций EclipseLink мёртв");
     }
 
     @Test
