@@ -5,11 +5,15 @@ import jakarta.persistence.Entity;
 /**
  * Владелец {@link Widget} — сторона ЛЕНИВОЙ связи в витрине.
  * <p>
- * ⚠️ {@code toString()} здесь НЕ переопределён НАМЕРЕННО. Если страж ленивости
- * ({@code HibernateLaziness}) когда-нибудь сломается и прокси снова начнут будить, во
- * вложении «DB Result» появится {@code Owner@1a2b3c} — и на это КРАСНЕЕТ уже существующая
- * гигиена тел ({@code inventory/StepNameHygiene}, правило «identity-хэш вместо значения»).
- * Переопределишь {@code toString()} — этот бесплатный гейт замолчит.
+ * ⚠️ Гигиена тел на регрессию стража НЕ сработает — проверено мутацией. Без стража
+ * значение печатается как {@code <?>}: {@code toString()} прокси бросает при закрытой
+ * сессии, и библиотека это ловит. Ни identity-хэша, ни синтетического имени в теле нет,
+ * ловить гигиене нечего.
+ * <p>
+ * Регрессию держат ДВА адресных теста в {@code demo/DataJpaReportIT}, и они про разное:
+ * {@code lazyAssociationIsNotWokenUp} — сессия закрыта, деградирует отчёт (маркер вместо
+ * {@code <?>}); {@code lazyAssociationCostsNoExtraQueryInsideTransaction} — сессия ОТКРЫТА,
+ * и тогда страдает уже приложение: лишний SELECT. Оба проверены мутацией.
  */
 @Entity
 public class Owner extends BaseEntity {

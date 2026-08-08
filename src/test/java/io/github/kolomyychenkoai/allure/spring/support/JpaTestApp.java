@@ -18,5 +18,6 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 @SpringBootConfiguration
 @EnableAutoConfiguration
 @EnableJpaRepositories(basePackageClasses = WidgetRepository.class)
+@org.springframework.context.annotation.ComponentScan(basePackageClasses = WidgetRepository.class)
 public class JpaTestApp {
 }

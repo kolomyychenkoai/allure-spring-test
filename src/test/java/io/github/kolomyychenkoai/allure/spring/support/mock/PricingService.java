@@ -21,4 +21,10 @@ public class PricingService implements Pricing {
     public double bulk(byte[] sku) {
         return 10.0 * sku.length;
     }
+
+    /** Реальной сущности у витрины нет — spy этот метод не использует. */
+    @Override
+    public Object entity() {
+        return "нет сущности";
+    }
 }

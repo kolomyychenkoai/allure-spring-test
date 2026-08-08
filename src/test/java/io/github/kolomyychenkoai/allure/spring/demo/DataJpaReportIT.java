@@ -6,6 +6,7 @@ import io.github.kolomyychenkoai.allure.spring.support.jpa.Owner;
 import io.github.kolomyychenkoai.allure.spring.support.jpa.OwnerRepository;
 import io.github.kolomyychenkoai.allure.spring.support.jpa.Widget;
 import io.github.kolomyychenkoai.allure.spring.support.jpa.WidgetRepository;
+import io.github.kolomyychenkoai.allure.spring.support.jpa.WidgetService;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
 import io.qameta.allure.model.Status;
@@ -37,6 +38,9 @@ class DataJpaReportIT {
 
     @Autowired
     private OwnerRepository owners;
+
+    @Autowired
+    private WidgetService service;
 
     @Test
     @DisplayName("findAll(Pageable): в «DB Result» видны сущности страницы, а не toString PageImpl")
@@ -73,6 +77,23 @@ class DataJpaReportIT {
         String dbResult = CurrentReport.attachmentOfStep("DB WidgetRepository.findById", "DB Result").orElse("");
         CurrentReport.check(dbResult.contains("owner=<не загружено: ленивая связь>"),
                 () -> "ленивая связь не помечена маркером — значит её разбудили: " + dbResult);
+    }
+
+    @Test
+    @DisplayName("при ОТКРЫТОЙ транзакции ленивая связь не даёт лишнего SELECT'а")
+    void lazyAssociationCostsNoExtraQueryInsideTransaction() {
+        Widget widget = new Widget("lazy-in-tx");
+        widget.setOwner(owners.save(new Owner("ACME-tx")));
+        Widget saved = widgets.save(widget);
+
+        service.loadWithinTransaction(saved.getId());
+
+        // Самый опасный случай: сессия ОТКРЫТА, поэтому обращение к прокси не бросает,
+        // а молча идёт в БД. Ловим это не по маркеру, а по ОТСУТСТВИЮ запроса —
+        // datasource-proxy показал бы «SQL SELECT owner» отдельным шагом.
+        List<String> steps = CurrentReport.stepNames();
+        CurrentReport.check(steps.stream().noneMatch(n -> n.startsWith("SQL SELECT") && n.contains("owner")),
+                () -> "ленивую связь загрузили ради отчёта — лишний запрос в БД: " + steps);
     }
 
     @Test

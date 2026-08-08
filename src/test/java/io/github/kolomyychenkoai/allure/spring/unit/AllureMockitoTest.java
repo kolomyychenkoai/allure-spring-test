@@ -173,4 +173,36 @@ class AllureMockitoTest {
                 .doesNotThrowAnyException();
     }
 
+
+    @Test
+    @DisplayName("мок вернул ЛЕНИВЫЙ прокси — во вложении маркер, toString() не позван")
+    void lazyProxyReturnedByMockIsNotWokenUp() {
+        boolean[] touched = {false};
+        Object initializer = java.lang.reflect.Proxy.newProxyInstance(getClass().getClassLoader(),
+                new Class<?>[]{org.hibernate.proxy.LazyInitializer.class}, (p, m, a) ->
+                        "isUninitialized".equals(m.getName()) ? Boolean.TRUE : null);
+        Object lazy = java.lang.reflect.Proxy.newProxyInstance(getClass().getClassLoader(),
+                new Class<?>[]{org.hibernate.proxy.HibernateProxy.class}, (p, m, a) -> {
+                    if ("toString".equals(m.getName())) {
+                        touched[0] = true; // в реальности это поход в БД
+                        return "разбудили!";
+                    }
+                    if ("getHibernateLazyInitializer".equals(m.getName())) {
+                        return initializer;
+                    }
+                    return "hashCode".equals(m.getName()) ? 1 : null;
+                });
+
+        Pricing pricing = Mockito.mock(Pricing.class);
+        Mockito.when(pricing.entity()).thenReturn(lazy);
+
+        TestResult result = allure.run("mock-lazy", () -> new PricingCaller().callEntity(pricing));
+
+        assertThat(allure.attachment(result, "Mock Result").orElseThrow())
+                .as("мок отдал ленивое значение — в отчёт должен уйти маркер, а не toString")
+                .contains("<не загружено: ленивая связь>");
+        assertThat(touched[0])
+                .as("Mockito-модуль разбудил ленивый прокси ради отчёта — у потребителя это SELECT")
+                .isFalse();
+    }
 }

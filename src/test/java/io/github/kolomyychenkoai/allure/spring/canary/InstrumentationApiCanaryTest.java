@@ -379,6 +379,26 @@ class InstrumentationApiCanaryTest {
     }
 
     @Test
+    @DisplayName("Hibernate: интерфейсы ленивости, на которых держится страж прокси")
+    void hibernateLazinessInterfaces() {
+        // ⚠️ Защита от пробуждения ленивых связей Hibernate-СПЕЦИФИЧНА: страж узнаёт их
+        // по ИМЕНИ интерфейса (Hibernate не в compile-classpath). Переименуют — страж молча
+        // перестанет срабатывать, а вместе с ним вернётся дефект: лишний SELECT на каждую
+        // ленивую связь у потребителя. Компилятор этого не поймает, отчёт тоже: он выглядит
+        // здоровым, просто в БД идут лишние запросы.
+        require(classPresent("org.hibernate.proxy.HibernateProxy"),
+                "HibernateProxy уехал → обнови имена в internal/HibernateLaziness");
+        require(hasMethod("org.hibernate.proxy.HibernateProxy", "getHibernateLazyInitializer", 0, null),
+                "HibernateProxy.getHibernateLazyInitializer уехал → страж не сможет спросить состояние");
+        require(hasMethod("org.hibernate.proxy.LazyInitializer", "isUninitialized", 0, null),
+                "LazyInitializer.isUninitialized уехал → страж не отличит загруженное от ленивого");
+        require(classPresent("org.hibernate.collection.spi.PersistentCollection"),
+                "PersistentCollection уехал → ленивые КОЛЛЕКЦИИ снова будут обходиться (N+1)");
+        require(hasMethod("org.hibernate.collection.spi.PersistentCollection", "wasInitialized", 0, null),
+                "PersistentCollection.wasInitialized уехал → страж коллекций мёртв");
+    }
+
+    @Test
     @DisplayName("JPA: jakarta.persistence.Entity (разбор полей сущностей во вложении DB Result)")
     void jpaEntityAnnotation() {
         // AllureRepositoryAspect ищет аннотацию через Class.forName и при ClassNotFoundException
