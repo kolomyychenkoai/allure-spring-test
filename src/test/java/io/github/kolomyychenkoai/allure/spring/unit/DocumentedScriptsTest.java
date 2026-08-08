@@ -42,7 +42,7 @@ class DocumentedScriptsTest {
     }
 
     private static Set<String> mentionedScripts() throws IOException {
-        Pattern reference = Pattern.compile("scripts/([a-z0-9-]+\\.sh)");
+        Pattern reference = Pattern.compile("scripts/([a-z0-9-]+\\.(?:sh|py))");
         Set<String> found = new TreeSet<>();
         for (Path doc : documents()) {
             if (!Files.exists(doc)) {
@@ -59,7 +59,9 @@ class DocumentedScriptsTest {
     private static Set<String> existingScripts() throws IOException {
         try (Stream<Path> files = Files.list(SCRIPTS)) {
             return files.map(p -> p.getFileName().toString())
-                    .filter(n -> n.endsWith(".sh"))
+                    // .py тоже: их зовут и напрямую, и из .sh — незадокументированный
+                    // python-скрипт ломает шаг процедуры так же, как незадокументированный shell
+                    .filter(n -> n.endsWith(".sh") || n.endsWith(".py"))
                     .collect(java.util.stream.Collectors.toCollection(TreeSet::new));
         }
     }
@@ -69,7 +71,7 @@ class DocumentedScriptsTest {
     void mentionedScriptsExistAndAreExecutable() throws IOException {
         Set<String> mentioned = mentionedScripts();
         assertThat(mentioned)
-                .as("ни одной ссылки на scripts/*.sh в доках — сломался сам сбор, а не доки")
+                .as("ни одной ссылки на scripts/*.{sh,py} в доках — сломался сам сбор, а не доки")
                 .isNotEmpty();
 
         for (String name : mentioned) {

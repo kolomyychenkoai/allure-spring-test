@@ -381,13 +381,12 @@ class InstrumentationApiCanaryTest {
     @Test
     @DisplayName("Hibernate: интерфейсы ленивости, на которых держится страж прокси")
     void hibernateLazinessInterfaces() {
-        // ⚠️ Защита от пробуждения ленивых связей Hibernate-СПЕЦИФИЧНА: страж узнаёт их
-        // по ИМЕНИ интерфейса (Hibernate не в compile-classpath). Переименуют — страж молча
-        // перестанет срабатывать, а вместе с ним вернётся дефект: лишний SELECT на каждую
-        // ленивую связь у потребителя. Компилятор этого не поймает, отчёт тоже: он выглядит
+        // ⚠️ Страж узнаёт ленивое по ИМЕНИ интерфейса (провайдеров нет в compile-classpath).
+        // Переименуют — он молча перестанет срабатывать, и вернётся дефект: лишний SELECT
+        // на каждую ленивую связь. Компилятор этого не поймает, отчёт тоже — он выглядит
         // здоровым, просто в БД идут лишние запросы.
         require(classPresent("org.hibernate.proxy.HibernateProxy"),
-                "HibernateProxy уехал → обнови имена в internal/HibernateLaziness");
+                "HibernateProxy уехал → обнови имена в internal/JpaLaziness");
         require(hasMethod("org.hibernate.proxy.HibernateProxy", "getHibernateLazyInitializer", 0, null),
                 "HibernateProxy.getHibernateLazyInitializer уехал → страж не сможет спросить состояние");
         require(hasMethod("org.hibernate.proxy.LazyInitializer", "isUninitialized", 0, null),
@@ -396,6 +395,21 @@ class InstrumentationApiCanaryTest {
                 "PersistentCollection уехал → ленивые КОЛЛЕКЦИИ снова будут обходиться (N+1)");
         require(hasMethod("org.hibernate.collection.spi.PersistentCollection", "wasInitialized", 0, null),
                 "PersistentCollection.wasInitialized уехал → страж коллекций мёртв");
+    }
+
+    @Test
+    @DisplayName("EclipseLink: интерфейсы ленивости, на которых держится тот же страж")
+    void eclipseLinkLazinessInterfaces() {
+        // ⚠️ У EclipseLink риск в другом месте, чем у Hibernate (разбор — javadoc
+        // JpaLaziness): опасен не toString(), а size(), который и зовёт ветка Collection.
+        require(classPresent("org.eclipse.persistence.indirection.ValueHolderInterface"),
+                "ValueHolderInterface уехал → обнови имена в internal/JpaLaziness");
+        require(hasMethod("org.eclipse.persistence.indirection.ValueHolderInterface", "isInstantiated", 0, null),
+                "ValueHolderInterface.isInstantiated уехал → страж не отличит загруженное от ленивого");
+        require(classPresent("org.eclipse.persistence.indirection.IndirectContainer"),
+                "IndirectContainer уехал → ленивые коллекции EclipseLink снова будут грузиться в size()");
+        require(hasMethod("org.eclipse.persistence.indirection.IndirectContainer", "isInstantiated", 0, null),
+                "IndirectContainer.isInstantiated уехал → страж коллекций EclipseLink мёртв");
     }
 
     @Test

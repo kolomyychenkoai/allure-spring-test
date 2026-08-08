@@ -10,9 +10,9 @@ public class Widget extends BaseEntity {
     private String name;
 
     /**
-     * ЛЕНИВАЯ связь — витрина для стража {@code HibernateLaziness}: аспект обязан напечатать
+     * ЛЕНИВАЯ связь — витрина для стража {@code JpaLaziness}: аспект обязан напечатать
      * маркер, а не разбудить прокси лишним SELECT'ом. Без этого поля страж был бы форвардным
-     * (см. {@link Owner} — там же описан гейт, который ловит регрессию).
+     * (в javadoc {@link Owner} названы два теста, которые ловят регрессию).
      */
     @ManyToOne(fetch = FetchType.LAZY)
     private Owner owner;
@@ -42,7 +42,10 @@ public class Widget extends BaseEntity {
 
     @Override
     public String toString() {
-        // порядок полей как в аспекте (describeEntity: поля класса, затем суперкласса)
+        // Порядок полей как в аспекте (describeEntity: поля класса, затем суперкласса).
+        // ⚠️ owner здесь НЕТ намеренно: он ленивый, и печать его в toString() будила бы
+        // прокси — ровно то, от чего защищает JpaLaziness. Поэтому строка аспекта
+        // («Widget{name=…, owner=…, id=…}») длиннее этой, и совпадать они не обязаны.
         return "Widget{name=" + name + ", id=" + getId() + "}";
     }
 }

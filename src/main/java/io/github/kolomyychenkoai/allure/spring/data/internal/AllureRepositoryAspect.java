@@ -2,7 +2,7 @@ package io.github.kolomyychenkoai.allure.spring.data.internal;
 
 import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
-import io.github.kolomyychenkoai.allure.spring.internal.HibernateLaziness;
+import io.github.kolomyychenkoai.allure.spring.internal.JpaLaziness;
 import io.qameta.allure.Allure;
 import io.qameta.allure.model.Status;
 import io.qameta.allure.model.StepResult;
@@ -197,11 +197,12 @@ public class AllureRepositoryAspect {
         if (result instanceof BaseStream<?, ?>) {
             return result.getClass().getSimpleName() + " (поток; не читаем — одноразовый)";
         }
-        // ⚠️ ДО веток Collection/Iterable: ленивая PersistentCollection — это и Collection,
-        // и Iterable, поэтому size() и обход ниже загрузили бы её из БД (N+1 у потребителя).
-        // Общий страж в AllureAdviceSupport сюда не помогает: обход идёт МИМО рендера.
-        if (HibernateLaziness.notLoaded(result)) {
-            return HibernateLaziness.NOT_LOADED;
+        // ⚠️ ДО веток Collection/Iterable: ленивая коллекция (PersistentCollection у Hibernate,
+        // IndirectContainer у EclipseLink) — это и Collection, и Iterable, поэтому size()
+        // и обход ниже загрузили бы её из БД (N+1 у потребителя). Общий страж в
+        // AllureAdviceSupport сюда не помогает: обход идёт МИМО рендера.
+        if (JpaLaziness.notLoaded(result)) {
+            return JpaLaziness.NOT_LOADED;
         }
         if (result instanceof Collection<?> col) {
             String items = col.stream().limit(ITEMS_CAP).map(this::describe).collect(Collectors.joining("\n"));

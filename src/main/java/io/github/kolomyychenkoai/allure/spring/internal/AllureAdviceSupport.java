@@ -124,9 +124,9 @@ public final class AllureAdviceSupport {
     /** Общий конвейер чистки для {@link #safe} и {@link #safeValue}. Никогда не бросает и не {@code null}. */
     private static String clean(Object value) {
         // ⚠️ Ленивое значение НЕ трогаем: String.valueOf ниже позвало бы toString() прокси,
-        // а это поход в БД. Почему страж стоит здесь — javadoc HibernateLaziness.
-        if (HibernateLaziness.notLoaded(value)) {
-            return HibernateLaziness.NOT_LOADED;
+        // а это поход в БД. Почему страж стоит здесь — javadoc JpaLaziness.
+        if (JpaLaziness.notLoaded(value)) {
+            return JpaLaziness.NOT_LOADED;
         }
         String s;
         try {
@@ -252,8 +252,8 @@ public final class AllureAdviceSupport {
      * тело уже сериализовано и любая «чистка» его исказит. Для имени шага — {@link #safe}.
      */
     public static String render(Object value) {
-        if (HibernateLaziness.notLoaded(value)) {
-            return HibernateLaziness.NOT_LOADED; // см. clean(): toString() прокси — это SELECT
+        if (JpaLaziness.notLoaded(value)) {
+            return JpaLaziness.NOT_LOADED; // см. clean(): toString() прокси — это SELECT
         }
         try {
             return String.valueOf(value);
