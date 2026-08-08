@@ -103,7 +103,7 @@ class HibernateLazinessTest {
     }
 
     @Test
-    @DisplayName("сбой при опросе состояния → ведём себя как раньше, а не роняем чужой тест")
+    @DisplayName("сбой при опросе состояния → ведём себя как без стража, а не роняем чужой тест")
     void brokenProbeDegradesToFalse() throws Exception {
         Object broken = proxy(HibernateProxy.class, (p, m, a) -> {
             if ("getHibernateLazyInitializer".equals(m.getName())) {

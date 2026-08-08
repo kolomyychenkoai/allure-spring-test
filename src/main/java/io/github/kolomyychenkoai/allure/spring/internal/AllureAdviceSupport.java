@@ -123,10 +123,8 @@ public final class AllureAdviceSupport {
 
     /** Общий конвейер чистки для {@link #safe} и {@link #safeValue}. Никогда не бросает и не {@code null}. */
     private static String clean(Object value) {
-        // ⚠️ Ленивое значение Hibernate НЕ трогаем: String.valueOf ниже позвал бы toString()
-        // неинициализированного прокси, а это при открытой сессии не чтение, а поход в БД
-        // (лишний SELECT, N+1 на коллекции). Страж стоит ЗДЕСЬ, в общей точке рендера, потому
-        // что ленивое доезжает сюда из разных модулей — и из аспекта БД, и из моков.
+        // ⚠️ Ленивое значение НЕ трогаем: String.valueOf ниже позвало бы toString() прокси,
+        // а это поход в БД. Почему страж стоит здесь — javadoc HibernateLaziness.
         if (HibernateLaziness.notLoaded(value)) {
             return HibernateLaziness.NOT_LOADED;
         }

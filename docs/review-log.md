@@ -191,8 +191,9 @@ gh auth refresh -h github.com -s workflow
 ## Проход по оси «потребитель» (issues #43 / #46)
 
 Первая проверка библиотеки НЕ на своей витрине. Три сервиса вне git, намеренно непохожих
-(servlet/JPA · WebFlux/R2DBC/Log4j2 · RestAssured/WireMock/JdbcClient/Hamcrest), 24 теста.
-Метод и полный результат — `docs/consumer-affects.md`, запуск — `scripts/consumer-matrix.sh`.
+(servlet/JPA · WebFlux/R2DBC/Log4j2 · RestAssured/WireMock/JdbcClient/Hamcrest).
+Актуальные числа — в `docs/consumer-affects.md` (он источник правды), запуск —
+`scripts/consumer-matrix.sh`.
 
 **Гейт нашёл настоящий дефект на ПЕРВОМ прогоне:** аспект репозиториев будит ленивые
 Hibernate-прокси (`describeEntity` → `safe()` → `toString()` прокси при открытой сессии).
