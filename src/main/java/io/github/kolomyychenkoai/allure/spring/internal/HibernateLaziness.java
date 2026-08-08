@@ -1,4 +1,4 @@
-package io.github.kolomyychenkoai.allure.spring.data.internal;
+package io.github.kolomyychenkoai.allure.spring.internal;
 
 import java.lang.reflect.Method;
 import java.util.Map;
@@ -14,9 +14,14 @@ import java.util.concurrent.ConcurrentHashMap;
  * Тот же класс дефекта, что {@code toString()} чужого объекта в имени шага: это побочный
  * эффект, а не чтение.
  * <p>
+ * <b>Почему здесь, а не в модуле БД.</b> Ленивое значение доезжает до рендера не только из
+ * аспекта репозиториев: мок, возвращающий сущность, отдаёт его в {@code AllureMockitoHandler},
+ * и тот будил прокси ровно так же. Страж стоит в ОБЩЕЙ точке рендера
+ * ({@link AllureAdviceSupport}), поэтому закрыты все модули сразу, а не тот, где заметили.
+ * <p>
  * <b>Почему рефлексия.</b> Hibernate не в compile-classpath библиотеки (тот же приём, что для
- * {@code jakarta.persistence.Entity} в {@link AllureRepositoryAspect}): у потребителя Spring
- * Data может быть без Hibernate вовсе.
+ * {@code jakarta.persistence.Entity} в аспекте репозиториев): у потребителя Spring Data может
+ * быть без Hibernate вовсе.
  * <p>
  * <b>Почему это безопасно спрашивать.</b> Ни {@code getHibernateLazyInitializer()}, ни
  * {@code isUninitialized()}, ни {@code wasInitialized()} прокси НЕ инициализируют — это
@@ -25,10 +30,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * При любом сбое определения отвечаем {@code false}: «не знаю» должно вести себя как раньше,
  * а не ронять чужой тест.
  */
-final class HibernateLaziness {
+public final class HibernateLaziness {
 
     /** Маркер вместо значения: обращаться к нему нельзя, а сказать о нём в отчёте нужно. */
-    static final String NOT_LOADED = "<не загружено: ленивая связь>";
+    public static final String NOT_LOADED = "<не загружено: ленивая связь>";
 
     private static final String PROXY = "org.hibernate.proxy.HibernateProxy";
     private static final String COLLECTION = "org.hibernate.collection.spi.PersistentCollection";
@@ -50,7 +55,7 @@ final class HibernateLaziness {
     }
 
     /** Ленивая связь, которую ещё не загружали? {@code false} — если это не она либо неизвестно. */
-    static boolean notLoaded(Object value) {
+    public static boolean notLoaded(Object value) {
         if (value == null) {
             return false;
         }

@@ -123,6 +123,13 @@ public final class AllureAdviceSupport {
 
     /** Общий конвейер чистки для {@link #safe} и {@link #safeValue}. Никогда не бросает и не {@code null}. */
     private static String clean(Object value) {
+        // ⚠️ Ленивое значение Hibernate НЕ трогаем: String.valueOf ниже позвал бы toString()
+        // неинициализированного прокси, а это при открытой сессии не чтение, а поход в БД
+        // (лишний SELECT, N+1 на коллекции). Страж стоит ЗДЕСЬ, в общей точке рендера, потому
+        // что ленивое доезжает сюда из разных модулей — и из аспекта БД, и из моков.
+        if (HibernateLaziness.notLoaded(value)) {
+            return HibernateLaziness.NOT_LOADED;
+        }
         String s;
         try {
             s = clean(value, 0);
@@ -247,6 +254,9 @@ public final class AllureAdviceSupport {
      * тело уже сериализовано и любая «чистка» его исказит. Для имени шага — {@link #safe}.
      */
     public static String render(Object value) {
+        if (HibernateLaziness.notLoaded(value)) {
+            return HibernateLaziness.NOT_LOADED; // см. clean(): toString() прокси — это SELECT
+        }
         try {
             return String.valueOf(value);
         } catch (Throwable t) {

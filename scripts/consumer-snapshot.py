@@ -33,11 +33,14 @@ def main(root: pathlib.Path) -> None:
             name = case.get("name", "?")
             lines.append(f"TEST | {cls}#{name} → {outcome(case)}")
 
-    behavior = root / "target" / "behavior.log"
-    if behavior.is_file():
-        lines.extend(behavior.read_text(encoding="utf-8").splitlines())
+    # Файл НА КАЖДУЮ JVM: под forkCount>1 форков несколько, и общий файл последний
+    # закрывшийся затирал бы. Сливаем все.
+    behavior = sorted((root / "target" / "behavior").glob("*.log"))
+    if behavior:
+        for dump in behavior:
+            lines.extend(dump.read_text(encoding="utf-8").splitlines())
     else:
-        lines.append("BEHAVIOR | <файла нет: рекордер не отработал>")
+        lines.append("BEHAVIOR | <дампов нет: рекордер не отработал>")
 
     # Сортируем: порядок тест-классов у потребителя случайный (runOrder), и несортированный
     # снимок расходился бы сам по себе, без всякой библиотеки.

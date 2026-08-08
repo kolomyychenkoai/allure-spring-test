@@ -22,15 +22,15 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Реализация — динамические прокси: так видно, что страж СПРАШИВАЕТ состояние, а не трогает
  * значение.
  * <p>
- * Сам метод пакетный, поэтому зовётся рефлексией (см. {@link #notLoaded}) — расширять его
- * видимость ради теста не стоит.
+ * Класс лежит в {@code internal} и виден, но зовём его рефлексией: тест не должен зависеть
+ * от того, останется ли метод публичным.
  */
 @Epic("Внутренние проверки библиотеки")
 class HibernateLazinessTest {
 
     private static boolean notLoaded(Object value) throws Exception {
         Class<?> type = Class.forName(
-                "io.github.kolomyychenkoai.allure.spring.data.internal.HibernateLaziness");
+                "io.github.kolomyychenkoai.allure.spring.internal.HibernateLaziness");
         Method method = type.getDeclaredMethod("notLoaded", Object.class);
         method.setAccessible(true);
         return (boolean) method.invoke(null, value);

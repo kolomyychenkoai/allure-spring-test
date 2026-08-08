@@ -2,6 +2,7 @@ package io.github.kolomyychenkoai.allure.spring.data.internal;
 
 import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
+import io.github.kolomyychenkoai.allure.spring.internal.HibernateLaziness;
 import io.qameta.allure.Allure;
 import io.qameta.allure.model.Status;
 import io.qameta.allure.model.StepResult;
@@ -197,7 +198,8 @@ public class AllureRepositoryAspect {
             return result.getClass().getSimpleName() + " (поток; не читаем — одноразовый)";
         }
         // ⚠️ ДО веток Collection/Iterable: ленивая PersistentCollection — это и Collection,
-        // и Iterable, поэтому и size(), и обход ниже загрузили бы её из БД (N+1 у потребителя).
+        // и Iterable, поэтому size() и обход ниже загрузили бы её из БД (N+1 у потребителя).
+        // Общий страж в AllureAdviceSupport сюда не помогает: обход идёт МИМО рендера.
         if (HibernateLaziness.notLoaded(result)) {
             return HibernateLaziness.NOT_LOADED;
         }
@@ -271,11 +273,6 @@ public class AllureRepositoryAspect {
         if (obj == null) {
             return "null";
         }
-        // Верхнеуровневый прокси (напр. getReference()) сюда доходит БЕЗ @Entity на своём классе
-        // — аннотация не @Inherited — и ушёл бы в safeValue, то есть в toString() прокси.
-        if (HibernateLaziness.notLoaded(obj)) {
-            return HibernateLaziness.NOT_LOADED;
-        }
         Class<?> clazz = obj.getClass();
         // obj — всегда объект (примитивы заболочены), поэтому проверяем по обёрткам/типам
         if (obj instanceof Number || obj instanceof String
@@ -315,19 +312,12 @@ public class AllureRepositoryAspect {
         StringJoiner sj = new StringJoiner(", ", clazz.getSimpleName() + "{", "}");
         for (Field field : fields) {
             try {
-                Object value = field.get(obj);
-                // ⚠️ Ленивую связь НЕ трогаем. При открытой сессии (а аспект работает внутри
-                // транзакции репозитория) toString() прокси не падает, а идёт в БД: лишний
-                // SELECT на каждую связь, N+1 на коллекции, и отсоединённая сущность уезжает
-                // к вызывающему уже инициализированной. Отчёт не меняет поведение приложения.
-                if (HibernateLaziness.notLoaded(value)) {
-                    sj.add(field.getName() + "=" + HibernateLaziness.NOT_LOADED);
-                    continue;
-                }
+                // Ленивое поле помечает маркером сам safe() — страж живёт в общей точке
+                // рендера (AllureAdviceSupport), чтобы закрывать все модули, а не только этот.
                 // Здесь safe() ОСОЗНАННО, а не safeValue: сущность печатается однострочным
                 // «Widget{id=1, name=…}», и список выборки читается строка-на-сущность.
                 // Многострочное значение поля разорвало бы этот формат.
-                sj.add(field.getName() + "=" + AllureAdviceSupport.safe(value));
+                sj.add(field.getName() + "=" + AllureAdviceSupport.safe(field.get(obj)));
             } catch (Throwable e) {
                 // напр. LazyInitializationException по ленивой связи — не теряем остальные поля
                 sj.add(field.getName() + "=?");
