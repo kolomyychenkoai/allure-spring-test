@@ -17,4 +17,8 @@ public class PricingCaller {
     public double callBulk(Pricing pricing, byte[] sku) {
         return pricing.bulk(sku);
     }
+
+    public Object callEntity(Pricing pricing) {
+        return pricing.entity();
+    }
 }

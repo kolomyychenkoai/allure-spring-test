@@ -2,8 +2,11 @@ package io.github.kolomyychenkoai.allure.spring.demo;
 
 import io.github.kolomyychenkoai.allure.spring.support.CurrentReport;
 import io.github.kolomyychenkoai.allure.spring.support.JpaTestApp;
+import io.github.kolomyychenkoai.allure.spring.support.jpa.Owner;
+import io.github.kolomyychenkoai.allure.spring.support.jpa.OwnerRepository;
 import io.github.kolomyychenkoai.allure.spring.support.jpa.Widget;
 import io.github.kolomyychenkoai.allure.spring.support.jpa.WidgetRepository;
+import io.github.kolomyychenkoai.allure.spring.support.jpa.WidgetService;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
 import io.qameta.allure.model.Status;
@@ -33,6 +36,12 @@ class DataJpaReportIT {
     @Autowired
     private WidgetRepository widgets;
 
+    @Autowired
+    private OwnerRepository owners;
+
+    @Autowired
+    private WidgetService service;
+
     @Test
     @DisplayName("findAll(Pageable): в «DB Result» видны сущности страницы, а не toString PageImpl")
     void pagedFindAllShowsEntities() {
@@ -47,6 +56,49 @@ class DataJpaReportIT {
                 () -> "DB Result без разбора сущностей страницы: " + dbResult);
         CurrentReport.check(!dbResult.contains("containing"),
                 () -> "в DB Result просочился toString PageImpl: " + dbResult);
+    }
+
+    @Test
+    @DisplayName("ленивая связь показана МАРКЕРОМ — прокси не разбужен ради отчёта")
+    void lazyAssociationIsNotWokenUp() {
+        Widget widget = new Widget("lazy-owner");
+        widget.setOwner(owners.save(new Owner("ACME")));
+        Widget saved = widgets.save(widget);
+
+        // findById — ОТДЕЛЬНАЯ транзакция: сессия сохранения уже закрыта, поэтому owner
+        // приезжает НЕинициализированным прокси. В одной сессии он был бы обычным объектом
+        // из кэша первого уровня, и витрина проверяла бы не тот случай.
+        widgets.findById(saved.getId());
+
+        // Сессия здесь ЗАКРЫТА, поэтому без стража обращение к прокси бросает, библиотека
+        // это ловит и печатает «<?>» — отчёт деградирует молча. Маркер и есть доказательство,
+        // что страж сработал. Случай ОТКРЫТОЙ сессии, где страдает уже приложение, проверяет
+        // соседний lazyAssociationCostsNoExtraQueryInsideTransaction.
+        String dbResult = CurrentReport.attachmentOfStep("DB WidgetRepository.findById", "DB Result").orElse("");
+        CurrentReport.check(dbResult.contains("owner=<не загружено: ленивая связь>"),
+                () -> "ленивая связь не помечена маркером — значит её разбудили: " + dbResult);
+    }
+
+    @Test
+    @DisplayName("при ОТКРЫТОЙ транзакции ленивая связь не даёт лишнего SELECT'а")
+    void lazyAssociationCostsNoExtraQueryInsideTransaction() {
+        Widget widget = new Widget("lazy-in-tx");
+        widget.setOwner(owners.save(new Owner("ACME-tx")));
+        Widget saved = widgets.save(widget);
+
+        service.loadWithinTransaction(saved.getId());
+
+        // Самый опасный случай: сессия ОТКРЫТА, поэтому обращение к прокси не бросает,
+        // а молча идёт в БД. Ловим это не по маркеру, а по ОТСУТСТВИЮ запроса —
+        // datasource-proxy показал бы «SQL SELECT owner» отдельным шагом.
+        List<String> steps = CurrentReport.stepNames();
+        // ⚠️ Сперва ЯКОРЬ, и только потом отсутствие. Без якоря это пустой негатив: выключи
+        // datasource-proxy или сломай листенер — SQL-шагов не будет вообще, и «owner не грузили»
+        // окажется правдой по той причине, что не грузили НИЧЕГО.
+        CurrentReport.check(steps.contains("SQL SELECT widget"),
+                () -> "нет даже своего запроса — SQL-канал молчит, проверять отсутствие нечем: " + steps);
+        CurrentReport.check(steps.stream().noneMatch(n -> n.startsWith("SQL SELECT") && n.contains("owner")),
+                () -> "ленивую связь загрузили ради отчёта — лишний запрос в БД: " + steps);
     }
 
     @Test

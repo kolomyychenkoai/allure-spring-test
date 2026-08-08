@@ -2,6 +2,7 @@ package io.github.kolomyychenkoai.allure.spring.data.internal;
 
 import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
+import io.github.kolomyychenkoai.allure.spring.internal.JpaLaziness;
 import io.qameta.allure.Allure;
 import io.qameta.allure.model.Status;
 import io.qameta.allure.model.StepResult;
@@ -196,6 +197,13 @@ public class AllureRepositoryAspect {
         if (result instanceof BaseStream<?, ?>) {
             return result.getClass().getSimpleName() + " (поток; не читаем — одноразовый)";
         }
+        // ⚠️ ДО веток Collection/Iterable: ленивая коллекция (PersistentCollection у Hibernate,
+        // IndirectContainer у EclipseLink) — это и Collection, и Iterable, поэтому size()
+        // и обход ниже загрузили бы её из БД (N+1 у потребителя). Общий страж в
+        // AllureAdviceSupport сюда не помогает: обход идёт МИМО рендера.
+        if (JpaLaziness.notLoaded(result)) {
+            return JpaLaziness.NOT_LOADED;
+        }
         if (result instanceof Collection<?> col) {
             String items = col.stream().limit(ITEMS_CAP).map(this::describe).collect(Collectors.joining("\n"));
             String more = col.size() > ITEMS_CAP ? "\n… и ещё " + (col.size() - ITEMS_CAP) : "";
@@ -305,12 +313,16 @@ public class AllureRepositoryAspect {
         StringJoiner sj = new StringJoiner(", ", clazz.getSimpleName() + "{", "}");
         for (Field field : fields) {
             try {
+                // Ленивое поле помечает маркером сам safe() — страж живёт в общей точке
+                // рендера (AllureAdviceSupport), чтобы закрывать все модули, а не только этот.
                 // Здесь safe() ОСОЗНАННО, а не safeValue: сущность печатается однострочным
                 // «Widget{id=1, name=…}», и список выборки читается строка-на-сущность.
                 // Многострочное значение поля разорвало бы этот формат.
                 sj.add(field.getName() + "=" + AllureAdviceSupport.safe(field.get(obj)));
             } catch (Throwable e) {
-                // напр. LazyInitializationException по ленивой связи — не теряем остальные поля
+                // Ленивая связь Hibernate/EclipseLink сюда не приводит — её помечает маркером
+                // страж JpaLaziness. Ловим ОСТАЛЬНОЕ: недоступное под module-системой поле,
+                // ленивое у незнакомого провайдера, сломанный getter — не теряем прочие поля.
                 sj.add(field.getName() + "=?");
             }
         }
