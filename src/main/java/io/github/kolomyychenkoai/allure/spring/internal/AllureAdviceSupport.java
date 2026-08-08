@@ -123,11 +123,6 @@ public final class AllureAdviceSupport {
 
     /** Общий конвейер чистки для {@link #safe} и {@link #safeValue}. Никогда не бросает и не {@code null}. */
     private static String clean(Object value) {
-        // ⚠️ Ленивое значение НЕ трогаем: String.valueOf ниже позвало бы toString() прокси,
-        // а это поход в БД. Почему страж стоит здесь — javadoc JpaLaziness.
-        if (JpaLaziness.notLoaded(value)) {
-            return JpaLaziness.NOT_LOADED;
-        }
         String s;
         try {
             s = clean(value, 0);
@@ -144,6 +139,13 @@ public final class AllureAdviceSupport {
     private static String clean(Object value, int depth) {
         if (value == null) {
             return "null";
+        }
+        // ⚠️ Ленивое значение НЕ трогаем: String.valueOf ниже позвало бы toString() прокси,
+        // а это поход в БД. Почему страж стоит здесь — javadoc JpaLaziness. Проверка в РЕКУРСИВНОЙ
+        // части, а не в clean(Object): так закрыт и элемент массива — varargs ассертов приходят
+        // массивом, и прокси внутри него будился бы в обход верхнеуровневой проверки.
+        if (JpaLaziness.notLoaded(value)) {
+            return JpaLaziness.NOT_LOADED;
         }
         Class<?> type = value.getClass();
         // Проверяем И synthetic, И маркер имени: synthetic бывает у прокси и записей компилятора,

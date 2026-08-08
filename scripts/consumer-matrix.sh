@@ -23,6 +23,9 @@
 # потоковой параллелью САМИ ПО СЕБЕ — поплыли бы обе стороны A/B, и сравнение потеряло бы смысл.
 #
 # Использование:  ./consumer-matrix.sh [каталог-сервиса ...]   (по умолчанию — все svc-*)
+#
+# MIN_TESTS=<n> — сколько тестов минимум обязан дать КАЖДЫЙ прогон (по умолчанию 1). Ниже
+# порога сервис красный: два пустых снимка совпадают, и без порога это читалось бы как «✅».
 
 set -u
 LIB=$(cd "$(dirname "$0")/.." && pwd)
@@ -32,6 +35,7 @@ HERE=${HERE/#\~/$HOME}
 cd "$HERE" || exit 1
 
 MODE=${MODE:-plain}
+MIN_TESTS=${MIN_TESTS:-1}
 case $MODE in
     plain)  MODE_ARGS=() ;;
     forked) MODE_ARGS=(-DforkCount=2 -DreuseForks=false) ;;
@@ -67,6 +71,28 @@ for svc in "${services[@]}"; do
         (cd "$svc" && mvn -q "${args[@]}" > "$HERE/$svc-$MODE-$phase.log" 2>&1)
         python3 "$LIB/scripts/consumer-snapshot.py" "$svc" > "$HERE/$svc-$MODE-$phase.snapshot"
     done
+
+    # ⚠️ Порог ДО сравнения. Совпасть могут и два ПУСТЫХ снимка: mvn не собрался, профиля нет,
+    # python3 не отработал, каталог не тот — и «✅ идентично» означало бы «мы ничего не измерили».
+    # Тот же урок, что в consumer-attribution.py: пустой результат обязан быть красным, а не «✅».
+    empty=0
+    for phase in without with; do
+        snapshot=$svc-$MODE-$phase.snapshot
+        tests=$(grep -c '^TEST | ' "$snapshot")
+        if [[ $tests -lt $MIN_TESTS ]]; then
+            echo "  ❌ $phase: тестов $tests (ждали ≥ $MIN_TESTS) — прогон не состоялся, разбирать: $svc-$MODE-$phase.log"
+            empty=1
+        fi
+        # Второй канал молчит так же тихо: без рекордера снимок сойдётся на одной строке-заглушке.
+        if grep -q '^BEHAVIOR | <дампов нет' "$snapshot"; then
+            echo "  ❌ $phase: канал поведения пуст — рекордер не отработал, «идентично» было бы ложью"
+            empty=1
+        fi
+    done
+    if [[ $empty -eq 1 ]]; then
+        fail=1
+        continue
+    fi
 
     if diff -u "$svc-$MODE-without.snapshot" "$svc-$MODE-with.snapshot" > "$svc-$MODE.diff"; then
         n=$(grep -c '^TEST | ' "$svc-$MODE-without.snapshot")

@@ -4,7 +4,7 @@
 Исходы берутся по элементам <testcase>, а НЕ по атрибуту tests= в корне: у класса, где
 все тесты в @Nested, там стоит 0 — на этом уже терялись тесты при апгрейде.
 
-Использование: snapshot.py <каталог-сервиса> > snapshot.txt
+Использование: consumer-snapshot.py <каталог-сервиса> > snapshot.txt
 """
 import sys
 import pathlib
@@ -48,4 +48,7 @@ def main(root: pathlib.Path) -> None:
 
 
 if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        # Без каталога — печатаем написанную выше строку использования, а не голый IndexError.
+        sys.exit(next(l for l in __doc__.splitlines() if l.startswith("Использование:")))
     main(pathlib.Path(sys.argv[1]))

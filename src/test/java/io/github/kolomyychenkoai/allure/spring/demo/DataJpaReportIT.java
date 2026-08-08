@@ -92,6 +92,11 @@ class DataJpaReportIT {
         // а молча идёт в БД. Ловим это не по маркеру, а по ОТСУТСТВИЮ запроса —
         // datasource-proxy показал бы «SQL SELECT owner» отдельным шагом.
         List<String> steps = CurrentReport.stepNames();
+        // ⚠️ Сперва ЯКОРЬ, и только потом отсутствие. Без якоря это пустой негатив: выключи
+        // datasource-proxy или сломай листенер — SQL-шагов не будет вообще, и «owner не грузили»
+        // окажется правдой по той причине, что не грузили НИЧЕГО.
+        CurrentReport.check(steps.contains("SQL SELECT widget"),
+                () -> "нет даже своего запроса — SQL-канал молчит, проверять отсутствие нечем: " + steps);
         CurrentReport.check(steps.stream().noneMatch(n -> n.startsWith("SQL SELECT") && n.contains("owner")),
                 () -> "ленивую связь загрузили ради отчёта — лишний запрос в БД: " + steps);
     }

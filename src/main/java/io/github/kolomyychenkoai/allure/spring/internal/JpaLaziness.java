@@ -1,8 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.internal;
 
 import java.lang.reflect.Method;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Определяет, что значение — ЕЩЁ НЕ ЗАГРУЖЕННАЯ ленивая связь JPA, не трогая её.
@@ -41,28 +39,53 @@ import java.util.concurrent.ConcurrentHashMap;
  * При любом сбое определения отвечаем {@code false}: «не знаю» ведёт себя как отсутствие
  * стража, а не роняет чужой тест.
  * <p>
- * <b>Стоимость ЗАМЕРЕНА</b> на полном сьюте: 2216 вызовов, 1,9 мс суммарно, 0,86 мкс на вызов.
- * Дёшево потому, что распознавание класса кэшируется в {@link #PROBES}, и на повторных
- * значениях остаётся один поиск в {@code ConcurrentHashMap}. Для сравнения: рефлексивный
- * поиск сервера WireMock стоит проекту 7,8 мс на тот же сьют и признан приемлемым.
+ * <b>Стоимость ЗАМЕРЕНА</b> inline-таймером на полном сьюте: ~2350 вызовов, 2,4 мс суммарно,
+ * 1,0 мкс на вызов (в цифру входит и сам таймер). Дёшево потому, что распознавание класса
+ * кэшируется в {@link #PROBES}, и на повторных значениях остаётся один его {@code get}.
+ * Тем же замером {@code ConcurrentHashMap} давал 0,87 мкс: {@link ClassValue} на вызов
+ * чуть дороже, но разница — 0,3 мс на ВЕСЬ сьют, и платим мы ею за то, что кэш не держит
+ * чужие классы (см. {@link #PROBES}). Для сравнения: рефлексивный поиск сервера WireMock
+ * стоит проекту 7,8 мс на тот же сьют и признан приемлемым.
  * <p>
  * ⚠️ <b>Покрыты Hibernate и EclipseLink.</b> На OpenJPA и прочих провайдерах ленивое
  * значение защиты НЕ получит и будет загружено рендером. Имена всех четырёх интерфейсов
  * стережёт канарейка {@code canary/InstrumentationApiCanaryTest} — переименуют, узнаем
  * точечно, а не по возврату дефекта.
+ * <p>
+ * ⚠️ <b>Защищено ЗНАЧЕНИЕ, а не всё, что внутри него.</b> Рендер спрашивает страж про само
+ * значение и про элементы массива, но коллекция и мапа уходят одним {@code String.valueOf},
+ * который сам зовёт {@code toString()} каждого элемента. Ленивый прокси, лежащий ВНУТРИ
+ * обычного {@code List} (не {@code PersistentCollection}), будет разбужен. Обходить чужие
+ * коллекции ради проверки нельзя — это ровно тот побочный эффект, от которого страж и стоит.
+ * Аспекта репозиториев это не касается: он печатает элементы поштучно, каждый через рендер.
  */
 public final class JpaLaziness {
 
     /** Маркер вместо значения: обращаться к нему нельзя, а сказать о нём в отчёте нужно. */
     public static final String NOT_LOADED = "<не загружено: ленивая связь>";
 
-    private static final String HIBERNATE_PROXY = "org.hibernate.proxy.HibernateProxy";
-    private static final String HIBERNATE_COLLECTION = "org.hibernate.collection.spi.PersistentCollection";
-    private static final String ECLIPSELINK_HOLDER = "org.eclipse.persistence.indirection.ValueHolderInterface";
-    private static final String ECLIPSELINK_CONTAINER = "org.eclipse.persistence.indirection.IndirectContainer";
+    private static final String HIBERNATE_PROXY_NAME = "org.hibernate.proxy.HibernateProxy";
+    private static final String HIBERNATE_COLLECTION_NAME = "org.hibernate.collection.spi.PersistentCollection";
+    private static final String ECLIPSELINK_HOLDER_NAME = "org.eclipse.persistence.indirection.ValueHolderInterface";
+    private static final String ECLIPSELINK_CONTAINER_NAME = "org.eclipse.persistence.indirection.IndirectContainer";
 
-    /** Кэш «класс значения → как у него спросить»: рефлексия на каждое поле сущности дорога. */
-    private static final Map<Class<?>, Probe> PROBES = new ConcurrentHashMap<>();
+    /**
+     * Кэш «класс значения → как у него спросить»: рефлексия на каждое поле сущности дорога.
+     * <p>
+     * {@link ClassValue}, а НЕ {@code Map<Class<?>, …>}: страж зовут на каждое отрендеренное
+     * значение во всех модулях, то есть ключом сюда попадёт всякий встреченный класс, включая
+     * генерируемые (моки, прокси). Статическая мапа держала бы их сильной ссылкой, а класс
+     * держит свой загрузчик — и он не ушёл бы в GC до конца JVM. У проекта это не абстракция:
+     * {@code HiddenClassLoader} заводит копии всего classpath, у потребителя — DevTools и
+     * изолированные загрузчики. {@code ClassValue} привязан к самому классу и уходит вместе
+     * с ним (та же причина, по которой рядом {@code WeakHashMap} в листенерах WireMock/MockMvc).
+     */
+    private static final ClassValue<Probe> PROBES = new ClassValue<>() {
+        @Override
+        protected Probe computeValue(Class<?> type) {
+            return probeFor(type);
+        }
+    };
 
     /** Как узнать состояние у конкретного класса значения. */
     private enum Probe {
@@ -85,7 +108,7 @@ public final class JpaLaziness {
             return false;
         }
         try {
-            return switch (PROBES.computeIfAbsent(value.getClass(), JpaLaziness::probeFor)) {
+            return switch (PROBES.get(value.getClass())) {
                 case HIBERNATE_PROXY -> uninitializedProxy(value);
                 case HIBERNATE_COLLECTION -> !invokeBoolean(value, "wasInitialized");
                 case ECLIPSELINK -> !invokeBoolean(value, "isInstantiated");
@@ -97,14 +120,14 @@ public final class JpaLaziness {
     }
 
     private static Probe probeFor(Class<?> type) {
-        if (implementsInterface(type, HIBERNATE_PROXY)) {
+        if (implementsInterface(type, HIBERNATE_PROXY_NAME)) {
             return Probe.HIBERNATE_PROXY;
         }
-        if (implementsInterface(type, HIBERNATE_COLLECTION)) {
+        if (implementsInterface(type, HIBERNATE_COLLECTION_NAME)) {
             return Probe.HIBERNATE_COLLECTION;
         }
         // У EclipseLink оба типа отвечают одним и тем же isInstantiated(), поэтому ветка общая.
-        if (implementsInterface(type, ECLIPSELINK_HOLDER) || implementsInterface(type, ECLIPSELINK_CONTAINER)) {
+        if (implementsInterface(type, ECLIPSELINK_HOLDER_NAME) || implementsInterface(type, ECLIPSELINK_CONTAINER_NAME)) {
             return Probe.ECLIPSELINK;
         }
         return Probe.NONE;
