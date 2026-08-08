@@ -2,6 +2,8 @@ package io.github.kolomyychenkoai.allure.spring.demo;
 
 import io.github.kolomyychenkoai.allure.spring.support.CurrentReport;
 import io.github.kolomyychenkoai.allure.spring.support.JpaTestApp;
+import io.github.kolomyychenkoai.allure.spring.support.jpa.Owner;
+import io.github.kolomyychenkoai.allure.spring.support.jpa.OwnerRepository;
 import io.github.kolomyychenkoai.allure.spring.support.jpa.Widget;
 import io.github.kolomyychenkoai.allure.spring.support.jpa.WidgetRepository;
 import io.qameta.allure.Epic;
@@ -33,6 +35,9 @@ class DataJpaReportIT {
     @Autowired
     private WidgetRepository widgets;
 
+    @Autowired
+    private OwnerRepository owners;
+
     @Test
     @DisplayName("findAll(Pageable): в «DB Result» видны сущности страницы, а не toString PageImpl")
     void pagedFindAllShowsEntities() {
@@ -47,6 +52,27 @@ class DataJpaReportIT {
                 () -> "DB Result без разбора сущностей страницы: " + dbResult);
         CurrentReport.check(!dbResult.contains("containing"),
                 () -> "в DB Result просочился toString PageImpl: " + dbResult);
+    }
+
+    @Test
+    @DisplayName("ленивая связь показана МАРКЕРОМ — прокси не разбужен ради отчёта")
+    void lazyAssociationIsNotWokenUp() {
+        Widget widget = new Widget("lazy-owner");
+        widget.setOwner(owners.save(new Owner("ACME")));
+        Widget saved = widgets.save(widget);
+
+        // findById — ОТДЕЛЬНАЯ транзакция: сессия сохранения уже закрыта, поэтому owner
+        // приезжает НЕинициализированным прокси. В одной сессии он был бы обычным объектом
+        // из кэша первого уровня, и витрина проверяла бы не тот случай.
+        widgets.findById(saved.getId());
+
+        // Отчёт не имеет права менять поведение приложения. При ОТКРЫТОЙ сессии обращение
+        // к неинициализированному прокси не бросает исключение, а молча идёт в БД: лишний
+        // SELECT на каждую связь и N+1 на коллекции у потребителя. Найдено A/B-проверкой
+        // на чужом сервисе (docs/consumer-affects.md, находка №1).
+        String dbResult = CurrentReport.attachmentOfStep("DB WidgetRepository.findById", "DB Result").orElse("");
+        CurrentReport.check(dbResult.contains("owner=<не загружено: ленивая связь>"),
+                () -> "ленивая связь не помечена маркером — значит её разбудили: " + dbResult);
     }
 
     @Test
