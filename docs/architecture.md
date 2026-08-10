@@ -112,13 +112,16 @@ Allure тест-кейс (`AllureAdviceSupport.step`). Поэтому перех
 
 13 листенеров (`META-INF/spring.factories`) — точка входа на каждый тест:
 
+Колонка «нет технологии» проверяется тестом `unit/ListenerDegradationTest`: каждый листенер
+из `spring.factories` покрыт сценарием «библиотеки нет».
+
 | точка входа | что ловит | механизм | нет технологии у потребителя |
 |---|---|---|---|
 | `logs/AllureApplicationLogsListener` | логи приложения за тест | аппендер Logback за гейтом `ClassPresence` + `instanceof` | молчит (Log4j2/JUL — не падает) |
 | `config/AllureConfigurationListener` | срез `Environment` перед тестом | Spring API | всегда применим |
 | `rest/AllureRestAssuredListener` | HTTP через глобальный `given()` | фильтр в `RestAssured.filters` | молчит |
 | `rest/AllureMockMvcListener` | `MockMvc.perform` | байткод | молчит |
-| `rest/AllureRestTemplateListener` | вызовы `RestTemplate` | байткод: интерсептор доставляется через `setInterceptors`, объявленный в `InterceptingHttpAccessor` ⚠️ переезд метода по иерархии сделал бы перехват тихим no-op | молчит |
+| `rest/AllureRestTemplateListener` | вызовы `RestTemplate` | байткод (интерсептор, см. §9) | молчит |
 | `rest/AllureRestClientListener` | вызовы `RestClient` | байткод по `DefaultRestClientBuilder.build` ⚠️ внутренний класс Spring | молчит |
 | `rest/AllureWebTestClientListener` | статус-онли обмены `WebTestClient` | проигрывание буфера, снятого фильтром обмена | молчит |
 | `wiremock/AllureWireMockTestListener` | старт сервера, запросы, near-miss, сценарии | рефлексивный поиск `WireMockServer` в полях тест-класса + request listener; ДОПОЛНИТЕЛЬНО байткод на `stubFor`/`verify`/`reset` — у них listener-хука нет | молчит |
@@ -170,8 +173,9 @@ cat src/main/resources/META-INF/spring.factories src/main/resources/META-INF/spr
    или свой `active()`), а листенеры конфигурации и логов гейта не содержат: Spring зовёт
    их внутри жизненного цикла теста, кейс есть по построению.
 2. **Три рендера значения, а не один** (`AllureAdviceSupport`): `safe` — ИМЯ шага (одна строка,
-   лимит 500), `safeValue` — ЗНАЧЕНИЕ во вложении (многострочно, без обрезки), `render` — СЫРОЕ
-   тело (без чистки). Путаница деградирует отчёт МОЛЧА: имя, mime и «непусто» не меняются.
+   лимит 500), `safeValue` — ЗНАЧЕНИЕ во вложении (многострочно, лимит 500 000 и обрезка
+   подписана в тексте), `render` — СЫРОЕ тело (без чистки). Путаница деградирует отчёт МОЛЧА:
+   имя, mime и «непусто» не меняются.
 3. **Никогда не бросать в потребителя.** Любой сбой перехвата — WARNING и обеднённый отчёт.
    Тонкое место: в аспекте репозиториев рендер ответа вычисляется как аргумент `finish(...)`,
    то есть внутри `try`, чей `catch` пробрасывает наружу. Поэтому он обёрнут в
@@ -191,15 +195,22 @@ cat src/main/resources/META-INF/spring.factories src/main/resources/META-INF/spr
 
 ## 8. Жизненный цикл и разделяемое состояние
 
-Что живёт дольше одного теста — и почему.
+ТИПОВЫЕ виды состояния, которое живёт дольше одного теста. Это не полный список — полный
+снимается командой под таблицей.
 
 | состояние | где | живёт | зачем такое |
 |---|---|---|---|
 | `AtomicBoolean INSTALLED` (в каждом байткод-модуле) | `*Instrumentation` | до конца JVM | идемпотентность; ⚠️ обратно не выключается — сценария «включить снова» нет |
 | `Set<MvcResult>` / `Set<WireMockServer>` на `WeakHashMap` | `AllureMockMvcResultHandler`, `AllureWireMockTestListener` | пока жив ключ | дедуп «уже залогировано», без удержания чужих объектов |
 | `List<String> STARTUP_SNAPSHOT` | `AllureLiquibaseInstrumentation` | до конца JVM | снимок стартовой схемы повторяется в НАЧАЛЕ каждого теста; ⚠️ JVM-широкий: два разных контекста БД в одной JVM накапливаются |
-| `ThreadLocal` глубины / журнала сброса | RestAssured-валидация, WireMock-reset | на поток | гашение дублей от делегации; журнал сброса снимается ДО reset |
+| `ThreadLocal` счётчика глубины | AssertJ, Spring-ассерты, валидация RestAssured, `JdbcTemplate` | на поток | перехваченные методы делегируют друг другу (`assertNull` → `assertTrue` → `fail`; `queryForObject` → `query`); без счётчика один вызов дал бы несколько шагов |
+| `ThreadLocal` журнала сброса | WireMock-reset | на поток | near-miss и сценарии снимаются ДО того, как `reset` их сотрёт |
 | `ClassValue` кэш распознавания | `JpaLaziness` | вместе с классом | не удерживает чужие загрузчики |
+
+```bash
+# полный список разделяемого состояния — БЕЗ head, иначе инвентарь врёт усечением
+grep -rn "ThreadLocal<\|static final \(Map\|Set\|List\|Atomic\|ClassValue\)" src/main/java
+```
 
 Потоковая параллель в одной JVM — низкий приоритет (у потребителя не планируется);
 честные списки «что ОК и что нет» — в README, раздел «Параллельный запуск».
@@ -213,6 +224,7 @@ cat src/main/resources/META-INF/spring.factories src/main/resources/META-INF/spr
 | привязка | чья внутренность | чем стережётся |
 |---|---|---|
 | `DefaultRestClientBuilder.build()` | Spring, package-private | канарейка `canary/InstrumentationApiCanaryTest` |
+| `setInterceptors`, объявленный в `InterceptingHttpAccessor` (доставка интерсептора `RestTemplate`) | Spring, иерархия классов | канарейка: ByteBuddy вплетает только в ОБЪЯВИТЕЛЯ, переезд метода по иерархии сделал бы перехват тихим no-op |
 | `ValidatableResponseOptionsImpl` + список методов проверок | RestAssured `internal` | канарейка (класс + каждый метод) |
 | `InlineByteBuddyMockMaker` | Mockito `internal` | канарейка + opt-in SPI (файл не едет в jar) |
 | приватное поле `AbstractAssert.actual` | AssertJ | канарейка + ADR 0001 |
@@ -262,8 +274,8 @@ cat src/main/resources/META-INF/spring.factories src/main/resources/META-INF/spr
    `InlineByteBuddyMockMaker`): канарейки достаточно, или такие точки не стоит поддерживать вовсе?
 3. **Статика, живущая до конца JVM** — гарды установки и JVM-широкий буфер Liquibase. Как бы
    ты это спроектировал, чтобы состояние не переживало Spring-контекст?
-4. **Границы модулей.** 20 пакетов, у каждого модуля свой `internal`. Где граница проведена
-   неверно и что стоит собрать вместе (или наоборот разнести)?
+4. **Границы модулей.** 20 пакетов; у девяти модулей из десяти свой `internal` (кроме `config`).
+   Где граница проведена неверно и что стоит собрать вместе — или наоборот разнести?
 5. **Читаемость с нуля.** Пройди маршрут из §1 и скажи, сколько по-твоему стоит вход нового
    человека и что мешало больше всего.
 6. **Что сделано «слишком умно»** и должно быть проще — даже ценой функциональности отчёта.
