@@ -43,8 +43,13 @@ show() {
 }
 
 # Добавленные строки комментариев кода: // /* * #  (шебанг не считаем).
+# ⚠️ НОВЫЕ файлы добавляем отдельно: git diff их не видит, пока не сделан `git add`, и проход
+# молча пропускал бы целый новый класс. Гейт на число такое не ловит — оба счётчика согласны.
 added_comments() {
-    git diff "$RANGE" -- src scripts | grep -E '^\+' | grep -vE '^\+\+\+' \
+    { git diff "$RANGE" -- src scripts
+      git ls-files --others --exclude-standard -- src scripts \
+          | while read -r f; do sed 's/^/+/' "$f"; done
+    } | grep -E '^\+' | grep -vE '^\+\+\+' \
         | grep -E '^\+[[:space:]]*(//|/\*|\*|#)' | grep -vE '^\+#!'
 }
 
@@ -54,10 +59,15 @@ echo "Скан комментариев: $RANGE (включая рабочее �
 # Цифра «сколько я насыпал» не видна ни автору, ни ревьюеру, пока её не посчитать.
 # Она же — единственный измеримый результат прохода: «было N, стало M».
 hdr "1. ОБЪЁМ: строк комментариев добавлено (по файлам)"
-for f in $(git diff --name-only "$RANGE" -- src scripts); do
+for f in $(git diff --name-only "$RANGE" -- src scripts
+           git ls-files --others --exclude-standard -- src scripts); do
     [ -f "$f" ] || continue
-    n=$(git diff "$RANGE" -- "$f" | grep -E '^\+' | grep -vE '^\+\+\+' \
-        | grep -cE '^\+[[:space:]]*(//|/\*|\*|#)')
+    if git ls-files --error-unmatch "$f" >/dev/null 2>&1; then
+        body=$(git diff "$RANGE" -- "$f" | grep -E '^\+' | grep -vE '^\+\+\+')
+    else
+        body=$(sed 's/^/+/' "$f")   # новый файл целиком считается добавленным
+    fi
+    n=$(printf '%s\n' "$body" | grep -cE '^\+[[:space:]]*(//|/\*|\*|#)')
     [ "$n" -gt 0 ] && printf '  %4s  %s\n' "$n" "$f"
 done | sort -rn | show
 COUNTED=$(added_comments | wc -l | tr -d ' ')
