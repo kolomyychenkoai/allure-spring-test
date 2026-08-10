@@ -141,6 +141,86 @@ class ArchitectureDocTest {
                 .isEmpty();
     }
 
+    @Test
+    @DisplayName("всё, на что документ ссылается, существует: классы, типы, файлы, разделы")
+    void everyReferenceResolves() throws IOException {
+        // Самая дешёвая ложь документа — сослаться на то, чего нет: она не ломает сборку
+        // и не видна при чтении, а читатель идёт по ссылке и упирается в пустоту. Так уже
+        // было: обзор обещал в InstrumentationDiagnostics дамп и гейт, которые живут в тестах.
+        String doc = Files.readString(DOC, StandardCharsets.UTF_8);
+        List<String> broken = new java.util.ArrayList<>();
+
+        // 1. НАШИ классы — по ПРЕФИКСУ имени. Список полных имён ловил бы только то, что в нём
+        // уже есть, и переименование в несуществующий класс проходило бы мимо (проверено
+        // мутацией). Суффиксы («…Listener») цепляют чужие типы вроде TestExecutionListener,
+        // поэтому берём начала имён, которые бывают только у нас.
+        var ours = java.util.regex.Pattern.compile("`[a-z/]*((?:Allure|Moved|ClassPresence|ByteBuddyP"
+                + "|ByteBuddyC|JpaLaziness|Instrumentation|Activation|ListenerDegradation"
+                + "|ArchitectureDoc)[A-Za-z]*)`");
+        var m = ours.matcher(doc);
+        while (m.find()) {
+            String type = m.group(1);
+            try (var files = Files.walk(Path.of("src"))) {
+                if (files.noneMatch(p -> p.getFileName().toString().equals(type + ".java"))) {
+                    broken.add("наш класс «" + type + "» упомянут, но файла нет");
+                }
+            }
+        }
+
+        // 2. ЧУЖИЕ типы, на которых стоят §5 и §9. Проверка в ОБЕ стороны: тип обязан
+        // резолвиться на classpath И быть назван в документе. Односторонняя («если документ
+        // упоминает — проверить») не ловит переименование в тексте: имени просто не находится,
+        // и проверка молча пропускается (поймано мутацией).
+        for (String fqn : List.of("org.springframework.test.web.servlet.MockMvc",
+                "org.assertj.core.api.AbstractAssert",
+                "org.springframework.web.client.DefaultRestClientBuilder",
+                "io.restassured.internal.ValidatableResponseOptionsImpl",
+                "org.mockito.internal.creation.bytebuddy.InlineByteBuddyMockMaker",
+                "liquibase.changelog.ChangeSet",
+                "com.github.tomakehurst.wiremock.WireMockServer",
+                "org.springframework.http.client.support.InterceptingHttpAccessor")) {
+            String simple = fqn.substring(fqn.lastIndexOf('.') + 1);
+            try {
+                Class.forName(fqn, false, getClass().getClassLoader());
+            } catch (ClassNotFoundException gone) {
+                broken.add("чужой тип «" + simple + "» не резолвится: " + fqn);
+                continue;
+            }
+            if (!doc.contains(simple)) {
+                broken.add("чужой тип «" + simple + "» пропал из документа — либо он переименован "
+                        + "в тексте, либо из таблицы рисков ушла строка");
+            }
+        }
+
+        // 3. Методы и константы: имена берём ИЗ ТЕКСТА, а не сверяем список с текстом —
+        // иначе `describeResponseXX` проходит проверку как подстрока (поймано мутацией).
+        var members = java.util.regex.Pattern.compile("`([a-z]+[A-Z][A-Za-z]+|[A-Z]{2,}_[A-Z_]+)`").matcher(doc);
+        while (members.find()) {
+            String member = members.group(1);
+            if (filesContaining(member) == 0) {
+                broken.add("метод/константа «" + member + "» упомянут, но в src/main его нет");
+            }
+        }
+
+        // 4. Пути к файлам и перекрёстные ссылки на разделы.
+        var paths = java.util.regex.Pattern.compile("`((?:docs|scripts|src)/[A-Za-z0-9_./-]+)`").matcher(doc);
+        while (paths.find()) {
+            if (!Files.exists(Path.of(paths.group(1)))) {
+                broken.add("путь «" + paths.group(1) + "» упомянут, но файла нет");
+            }
+        }
+        var sections = java.util.regex.Pattern.compile("§(\\d+)").matcher(doc);
+        while (sections.find()) {
+            if (!doc.contains("## " + sections.group(1) + ". ")) {
+                broken.add("ссылка на §" + sections.group(1) + ", а такого раздела нет");
+            }
+        }
+
+        assertThat(broken)
+                .as("документ ссылается в пустоту — читатель пойдёт по ссылке и не найдёт ничего")
+                .isEmpty();
+    }
+
     /** Суммарный объём файлов «маршрута чтения»: документ обещает его одним числом. */
     private static long routeLines() throws IOException {
         long total = 0;

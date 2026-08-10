@@ -46,7 +46,7 @@ find src/main/java -name '*.java' | wc -l && find src/main/java -name '*.java' -
 mvn clean test        # число тестов
 ```
 
-⚠️ Числа сняты на ветке `docs/architecture` (день создания документа) — они дрейфуют.
+⚠️ Числа сняты в ветке docs/architecture (день создания документа) — они дрейфуют.
 Команды рядом именно для того, чтобы не верить на слово.
 
 ---
@@ -134,7 +134,7 @@ flowchart LR
 |---|---|---|---|
 | `logs/AllureApplicationLogsListener` | логи приложения за тест | аппендер Logback за гейтом `ClassPresence` + `instanceof` | молчит (Log4j2/JUL — не падает) |
 | `config/AllureConfigurationListener` | срез `Environment` перед тестом | Spring API | всегда применим |
-| `rest/AllureRestAssuredListener` | HTTP через глобальный `given()` | фильтр в `RestAssured.filters` | молчит |
+| `rest/AllureRestAssuredListener` | HTTP через глобальный `given()` и проверки `.then()` | фильтр в `RestAssured.filters` (ставится в `beforeTestExecution`) + байткод на проверках `ValidatableResponseOptionsImpl` | молчит |
 | `rest/AllureMockMvcListener` | `MockMvc.perform` | байткод | молчит |
 | `rest/AllureRestTemplateListener` | вызовы `RestTemplate` | байткод (интерсептор, см. §9) | молчит |
 | `rest/AllureRestClientListener` | вызовы `RestClient` | байткод (внутренний класс Spring, см. §9) | молчит |
@@ -152,7 +152,7 @@ flowchart LR
 |---|---|---|
 | `rest/AllureMockMvcAutoConfiguration` | кастомайзер MockMvc, который вешает `AllureMockMvcResultHandler` на каждый собираемый `MockMvc` | тип кастомайзера ПЕРЕЕХАЛ между Boot 3 и 4 — резолвится по имени, бин регистрируется программно |
 | `rest/AllureWebTestClientAutoConfiguration` | кастомайзер WebTestClient | то же; у WebTestClient байткод-фолбэка нет — потеря кастомайзера означала бы полную потерю шагов |
-| `data/AllureDataJpaAutoConfiguration` | аспект репозиториев (Spring AOP) | pointcut задан СТРОКОЙ: spring-data нет в compile-classpath |
+| `data/AllureDataJpaAutoConfiguration` | аспект репозиториев (Spring AOP) и `@EnableAspectJAutoProxy` в контексте потребителя | pointcut задан СТРОКОЙ (spring-data нет в compile-classpath); `proxyTargetClass` намеренно НЕ выставляется — режим проксирования остаётся тот, что у потребителя |
 | `data/AllureDataSourceAutoConfiguration` | `BeanPostProcessor`, оборачивающий `DataSource` в datasource-proxy | реальный SQL вкладывается ВНУТРЬ шага вызова репозитория |
 
 ```bash
@@ -217,9 +217,12 @@ cat src/main/resources/META-INF/spring.factories src/main/resources/META-INF/spr
    то есть внутри `try`, чей `catch` пробрасывает наружу. Поэтому он обёрнут в
    `describeResponse` — иначе сбой рендера ронял бы вызов репозитория, который уже прошёл
    успешно (и врал бы статусом BROKEN).
-4. **Гард присутствия ПЕРЕД install.** Листенер регистрируется всегда, поэтому модуль сам
-   проверяет `ClassPresence`/`ByteBuddyPresence`; иначе отсутствие чужой библиотеки роняло
-   бы весь сьют.
+4. **Гард перед install.** Листенер регистрируется всегда, поэтому модуль сам защищается от
+   отсутствия чужой библиотеки — иначе её отсутствие роняло бы весь сьют. Защита двух видов,
+   и это стоит знать при чтении: большинство модулей спрашивают `ClassPresence.isPresent(…)`
+   (+ `ByteBuddyPresence` перед байткодом), а Kafka обходится без первого — его матчер задан
+   именем класса и без kafka-clients просто ничего не находит, а advice со ссылками на типы
+   Kafka линкуется только при совпадении.
 5. **Переехавшие типы — по ИМЕНИ.** Компиляция против типа, который переезжает между мажорами
    Boot, молча выключала бы модуль у потребителя с другим мажором.
 6. **Идемпотентность установки.** У каждого из 13 модулей-инструментаторов свой
@@ -275,7 +278,7 @@ grep -rn "ThreadLocal<\|static final \(Map\|Set\|List\|Atomic\|ClassValue\)" src
 - **типизированный** — ровно один: AssertJ матчит `isSubTypeOf(AbstractAssert.class)` и берёт
   методы по признакам (`isPublic`, `not(isConstructor)`), без имён вовсе. Компилятор тип
   проверяет, зато ломает изменение иерархии и приватного поля `actual` — отсюда отдельный
-  разбор в `docs/adr/0001`.
+  разбор в `docs/adr/0001-assertj-instrumentation.md`.
 
 Канарейка нужна обоим, но ловит разное; поэтому вопрос про эти привязки вынесен в §12.
 
