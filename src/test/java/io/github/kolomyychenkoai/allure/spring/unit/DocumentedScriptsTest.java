@@ -113,4 +113,35 @@ class DocumentedScriptsTest {
                         + "отчёт снова уедет заказчику")
                 .contains("до того, как показать отчёт");
     }
+
+    @Test
+    @DisplayName("проход «комментарии подряд» описан среди проходов и требует своего инструмента")
+    void commentPassIsWiredIntoProcedure() {
+        // Стережём две вещи: проход стоит СРЕДИ проходов (в завершающем разделе он
+        // вырождается в самоотчёт) и у него есть инструмент — иначе «сплошное чтение»
+        // снова станет пожеланием.
+        String playbook = read("docs/review-playbook.md");
+        assertThat(playbook)
+                .as("проход по комментариям пропал из playbook — вместе с ним пропадает "
+                        + "единственная проверка правил 2, 3 и 5, которые грепом не берутся")
+                .contains("scripts/comment-scan.sh")
+                .contains("СПЛОШНОЕ ЧТЕНИЕ");
+        assertThat(playbook.indexOf("scripts/comment-scan.sh"))
+                .as("проход уехал из раздела «2. Порядок» в завершающий — там он и вырождался "
+                        + "в самоотчёт «перечитал»")
+                .isLessThan(playbook.indexOf("## 3. Завершающий проход"));
+
+        assertThat(read("docs/java-code-standard.md"))
+                .as("правило «один факт — одно место» обязано называть дубль МЕЖДУ файлами: "
+                        + "именно он невидим в дифе и стоил всех находок последнего круга")
+                .contains("про РЕПОЗИТОРИЙ, а не про файл");
+    }
+
+    private static String read(String path) {
+        try {
+            return Files.readString(Path.of(path), StandardCharsets.UTF_8);
+        } catch (IOException unreadable) {
+            throw new AssertionError("нет файла процедуры: " + path, unreadable);
+        }
+    }
 }
