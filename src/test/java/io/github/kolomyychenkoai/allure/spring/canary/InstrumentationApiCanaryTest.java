@@ -382,10 +382,8 @@ class InstrumentationApiCanaryTest {
     @Test
     @DisplayName("Hibernate: интерфейсы ленивости, на которых держится страж прокси")
     void hibernateLazinessInterfaces() {
-        // ⚠️ Страж узнаёт ленивое по ИМЕНИ интерфейса (провайдеров нет в compile-classpath).
-        // Переименуют — он молча перестанет срабатывать, и вернётся дефект: лишний SELECT
-        // на каждую ленивую связь. Компилятор этого не поймает, отчёт тоже — он выглядит
-        // здоровым, просто в БД идут лишние запросы.
+        // ⚠️ Страж узнаёт ленивое по ИМЕНИ интерфейса (провайдеров нет в compile-classpath):
+        // переименуют — он перестанет срабатывать молча, отчёт при этом выглядит здоровым.
         // Имена — из самого стража (почему не строками — javadoc у его констант).
         require(classPresent(JpaLaziness.HIBERNATE_PROXY_NAME),
                 "HibernateProxy уехал → обнови имена в internal/JpaLaziness");
@@ -405,8 +403,7 @@ class InstrumentationApiCanaryTest {
     @Test
     @DisplayName("EclipseLink: интерфейсы ленивости, на которых держится тот же страж")
     void eclipseLinkLazinessInterfaces() {
-        // ⚠️ У EclipseLink риск в другом месте, чем у Hibernate (разбор — javadoc
-        // JpaLaziness): опасен не toString(), а size(), который и зовёт ветка Collection.
+        // ⚠️ У EclipseLink опасен size(), а не toString() — разбор в javadoc JpaLaziness.
         require(classPresent(JpaLaziness.ECLIPSELINK_HOLDER_NAME),
                 "ValueHolderInterface уехал → обнови имена в internal/JpaLaziness");
         require(hasMethod(JpaLaziness.ECLIPSELINK_HOLDER_NAME, JpaLaziness.ECLIPSELINK_PROBE, 0, null),

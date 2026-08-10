@@ -313,8 +313,6 @@ public class AllureRepositoryAspect {
         StringJoiner sj = new StringJoiner(", ", clazz.getSimpleName() + "{", "}");
         for (Field field : fields) {
             try {
-                // Ленивое поле помечает маркером сам safe() — страж живёт в общей точке
-                // рендера (AllureAdviceSupport), чтобы закрывать все модули, а не только этот.
                 // Здесь safe() ОСОЗНАННО, а не safeValue: сущность печатается однострочным
                 // «Widget{id=1, name=…}», и список выборки читается строка-на-сущность.
                 // Многострочное значение поля разорвало бы этот формат.

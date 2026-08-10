@@ -65,7 +65,6 @@ public final class LazyProxies {
                 });
     }
 
-    /** Прокси одного интерфейса: обработчик получает имя метода и аргументы. */
     private static Object handler(String interfaceName, Answer answer) {
         return Proxy.newProxyInstance(LazyProxies.class.getClassLoader(),
                 new Class<?>[]{type(interfaceName)},

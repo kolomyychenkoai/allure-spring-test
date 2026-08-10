@@ -70,10 +70,7 @@ class DataJpaReportIT {
         // из кэша первого уровня, и витрина проверяла бы не тот случай.
         widgets.findById(saved.getId());
 
-        // Сессия здесь ЗАКРЫТА, поэтому без стража обращение к прокси бросает, библиотека
-        // это ловит и печатает «<?>» — отчёт деградирует молча. Маркер и есть доказательство,
-        // что страж сработал. Случай ОТКРЫТОЙ сессии, где страдает уже приложение, проверяет
-        // соседний lazyAssociationCostsNoExtraQueryInsideTransaction.
+        // Мутация: снять страж → вместо маркера «<?>» (сессия закрыта, toString прокси бросает).
         String dbResult = CurrentReport.attachmentOfStep("DB WidgetRepository.findById", "DB Result").orElse("");
         CurrentReport.check(dbResult.contains("owner=<не загружено: ленивая связь>"),
                 () -> "ленивая связь не помечена маркером — значит её разбудили: " + dbResult);
@@ -88,9 +85,8 @@ class DataJpaReportIT {
 
         service.loadWithinTransaction(saved.getId());
 
-        // Самый опасный случай: сессия ОТКРЫТА, поэтому обращение к прокси не бросает,
-        // а молча идёт в БД. Ловим это не по маркеру, а по ОТСУТСТВИЮ запроса —
-        // datasource-proxy показал бы «SQL SELECT owner» отдельным шагом.
+        // Сессия ОТКРЫТА, поэтому ловим не по маркеру, а по ОТСУТСТВИЮ запроса: пробуждение
+        // прокси дало бы отдельный шаг «SQL SELECT owner» от datasource-proxy.
         List<String> steps = CurrentReport.stepNames();
         // ⚠️ Сперва ЯКОРЬ, и только потом отсутствие. Без якоря это пустой негатив: выключи
         // datasource-proxy или сломай листенер — SQL-шагов не будет вообще, и «owner не грузили»

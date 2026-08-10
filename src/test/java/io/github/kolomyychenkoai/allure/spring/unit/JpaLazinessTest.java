@@ -144,8 +144,7 @@ class JpaLazinessTest {
     @DisplayName("EclipseLink: у незагруженного IndirectContainer НЕ зовут size() — это и есть загрузка")
     void uninitializedIndirectContainerIsDetectedWithoutCallingSize() {
         boolean[] loaded = {false};
-        // ⚠️ Стережём size(), а не toString(): у EclipseLink опасен именно он (почему —
-        // javadoc JpaLaziness), и ветка Collection в аспекте зовёт как раз size() и обход.
+        // ⚠️ Стережём size(), а не toString(): у EclipseLink опасен именно он (javadoc JpaLaziness).
         Object container = proxy(IndirectContainer.class, (p, m, a) -> {
             if ("isInstantiated".equals(m.getName())) {
                 return Boolean.FALSE;
