@@ -4,7 +4,8 @@
 (пользователю — `README.md`). Задача документа — за полчаса довести до состояния, в котором
 можно спорить по существу.
 
-Все числа ниже перемерены командами, команды приведены рядом — можно ткнуть.
+Числа в документе сняты командами с репозитория; там, где число легко проверить самому,
+команда стоит рядом.
 
 ---
 
@@ -14,7 +15,7 @@
 
 | # | файл | что смотреть | ~мин |
 |---|---|---|---|
-| 1 | `internal/AllureInstrumentation` | единственная точка байткода: `retransform`, идемпотентность, аварийный выключатель, поведение при сбое | 6 |
+| 1 | `internal/AllureInstrumentation` | единственная точка УСТАНОВКИ агента: `retransform`, аварийный выключатель, поведение при сбое (matcher и advice приносит каждый модуль сам) | 6 |
 | 2 | `internal/AllureAdviceSupport` | рендер значений: ТРИ функции для трёх мест отчёта; почему их три и что ломается при путанице | 6 |
 | 3 | `assertion/AllureAssertionsListener` + `assertion/internal/AllureAssertJInstrumentation` | типовой байткод-модуль целиком: гард присутствия → install → advice → шаг | 6 |
 | 4 | `rest/AllureMockMvcAutoConfiguration` + `internal/MovedCustomizerRegistrar` | второй механизм активации и приём «тип резолвится по имени», которым держится кросс-версионность | 5 |
@@ -30,7 +31,9 @@
 
 Библиотека даёт Allure-отчёт для Spring-тестов **без единой строки в тестах потребителя**:
 jar на test-classpath сам вцепляется в MockMvc, RestAssured, репозитории, SQL, Kafka, WireMock,
-ассерты, Mockito, логи и конфигурацию.
+ассерты, логи и конфигурацию. Единственное исключение — **Mockito: он opt-in**, SPI-файла
+MockMaker в jar нет, потребитель добавляет его сам (иначе библиотека навязывала бы свой
+MockMaker всем и конфликтовала бы с чужим).
 
 Два принципа, из которых следует почти вся форма кода:
 
@@ -82,6 +85,10 @@ flowchart LR
     AL --> R[("target/allure-results")]
 ```
 
+⚠️ **На схеме модуль стоит под одним механизмом, в коде бывает два.** MockMvc: кастомайзер
+из автоконфигурации плюс байткод на `perform`. WireMock: листенер плюс байткод на
+`stubFor`/`verify`/`reset`. Точный механизм по каждой точке входа — в §5.
+
 **Гейт на входе в отчёт один для всех модулей:** пишем шаг, только если есть активный
 Allure тест-кейс (`AllureAdviceSupport.step`). Поэтому перехват, срабатывающий во время
 старта контекста или в чужом потоке, молчит, а не сыпет «no test case running».
@@ -94,10 +101,10 @@ Allure тест-кейс (`AllureAdviceSupport.step`). Поэтому перех
 |---|---|---|
 | `TestExecutionListener` (`spring.factories`) | всё, что нужно **на каждый тест**: логи, конфигурация, проигрывание буферов, установка байткода перед первым классом | Spring API, стабильно; но листенер регистрируется ВСЕГДА — значит каждый модуль обязан сам проверить, есть ли его технология (`ClassPresence`) |
 | Spring Boot auto-configuration (`AutoConfiguration.imports`) | то, что должно стать **бином**: кастомайзеры MockMvc/WebTestClient, аспект репозиториев, обёртка `DataSource` | работает только там, где включена автоконфигурация; `@ConditionalOnClass` читается ASM-ом — если класс уехал, модуль молча не применится |
-| Байткод (ByteBuddy) | то, где у библиотеки **нет hook'а**: ассерты, `KafkaConsumer.poll`, `WireMock.stubFor`, `JdbcTemplate`, `ChangeSet.execute`, билдеры RestTemplate/RestClient | привязка к чужим сигнатурам, иногда к внутренним классам (§9); сбой трансформации не виден из теста — нужна отдельная диагностика (§10) |
+| Байткод (ByteBuddy) | то, где у библиотеки **нет hook'а**: ассерты, `KafkaConsumer.poll`, `WireMock.stubFor`, `JdbcTemplate`, `ChangeSet.execute`, точки внедрения интерсептора в RestTemplate/RestClient | привязка к чужим сигнатурам, иногда к внутренним классам (§9); сбой трансформации не виден из теста — нужна отдельная диагностика (§10) |
 
-Байткод — не «потому что можно», а потому что у перечисленных точек нет публичного расширения.
-Это первое, что стоит оспорить, если оспаривать (§12, вопрос 1).
+У перечисленных точек нет публичной точки расширения — отсюда байткод. Обоснованность этого
+выбора вынесена отдельным вопросом (§12, вопрос 1).
 
 ---
 
@@ -111,10 +118,10 @@ Allure тест-кейс (`AllureAdviceSupport.step`). Поэтому перех
 | `config/AllureConfigurationListener` | срез `Environment` перед тестом | Spring API | всегда применим |
 | `rest/AllureRestAssuredListener` | HTTP через глобальный `given()` | фильтр в `RestAssured.filters` | молчит |
 | `rest/AllureMockMvcListener` | `MockMvc.perform` | байткод | молчит |
-| `rest/AllureRestTemplateListener` | вызовы `RestTemplate` | байткод (интерсептор в `setInterceptors`) | молчит |
+| `rest/AllureRestTemplateListener` | вызовы `RestTemplate` | байткод: интерсептор доставляется через `setInterceptors`, объявленный в `InterceptingHttpAccessor` ⚠️ переезд метода по иерархии сделал бы перехват тихим no-op | молчит |
 | `rest/AllureRestClientListener` | вызовы `RestClient` | байткод по `DefaultRestClientBuilder.build` ⚠️ внутренний класс Spring | молчит |
 | `rest/AllureWebTestClientListener` | статус-онли обмены `WebTestClient` | проигрывание буфера, снятого фильтром обмена | молчит |
-| `wiremock/AllureWireMockTestListener` | старт сервера, запросы, near-miss, сценарии | рефлексивный поиск `WireMockServer` в полях тест-класса + request listener | молчит |
+| `wiremock/AllureWireMockTestListener` | старт сервера, запросы, near-miss, сценарии | рефлексивный поиск `WireMockServer` в полях тест-класса + request listener; ДОПОЛНИТЕЛЬНО байткод на `stubFor`/`verify`/`reset` — у них listener-хука нет | молчит |
 | `assertion/AllureAssertionsListener` | AssertJ, Hamcrest, JUnit Jupiter, Spring `AssertionErrors` | байткод | молчит |
 | `kafka/AllureKafkaListener` | `producer.send`, `consumer.poll` | байткод | молчит |
 | `data/AllureJdbcListener` | `JdbcTemplate`, `NamedParameterJdbcTemplate` | байткод | молчит |
@@ -125,7 +132,7 @@ Allure тест-кейс (`AllureAdviceSupport.step`). Поэтому перех
 
 | автоконфиг | что регистрирует | тонкость |
 |---|---|---|
-| `rest/AllureMockMvcAutoConfiguration` | кастомайзер MockMvc + `ResultHandler` | тип кастомайзера ПЕРЕЕХАЛ между Boot 3 и 4 — резолвится по имени, бин регистрируется программно |
+| `rest/AllureMockMvcAutoConfiguration` | кастомайзер MockMvc, который вешает `AllureMockMvcResultHandler` на каждый собираемый `MockMvc` | тип кастомайзера ПЕРЕЕХАЛ между Boot 3 и 4 — резолвится по имени, бин регистрируется программно |
 | `rest/AllureWebTestClientAutoConfiguration` | кастомайзер WebTestClient | то же; у WebTestClient байткод-фолбэка нет — потеря кастомайзера означала бы полную потерю шагов |
 | `data/AllureDataJpaAutoConfiguration` | аспект репозиториев (Spring AOP) | pointcut задан СТРОКОЙ: spring-data нет в compile-classpath |
 | `data/AllureDataSourceAutoConfiguration` | `BeanPostProcessor`, оборачивающий `DataSource` в datasource-proxy | реальный SQL вкладывается ВНУТРЬ шага вызова репозитория |
@@ -142,7 +149,7 @@ cat src/main/resources/META-INF/spring.factories src/main/resources/META-INF/spr
 
 | класс | зачем |
 |---|---|
-| `AllureInstrumentation` | единственная точка ByteBuddy: `retransform(matcher, transformer)`, аварийный выключатель `-Dallure.spring.instrumentation=off` |
+| `AllureInstrumentation` | `retransform(matcher, transformer)` + аварийный выключатель `-Dallure.spring.instrumentation=off`. Единственное место, где вызывается `ByteBuddyAgent.install()` и строится `AgentBuilder`; сам byte-buddy импортируют ещё 16 файлов — модули пишут свои matcher и advice |
 | `AllureAdviceSupport` | рендер значений и создание шага; вызывается ИЗ inline-advice, поэтому `public static` |
 | `AllureJson` | отступы в JSON-вложениях без JSON-зависимости и без пересериализации |
 | `ClassPresence` / `ByteBuddyPresence` / `ByteBuddyClassFormat` | гарды: есть ли технология, есть ли byte-buddy, знает ли он формат class-файлов этой JVM |
@@ -157,8 +164,11 @@ cat src/main/resources/META-INF/spring.factories src/main/resources/META-INF/spr
 
 По ним и стоит судить качество — они повторяются во всех модулях.
 
-1. **Гейт по активному тест-кейсу.** Ни один модуль не пишет в отчёт, если нет активного
-   Allure-кейса. Иначе перехват, общий на JVM, сыпал бы шаги мимо тестов.
+1. **Гейт по активному тест-кейсу.** В отчёт не пишем, если активного Allure-кейса нет:
+   перехват общий на JVM и иначе сыпал бы шаги мимо тестов. Проверка выглядит по-разному —
+   байткод-модули, фильтры и интерсепторы спрашивают явно (`AllureAdviceSupport.step`
+   или свой `active()`), а листенеры конфигурации и логов гейта не содержат: Spring зовёт
+   их внутри жизненного цикла теста, кейс есть по построению.
 2. **Три рендера значения, а не один** (`AllureAdviceSupport`): `safe` — ИМЯ шага (одна строка,
    лимит 500), `safeValue` — ЗНАЧЕНИЕ во вложении (многострочно, без обрезки), `render` — СЫРОЕ
    тело (без чистки). Путаница деградирует отчёт МОЛЧА: имя, mime и «непусто» не меняются.
@@ -244,7 +254,7 @@ cat src/main/resources/META-INF/spring.factories src/main/resources/META-INF/spr
 
 ---
 
-## 12. Шесть вопросов, ради которых всё это написано
+## 12. Шесть вопросов лиду
 
 1. **Байткод там, где нет hook'а** — приемлемая цена или архитектурная ошибка? Если ошибка,
    то что вместо: отказ от этих модулей или свой SPI-слой поверх?
