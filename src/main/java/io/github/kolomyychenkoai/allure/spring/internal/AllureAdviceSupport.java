@@ -256,11 +256,10 @@ public final class AllureAdviceSupport {
      * тело уже сериализовано и любая «чистка» его исказит. Для имени шага — {@link #safe}.
      */
     public static String render(Object value) {
-        if (JpaLaziness.notLoaded(value)) {
-            return JpaLaziness.NOT_LOADED; // см. clean(): toString() прокси — это SELECT
-        }
         try {
-            return String.valueOf(value);
+            // Внутри try, а не перед ним: метод обещает «не бросает», и гейт — не исключение
+            // из обещания. Почему ленивое не трогаем — javadoc JpaLaziness.
+            return JpaLaziness.notLoaded(value) ? JpaLaziness.NOT_LOADED : String.valueOf(value);
         } catch (Throwable t) {
             return "<?>";
         }

@@ -14,6 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Proxy;
 import java.util.List;
 import java.util.Optional;
 
@@ -137,6 +138,44 @@ class AllureRepositoryAspectTest {
         assertThat(allure.attachment(result, "DB Result").orElseThrow())
                 .contains("<не загружено: ленивая связь>");
         assertThat(touched[0]).as("верхнеуровневый прокси разбужен ради отчёта").isFalse();
+    }
+
+    @Test
+    @DisplayName("сбой РЕНДЕРА ответа не роняет вызов репозитория и не врёт статусом BROKEN")
+    void brokenResponseRenderDoesNotBreakTheCall() throws Throwable {
+        // Мутация: звать formatResponse напрямую вместо describeResponse → красный.
+        // Коллекция, чей size() бросает, — это провайдер, которого страж не знает
+        // (почему такой сбой опасен — javadoc describeResponse).
+        List<?> hostile = (List<?>) Proxy.newProxyInstance(getClass().getClassLoader(),
+                new Class<?>[]{List.class}, (proxy, method, args) -> {
+                    if ("size".equals(method.getName()) || "iterator".equals(method.getName())) {
+                        throw new IllegalStateException("failed to lazily initialize a collection");
+                    }
+                    return "toString".equals(method.getName()) ? "<коллекция>" : null;
+                });
+
+        ProceedingJoinPoint joinPoint = pjp("findAll", new Object[]{}, hostile);
+        Object[] returned = new Object[1];
+        TestResult result = allure.run("db-hostile-render", () -> {
+            try {
+                returned[0] = aspect.logRepositoryCall(joinPoint);
+            } catch (Throwable t) {
+                throw new IllegalStateException("сбой рендера улетел в приложение потребителя", t);
+            }
+        });
+
+        assertThat(returned[0]).as("вызов репозитория обязан вернуть своё значение").isSameAs(hostile);
+        assertThat(step(result, "DB FakeRepo.findAll").getStatus())
+                .as("вызов прошёл успешно — статус BROKEN был бы неправдой про приложение")
+                .isEqualTo(io.qameta.allure.model.Status.PASSED);
+        assertThat(allure.attachment(result, "DB Result").orElseThrow()).isEqualTo("<?>");
+    }
+
+    private io.qameta.allure.model.StepResult step(TestResult result, String name) {
+        return result.getSteps().stream()
+                .filter(s -> name.equals(s.getName()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("нет шага «" + name + "»"));
     }
 
     /** Вызов аспекта внутри allure.run: сигнатура logRepositoryCall бросает Throwable. */

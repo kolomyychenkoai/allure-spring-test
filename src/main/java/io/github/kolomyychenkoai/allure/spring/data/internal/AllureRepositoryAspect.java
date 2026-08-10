@@ -85,7 +85,7 @@ public class AllureRepositoryAspect {
         boolean started = startStep(uuid, call.stepName());
         try {
             Object result = pjp.proceed();
-            finish(started, uuid, call.callText(), formatResponse(result), Status.PASSED);
+            finish(started, uuid, call.callText(), describeResponse(result), Status.PASSED);
             return result;
         } catch (Throwable error) {
             // помечаем шаг BROKEN (родная семантика Allure для ошибки), но текст исключения
@@ -94,6 +94,26 @@ public class AllureRepositoryAspect {
             throw error;
         } finally {
             stopQuietly(started, uuid);
+        }
+    }
+
+    /**
+     * Рендер ответа под защитой — как и рендер аргументов внутри {@link #snapshotIfActive}.
+     * <p>
+     * ⚠️ Считается ДО входа в {@code finish}, то есть внутри try, чей catch ПРОБРАСЫВАЕТ.
+     * Без этой обёртки сбой рендера летел бы в приложение потребителя — притом что вызов
+     * репозитория уже прошёл успешно, — и заодно врал бы статусом BROKEN. Ветки рендера зовут
+     * ЧУЖОЙ код ({@code size()} и обход коллекции, {@code isAnnotationPresent} на классе
+     * с нерезолвимыми аннотациями), а у провайдера, которого не знает {@code JpaLaziness},
+     * незагруженная коллекция на {@code size()} и бросает. Цена отказа — «{@code <?>}» вместо
+     * содержимого: отчёт беднеет, тест потребителя цел.
+     */
+    private String describeResponse(Object result) {
+        try {
+            return formatResponse(result);
+        } catch (Throwable t) {
+            AllureInstrumentationLogger.warn("DbFormatResponse", t);
+            return "<?>";
         }
     }
 
