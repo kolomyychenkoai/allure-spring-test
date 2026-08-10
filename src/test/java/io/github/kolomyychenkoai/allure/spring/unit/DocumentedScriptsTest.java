@@ -20,8 +20,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Страж связки «дока обещает инструмент — инструмент существует», в обе стороны.
  * <p>
- * Процедура ревью держится на четырёх скриптах, и каждый из них упомянут в доках как
- * обязательный шаг. Обещание без стража — гипотеза: переименованный или удалённый скрипт
+ * Процедура ревью и проверка потребителей держатся на скриптах из `scripts/`, и каждый из них
+ * упомянут в доках как шаг. Обещание без стража — гипотеза: переименованный или удалённый скрипт
  * оставляет в playbook'е шаг, который просто не выполнить, и узнать об этом можно только
  * дойдя до него руками. Обратная сторона не менее важна: инструмент, о котором не сказано
  * ни в одной доке, не будет запущен никогда — а значит его и нет.
@@ -42,7 +42,7 @@ class DocumentedScriptsTest {
     }
 
     private static Set<String> mentionedScripts() throws IOException {
-        Pattern reference = Pattern.compile("scripts/([a-z0-9-]+\\.sh)");
+        Pattern reference = Pattern.compile("scripts/([a-z0-9-]+\\.(?:sh|py))");
         Set<String> found = new TreeSet<>();
         for (Path doc : documents()) {
             if (!Files.exists(doc)) {
@@ -59,7 +59,9 @@ class DocumentedScriptsTest {
     private static Set<String> existingScripts() throws IOException {
         try (Stream<Path> files = Files.list(SCRIPTS)) {
             return files.map(p -> p.getFileName().toString())
-                    .filter(n -> n.endsWith(".sh"))
+                    // .py тоже: их зовут и напрямую, и из .sh — незадокументированный
+                    // python-скрипт ломает шаг процедуры так же, как незадокументированный shell
+                    .filter(n -> n.endsWith(".sh") || n.endsWith(".py"))
                     .collect(java.util.stream.Collectors.toCollection(TreeSet::new));
         }
     }
@@ -69,7 +71,7 @@ class DocumentedScriptsTest {
     void mentionedScriptsExistAndAreExecutable() throws IOException {
         Set<String> mentioned = mentionedScripts();
         assertThat(mentioned)
-                .as("ни одной ссылки на scripts/*.sh в доках — сломался сам сбор, а не доки")
+                .as("ни одной ссылки на scripts/*.{sh,py} в доках — сломался сам сбор, а не доки")
                 .isNotEmpty();
 
         for (String name : mentioned) {
@@ -110,5 +112,51 @@ class DocumentedScriptsTest {
                 .as("стандарт приёмки обязан называть, кто читает отчёт ПЕРВЫМ: иначе непрочитанный "
                         + "отчёт снова уедет заказчику")
                 .contains("до того, как показать отчёт");
+    }
+
+    @Test
+    @DisplayName("проход «комментарии подряд» описан среди проходов и требует своего инструмента")
+    void commentPassIsWiredIntoProcedure() {
+        // Стережём две вещи: проход стоит СРЕДИ проходов (в завершающем разделе он
+        // вырождается в самоотчёт) и у него есть инструмент — иначе «сплошное чтение»
+        // снова станет пожеланием.
+        String playbook = read("docs/review-playbook.md");
+        assertThat(playbook)
+                .as("проход по комментариям пропал из playbook — вместе с ним пропадает "
+                        + "единственная проверка правил 2, 3 и 5, которые грепом не берутся")
+                .contains("scripts/comment-scan.sh")
+                .contains("СПЛОШНОЕ ЧТЕНИЕ");
+        assertThat(playbook.indexOf("scripts/comment-scan.sh"))
+                .as("проход уехал из раздела «2. Порядок» в завершающий — там он и вырождался "
+                        + "в самоотчёт «перечитал»")
+                .isLessThan(playbook.indexOf("## 3. Завершающий проход"));
+
+        assertThat(read("docs/java-code-standard.md"))
+                .as("правило «один факт — одно место» обязано называть дубль МЕЖДУ файлами: "
+                        + "именно он невидим в дифе и стоил всех находок последнего круга")
+                .contains("про РЕПОЗИТОРИЙ, а не про файл");
+    }
+
+    @Test
+    @DisplayName("правила, выведенные из ложно-зелёных гейтов, остались в критериях")
+    void falseGreenLessonsAreWrittenDown() {
+        // Оба правила про гейт, который доказан мутацией и всё равно врёт. Пропадут из доков —
+        // вернётся тот же класс дефекта, и мутация его снова не поймает.
+        assertThat(read("docs/java-code-standard.md"))
+                .as("правило «у отрицательной проверки должен быть якорь» пропало — без него "
+                        + "тест зеленеет от МОЛЧАНИЯ канала, а не от отсутствия дефекта")
+                .contains("Проверка ОТСУТСТВИЯ обязана стоять рядом с положительным якорем");
+        assertThat(read("docs/review-playbook.md"))
+                .as("вопрос «что гейт говорит на ПУСТОМ входе» пропал из 2.8 — мутация его "
+                        + "не заменяет: она проверяет ловлю дефекта, а не поведение без данных")
+                .contains("ПУСТОМ входе");
+    }
+
+    private static String read(String path) {
+        try {
+            return Files.readString(Path.of(path), StandardCharsets.UTF_8);
+        } catch (IOException unreadable) {
+            throw new AssertionError("нет файла процедуры: " + path, unreadable);
+        }
     }
 }

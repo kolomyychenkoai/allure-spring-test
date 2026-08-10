@@ -4,6 +4,7 @@ import io.qameta.allure.Epic;
 
 import io.github.kolomyychenkoai.allure.spring.mock.internal.MockitoInternals;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
+import io.github.kolomyychenkoai.allure.spring.support.LazyProxies;
 import io.github.kolomyychenkoai.allure.spring.support.mock.Pricing;
 import io.github.kolomyychenkoai.allure.spring.support.mock.PricingCaller;
 import io.github.kolomyychenkoai.allure.spring.support.mock.PricingService;
@@ -173,4 +174,23 @@ class AllureMockitoTest {
                 .doesNotThrowAnyException();
     }
 
+
+    @Test
+    @DisplayName("мок вернул ЛЕНИВЫЙ прокси — во вложении маркер, toString() не позван")
+    void lazyProxyReturnedByMockIsNotWokenUp() {
+        boolean[] touched = {false};
+        Object lazy = LazyProxies.uninitializedEntity(touched);
+
+        Pricing pricing = Mockito.mock(Pricing.class);
+        Mockito.when(pricing.entity()).thenReturn(lazy);
+
+        TestResult result = allure.run("mock-lazy", () -> new PricingCaller().callEntity(pricing));
+
+        assertThat(allure.attachment(result, "Mock Result").orElseThrow())
+                .as("мок отдал ленивое значение — в отчёт должен уйти маркер, а не toString")
+                .contains("<не загружено: ленивая связь>");
+        assertThat(touched[0])
+                .as("Mockito-модуль разбудил ленивый прокси ради отчёта — у потребителя это SELECT")
+                .isFalse();
+    }
 }

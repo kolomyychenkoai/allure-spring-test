@@ -140,6 +140,12 @@ public final class AllureAdviceSupport {
         if (value == null) {
             return "null";
         }
+        // ⚠️ Ленивое значение НЕ трогаем: String.valueOf ниже позвало бы toString() прокси, а это
+        // поход в БД (разбор — javadoc JpaLaziness). Гейт стоит в РЕКУРСИВНОЙ части намеренно —
+        // мутация: перенести в clean(Object) → красный lazyProxyInsideArrayIsNotWokenUp.
+        if (JpaLaziness.notLoaded(value)) {
+            return JpaLaziness.NOT_LOADED;
+        }
         Class<?> type = value.getClass();
         // Проверяем И synthetic, И маркер имени: synthetic бывает у прокси и записей компилятора,
         // а «$$» без synthetic — у классов пользователя с таким именем. Нужны оба признака.
@@ -161,9 +167,12 @@ public final class AllureAdviceSupport {
      * {@code toString()} не переопределён и в имя шага течёт хэш.
      * <p>
      * Сначала дешёвая проверка ФОРМЫ по префиксу, и только потом {@code hashCode()} — и он
-     * в своём try: у неинициализированного Hibernate-прокси он и бросает
-     * ({@code LazyInitializationException}), и будит прокси. Исправный {@code toString()}
-     * из-за сломанного {@code hashCode()} терять нельзя.
+     * в своём try: у неинициализированного прокси он и бросает, и будит связь. Исправный
+     * {@code toString()} из-за сломанного {@code hashCode()} терять нельзя.
+     * <p>
+     * Прокси Hibernate и EclipseLink сюда уже не доходят — их отсекает страж
+     * {@link JpaLaziness} выше по {@code clean}. Try остаётся ради прочих провайдеров
+     * (OpenJPA и т.п.), которых страж не знает, и ради чужого сломанного {@code hashCode}.
      */
     private static boolean isIdentityToString(String text, Object value, Class<?> type) {
         String name = type.getName();
@@ -248,7 +257,9 @@ public final class AllureAdviceSupport {
      */
     public static String render(Object value) {
         try {
-            return String.valueOf(value);
+            // Внутри try, а не перед ним: метод обещает «не бросает», и гейт — не исключение
+            // из обещания. Почему ленивое не трогаем — javadoc JpaLaziness.
+            return JpaLaziness.notLoaded(value) ? JpaLaziness.NOT_LOADED : String.valueOf(value);
         } catch (Throwable t) {
             return "<?>";
         }

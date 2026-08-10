@@ -53,7 +53,7 @@
 - Прогнать после апгрейда/правки:
   - `e2e/AssertJReportIT` — end-to-end полнота (строковые/коллекционные/comparable шаги есть);
   - `assertion/AllureAssertJTest#successfulAssertSingleStep` — дедуп (ровно один шаг);
-  - `internal/InstrumentationApiCanaryTest#assertjHierarchy` — иерархия/методы на местах.
+  - `canary/InstrumentationApiCanaryTest#assertjHierarchy` — иерархия/методы на местах.
 - Диагностика хрупкого байткода: `AgentBuilder.Listener` уже стоит постоянно
   (`internal/AllureInstrumentation` → `internal/InstrumentationDiagnostics`), сбои трансформации
   копятся и проверяются гейтом; для дедупа — временная трасса enter/exit в advice.

@@ -4,6 +4,7 @@ import io.qameta.allure.Epic;
 
 import io.github.kolomyychenkoai.allure.spring.data.internal.AllureRepositoryAspect;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
+import io.github.kolomyychenkoai.allure.spring.support.LazyProxies;
 import io.github.kolomyychenkoai.allure.spring.support.jpa.Widget;
 import io.qameta.allure.model.TestResult;
 import org.aspectj.lang.ProceedingJoinPoint;
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Proxy;
 import java.util.List;
 import java.util.Optional;
 
@@ -104,6 +106,76 @@ class AllureRepositoryAspectTest {
 
         // поток одноразовый: если бы мы прочитали его для отчёта, тест потребителя упал бы
         assertThat(((java.util.stream.Stream<?>) returned).count()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("ленивая КОЛЛЕКЦИЯ помечена маркером и НЕ обойдена (иначе N+1 у потребителя)")
+    void doesNotWalkLazyCollection() throws Throwable {
+        boolean[] walked = {false};
+        Object lazyCollection = LazyProxies.uninitializedCollection(walked);
+
+        ProceedingJoinPoint joinPoint = pjp("findAll", new Object[]{}, lazyCollection);
+        TestResult result = allure.run("db-lazy-collection", () -> proceed(joinPoint));
+
+        assertThat(allure.attachment(result, "DB Result").orElseThrow())
+                .contains("<не загружено: ленивая связь>");
+        assertThat(walked[0])
+                .as("ленивую коллекцию обошли ради отчёта — это лишние запросы у потребителя")
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("ВЕРХНЕУРОВНЕВЫЙ ленивый прокси помечен маркером, а не отрендерен через toString")
+    void doesNotRenderTopLevelLazyProxy() throws Throwable {
+        boolean[] touched = {false};
+        // Класс прокси НЕ несёт @Entity (аннотация не @Inherited), поэтому без стража
+        // значение уходило бы в safeValue → String.valueOf → toString() → SELECT.
+        Object lazyEntity = LazyProxies.uninitializedEntity(touched);
+
+        ProceedingJoinPoint joinPoint = pjp("getReferenceById", new Object[]{1L}, lazyEntity);
+        TestResult result = allure.run("db-lazy-top", () -> proceed(joinPoint));
+
+        assertThat(allure.attachment(result, "DB Result").orElseThrow())
+                .contains("<не загружено: ленивая связь>");
+        assertThat(touched[0]).as("верхнеуровневый прокси разбужен ради отчёта").isFalse();
+    }
+
+    @Test
+    @DisplayName("сбой РЕНДЕРА ответа не роняет вызов репозитория и не врёт статусом BROKEN")
+    void brokenResponseRenderDoesNotBreakTheCall() throws Throwable {
+        // Мутация: звать formatResponse напрямую вместо describeResponse → красный.
+        // Коллекция, чей size() бросает, — это провайдер, которого страж не знает
+        // (почему такой сбой опасен — javadoc describeResponse).
+        List<?> hostile = (List<?>) Proxy.newProxyInstance(getClass().getClassLoader(),
+                new Class<?>[]{List.class}, (proxy, method, args) -> {
+                    if ("size".equals(method.getName()) || "iterator".equals(method.getName())) {
+                        throw new IllegalStateException("failed to lazily initialize a collection");
+                    }
+                    return "toString".equals(method.getName()) ? "<коллекция>" : null;
+                });
+
+        ProceedingJoinPoint joinPoint = pjp("findAll", new Object[]{}, hostile);
+        Object[] returned = new Object[1];
+        TestResult result = allure.run("db-hostile-render", () -> {
+            try {
+                returned[0] = aspect.logRepositoryCall(joinPoint);
+            } catch (Throwable t) {
+                throw new IllegalStateException("сбой рендера улетел в приложение потребителя", t);
+            }
+        });
+
+        assertThat(returned[0]).as("вызов репозитория обязан вернуть своё значение").isSameAs(hostile);
+        assertThat(step(result, "DB FakeRepo.findAll").getStatus())
+                .as("вызов прошёл успешно — статус BROKEN был бы неправдой про приложение")
+                .isEqualTo(io.qameta.allure.model.Status.PASSED);
+        assertThat(allure.attachment(result, "DB Result").orElseThrow()).isEqualTo("<?>");
+    }
+
+    private io.qameta.allure.model.StepResult step(TestResult result, String name) {
+        return result.getSteps().stream()
+                .filter(s -> name.equals(s.getName()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("нет шага «" + name + "»"));
     }
 
     /** Вызов аспекта внутри allure.run: сигнатура logRepositoryCall бросает Throwable. */

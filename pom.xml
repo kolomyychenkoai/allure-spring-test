@@ -326,6 +326,17 @@
             <artifactId>h2</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- ТОЛЬКО ради интерфейсов ленивости EclipseLink (ValueHolderInterface,
+             IndirectContainer): страж internal/JpaLaziness распознаёт их по имени, и тесты
+             с канарейкой обязаны держать НАСТОЯЩИЕ типы, а не одноимённые двойники — на
+             Hibernate этот урок уже стоил раунда. Не полный eclipselink (8.8 МБ), а core
+             (5 МБ), и только test: в jar не едет, потребителю ничего не навязываем. -->
+        <dependency>
+            <groupId>org.eclipse.persistence</groupId>
+            <artifactId>org.eclipse.persistence.core</artifactId>
+            <version>4.0.4</version>
+            <scope>test</scope>
+        </dependency>
         <!-- для живого теста миграций: в Boot 4 автоконфигурация Liquibase уехала из
              spring-boot-autoconfigure в отдельный модуль (как и Kafka). Без него бина
              SpringLiquibase нет, миграции не идут — и наш снимок схемы нечему показывать.

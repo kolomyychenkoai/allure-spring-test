@@ -4,6 +4,7 @@ import io.qameta.allure.Epic;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
+import io.github.kolomyychenkoai.allure.spring.support.LazyProxies;
 import io.qameta.allure.model.Status;
 import io.qameta.allure.model.StepResult;
 import io.qameta.allure.model.TestResult;
@@ -161,6 +162,23 @@ class AllureAdviceSupportTest {
             }
         };
         assertThat(AllureAdviceSupport.safeValue(boom)).isEqualTo("<?>");
+    }
+
+    @Test
+    @DisplayName("ленивый прокси ВНУТРИ массива тоже помечен маркером, а не разбужен")
+    void lazyProxyInsideArrayIsNotWokenUp() {
+        // varargs ассертов приходят массивом (AssertJ satisfies/matches, assertArrayEquals),
+        // поэтому верхнеуровневой проверки мало: гейт стоит в РЕКУРСИВНОЙ части чистки.
+        boolean[] touched = {false};
+        Object lazy = LazyProxies.uninitializedEntity(touched);
+
+        assertThat(AllureAdviceSupport.safe(new Object[]{"до", lazy, "после"}))
+                .isEqualTo("[до, <не загружено: ленивая связь>, после]");
+        assertThat(AllureAdviceSupport.safeValue(new Object[]{lazy}))
+                .contains("<не загружено: ленивая связь>");
+        assertThat(touched[0])
+                .as("прокси внутри массива разбужен ради отчёта — у потребителя это SELECT")
+                .isFalse();
     }
 
     @Test

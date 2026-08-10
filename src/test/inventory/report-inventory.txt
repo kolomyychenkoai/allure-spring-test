@@ -38,6 +38,8 @@ AssertJReportIT | Проверка: значение <V> — satisfies <V>  ×1 
 AssertJReportIT | Проверка: значение <V> — startsWith <V>  ×1  # AllureAssertJInstrumentation
 AwaitilityReportIT | Конфиги приложения  ×1  # AllureConfigurationListener
 AwaitilityReportIT | Ожидание: результат готов — выполнено за <MS> мс  ×1  # AllureAwaitilityConditionListener
+DataJpaReportIT | DB OwnerRepository.save  ×1  # AllureRepositoryAspect (витрина ленивой связи)
+DataJpaReportIT | DB OwnerRepository.save ▸ SQL INSERT owner  ×1  # AllureDataSourceListener (вложен в «DB OwnerRepository.save»)
 DataJpaReportIT | DB WidgetRepository.deleteById  ×1  # AllureRepositoryAspect
 DataJpaReportIT | DB WidgetRepository.deleteById ▸ SQL DELETE widget  ×1  # AllureDataSourceListener (вложен в «DB WidgetRepository.deleteById»)
 DataJpaReportIT | DB WidgetRepository.deleteById ▸ SQL SELECT widget  ×1  # AllureDataSourceListener (вложен в «DB WidgetRepository.deleteById»)
