@@ -140,10 +140,9 @@ public final class AllureAdviceSupport {
         if (value == null) {
             return "null";
         }
-        // ⚠️ Ленивое значение НЕ трогаем: String.valueOf ниже позвало бы toString() прокси,
-        // а это поход в БД. Почему страж стоит здесь — javadoc JpaLaziness. Проверка в РЕКУРСИВНОЙ
-        // части, а не в clean(Object): так закрыт и элемент массива — varargs ассертов приходят
-        // массивом, и прокси внутри него будился бы в обход верхнеуровневой проверки.
+        // ⚠️ Ленивое значение НЕ трогаем: String.valueOf ниже позвало бы toString() прокси, а это
+        // поход в БД (разбор — javadoc JpaLaziness). Гейт стоит в РЕКУРСИВНОЙ части намеренно —
+        // мутация: перенести в clean(Object) → красный lazyProxyInsideArrayIsNotWokenUp.
         if (JpaLaziness.notLoaded(value)) {
             return JpaLaziness.NOT_LOADED;
         }

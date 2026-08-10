@@ -76,9 +76,8 @@ def main(root: pathlib.Path, expected: int, prefix: str) -> int:
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        # Без каталога — печатаем написанную выше строку использования, а не голый IndexError.
-        # Дефолт у next() обязателен: иначе переименованная строка докстринга даст StopIteration
-        # вместо подсказки, то есть подсказка сломается ровно там, где она и нужна.
+        # Дефолт у next() обязателен: без него переименованная строка докстринга даст
+        # StopIteration вместо подсказки — то есть сломает её ровно там, где она нужна.
         sys.exit(next((l for l in __doc__.splitlines() if l.startswith("Использование:")),
                       f"Использование: {pathlib.Path(sys.argv[0]).name} <каталог-сервиса>"))
     sys.exit(main(pathlib.Path(sys.argv[1]),

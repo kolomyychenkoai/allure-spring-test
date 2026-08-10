@@ -64,10 +64,8 @@ public final class JpaLaziness {
     /** Маркер вместо значения: обращаться к нему нельзя, а сказать о нём в отчёте нужно. */
     public static final String NOT_LOADED = "<не загружено: ленивая связь>";
 
-    // Имена ПУБЛИЧНЫЕ, потому что их читает канарейка (canary/InstrumentationApiCanaryTest).
-    // Копировать их туда строками нельзя: разъедутся, и канарейка станет стеречь чужой API,
-    // а не НАШУ связь с ним — переименуй здесь с опечаткой, и она останется зелёной.
-    // Тот же приём, что у MovedTypeNames.
+    // Публичные, потому что их читает канарейка (canary/InstrumentationApiCanaryTest): копия
+    // строкой у неё стерегла бы чужой API, а не НАШУ связь с ним. Тот же приём, что MovedTypeNames.
     public static final String HIBERNATE_PROXY_NAME = "org.hibernate.proxy.HibernateProxy";
     public static final String HIBERNATE_INITIALIZER_NAME = "org.hibernate.proxy.LazyInitializer";
     public static final String HIBERNATE_COLLECTION_NAME = "org.hibernate.collection.spi.PersistentCollection";

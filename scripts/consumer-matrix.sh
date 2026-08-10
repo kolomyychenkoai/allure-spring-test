@@ -72,9 +72,7 @@ for svc in "${services[@]}"; do
         python3 "$LIB/scripts/consumer-snapshot.py" "$svc" > "$HERE/$svc-$MODE-$phase.snapshot"
     done
 
-    # ⚠️ Порог ДО сравнения. Совпасть могут и два ПУСТЫХ снимка: mvn не собрался, профиля нет,
-    # python3 не отработал, каталог не тот — и «✅ идентично» означало бы «мы ничего не измерили».
-    # Тот же урок, что в consumer-attribution.py: пустой результат обязан быть красным, а не «✅».
+    # ⚠️ Порог ДО сравнения: два ПУСТЫХ снимка тоже совпадают (см. MIN_TESTS в шапке).
     empty=0
     tests=0
     for phase in without with; do

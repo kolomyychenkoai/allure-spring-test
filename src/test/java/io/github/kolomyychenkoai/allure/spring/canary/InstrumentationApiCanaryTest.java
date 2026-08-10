@@ -386,10 +386,7 @@ class InstrumentationApiCanaryTest {
         // Переименуют — он молча перестанет срабатывать, и вернётся дефект: лишний SELECT
         // на каждую ленивую связь. Компилятор этого не поймает, отчёт тоже — он выглядит
         // здоровым, просто в БД идут лишние запросы.
-        //
-        // Имена берём ИЗ САМОГО СТРАЖА (JpaLaziness), а не строками: копия разъехалась бы,
-        // и канарейка стерегла бы API Hibernate вместо НАШЕЙ связи с ним — опечатка в страже
-        // оставила бы её зелёной. Тот же приём, что с MovedTypeNames ниже.
+        // Имена — из самого стража (почему не строками — javadoc у его констант).
         require(classPresent(JpaLaziness.HIBERNATE_PROXY_NAME),
                 "HibernateProxy уехал → обнови имена в internal/JpaLaziness");
         require(hasMethod(JpaLaziness.HIBERNATE_PROXY_NAME, JpaLaziness.PROXY_INITIALIZER_METHOD, 0, null),
