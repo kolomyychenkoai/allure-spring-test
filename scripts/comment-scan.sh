@@ -12,6 +12,9 @@
 # ⚠️ Секции 4–7 — СБОР, а не вывод. «Грепы чистые» не отвечает ни на один из четырёх
 # вопросов внизу: отвечать на них можно только чтением секции 2, цитируя строки.
 #
+# Область: src, scripts и tools (оснастка ревью — тоже наш код, и её комментарии
+# читаются тем же проходом; без tools целое дерево исходников молча оставалось непрочитанным).
+#
 # Использование:  scripts/comment-scan.sh [база]      (по умолчанию origin/main)
 #
 set -u
@@ -46,8 +49,8 @@ show() {
 # ⚠️ НОВЫЕ файлы добавляем отдельно: git diff их не видит, пока не сделан `git add`, и проход
 # молча пропускал бы целый новый класс. Гейт на число такое не ловит — оба счётчика согласны.
 added_comments() {
-    { git diff "$RANGE" -- src scripts
-      git ls-files --others --exclude-standard -- src scripts \
+    { git diff "$RANGE" -- src scripts tools
+      git ls-files --others --exclude-standard -- src scripts tools \
           | while read -r f; do sed 's/^/+/' "$f"; done
     } | grep -E '^\+' | grep -vE '^\+\+\+' \
         | grep -E '^\+[[:space:]]*(//|/\*|\*|#)' | grep -vE '^\+#!'
@@ -59,8 +62,8 @@ echo "Скан комментариев: $RANGE (включая рабочее �
 # Цифра «сколько я насыпал» не видна ни автору, ни ревьюеру, пока её не посчитать.
 # Она же — единственный измеримый результат прохода: «было N, стало M».
 hdr "1. ОБЪЁМ: строк комментариев добавлено (по файлам)"
-for f in $(git diff --name-only "$RANGE" -- src scripts
-           git ls-files --others --exclude-standard -- src scripts); do
+for f in $(git diff --name-only "$RANGE" -- src scripts tools
+           git ls-files --others --exclude-standard -- src scripts tools); do
     [ -f "$f" ] || continue
     if git ls-files --error-unmatch "$f" >/dev/null 2>&1; then
         body=$(git diff "$RANGE" -- "$f" | grep -E '^\+' | grep -vE '^\+\+\+')
@@ -92,7 +95,7 @@ fi
 # «общей точке» в двух местах бывает законно, но именно так выглядит факт, размазанный
 # по репозиторию. Один факт — одно место, остальные ссылаются (§6, правило 3).
 hdr "3. КАНДИДАТЫ НА ДУБЛЬ: пары слов в комментариях 2+ файлов"
-git diff "$RANGE" -- src scripts | awk '
+git diff "$RANGE" -- src scripts tools | awk '
     /^\+\+\+ b\// { file = substr($2, 3); next }
     /^\+[ \t]*(\/\/|\/\*|\*|#)/ {
         line = $0
