@@ -128,6 +128,21 @@ class AttributionTest {
     }
 
     @Test
+    @DisplayName("нечитаемый файл не пропускается молча: проверять по неполным данным нельзя")
+    void unreadableFileIsRed() throws IOException {
+        // Молчаливый пропуск давал «✅ атрибуция цела» на битом сборе. Ловилось живьём: файл
+        // с вложенностью глубже лимита Jackson отбрасывался, и маркер из двух кейсов
+        // засчитывался как лежащий в одном — нарушение исчезало вместе с файлом.
+        testCase("ok", "Первый", "шаг attr-1");
+        ToolRun.write(results(), "broken-result.json", "{это не json");
+
+        ToolRun run = ToolRun.of("attribution", service.toString());
+
+        assertThat(run.code()).isEqualTo(1);
+        assertThat(run.out()).contains("не разобрано файлов: 1").contains("broken-result.json");
+    }
+
+    @Test
     @DisplayName("каталога результатов нет — провал проверки, код 1")
     void missingResultsIsFailedCheck() {
         ToolRun run = ToolRun.of("attribution", service.toString());

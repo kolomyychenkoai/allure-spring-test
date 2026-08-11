@@ -66,6 +66,7 @@ final class Attribution {
 
         Map<String, Set<String>> owners = new TreeMap<>();
         int cases = 0;
+        List<String> unreadable = new java.util.ArrayList<>();
 
         List<Path> files;
         try (Stream<Path> s = Files.list(results)) {
@@ -75,7 +76,12 @@ final class Attribution {
             JsonNode data;
             try {
                 data = MAPPER.readTree(Files.readString(path, StandardCharsets.UTF_8));
-            } catch (Exception unreadable) {
+            } catch (Exception broken) {
+                // Молча пропустить нельзя: непрочитанный кейс — это НЕпроверенный кейс, а вывод
+                // «атрибуция цела» читался бы как доказательство по всем. Ловилось так: файл
+                // с вложенностью глубже лимита Jackson отбрасывался, и маркер, лежавший в двух
+                // кейсах, считался лежащим в одном — нарушение исчезало вместе с файлом.
+                unreadable.add(path.getFileName() + ": " + broken.getMessage());
                 continue;
             }
             String name = data.path("fullName").asText("");
@@ -92,6 +98,12 @@ final class Attribution {
             }
         }
 
+        if (!unreadable.isEmpty()) {
+            System.out.printf("✗ не разобрано файлов: %d — проверять по неполным данным нельзя%n",
+                    unreadable.size());
+            unreadable.forEach(file -> System.out.println("       └ " + file));
+            return 1;
+        }
         if (owners.isEmpty()) {
             // Пустой результат читался бы как «нарушений нет» — а это может значить «сбор
             // сломался» либо «шаги вообще не пишутся». Оба случая обязаны быть красными.
