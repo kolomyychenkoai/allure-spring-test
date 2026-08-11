@@ -56,20 +56,29 @@ class TestingDocTest {
         long integration = classesMatching("IT.java");
         long unitTests = classesMatching("Test.java");
 
+        long checks = classesMatching("Check.java");
+        long tests = integration + unitTests + checks;
+
         Map<String, String> expected = new LinkedHashMap<>();
-        expected.put("всего тест-классов", "%d тест-классов".formatted(all));
-        expected.put("живые ReportIT", "%d `*IT`".formatted(integration));
-        expected.put("обычные Test", "%d `*Test`".formatted(unitTests));
-        expected.put("вспомогательные", "%d вспомогательных".formatted(all - integration - unitTests));
-        expected.put("демо-классы", "%d живых `*ReportIT`".formatted(classesIn("demo")));
+        expected.put("файлов в src/test", "%d файлов".formatted(all));
+        expected.put("тестовых классов", "%d тестовых классов".formatted(tests));
+        expected.put("вспомогательных", "%d вспомогательных".formatted(all - tests));
+        expected.put("суффикс IT", "%d с суффиксом `IT`".formatted(integration));
+        expected.put("суффикс Test", "%d с суффиксом `Test`".formatted(unitTests));
+        expected.put("суффикс Check", "%d класса с суффиксом `Check`".formatted(checks));
+        // Считаем именно *ReportIT, а не все файлы demo: раньше сюда подставлялось число
+        // файлов, и документ утверждал «19 живых *ReportIT», хотя их 18 плюс ReportSmokeIT.
+        // Гейт закреплял собственную ошибку.
+        expected.put("демо-классы", "%d классов `*ReportIT`".formatted(reportIT()));
         expected.put("строк эталона инвентаря",
-                "эталон на %d строки".formatted(Files.readAllLines(
+                "%d строки, в гите".formatted(Files.readAllLines(
                         Path.of("src/test/inventory/report-inventory.txt"), StandardCharsets.UTF_8).size()));
         // Сверяем по ячейке таблицы: там число стоит рядом со словом, которое не склоняется
         // от его величины. Изменится число так, что поедет падеж, — тест скажет поправить текст.
-        expected.put("канарейки матчеров",
-                "%d проверок про матчеры".formatted(testMethods("canary/InstrumentationApiCanaryTest")));
-        expected.put("канарейки Allure", "%d про сам Allure".formatted(testMethods("canary/AllureApiCanaryTest")));
+        expected.put("канарейки внешнего API",
+                "%d в `InstrumentationApiCanaryTest`".formatted(testMethods("canary/InstrumentationApiCanaryTest")));
+        expected.put("канарейки Allure",
+                "%d в `AllureApiCanaryTest`".formatted(testMethods("canary/AllureApiCanaryTest")));
 
         List<String> stale = expected.entrySet().stream()
                 .filter(e -> {
@@ -87,10 +96,32 @@ class TestingDocTest {
                 .isEmpty();
     }
 
+    /** Сколько в `demo` именно классов `*ReportIT` — остальные файлы там тоже есть. */
+    private static long reportIT() throws IOException {
+        try (Stream<Path> files = Files.list(TESTS.resolve("demo"))) {
+            return files.filter(p -> p.getFileName().toString().endsWith("ReportIT.java")).count();
+        }
+    }
+
     /** Сколько тест-методов в классе: по аннотациям, потому что нас интересует объём проверок. */
     private static long testMethods(String relative) throws IOException {
         String source = Files.readString(TESTS.resolve(relative + ".java"), StandardCharsets.UTF_8);
         return Pattern.compile("@Test\\b").matcher(source).results().count();
+    }
+
+    @Test
+    @DisplayName("документ называет ключи пересева снапшота — без них он бесполезен мейнтейнеру")
+    void inventoryFlagsAreDocumented() throws IOException {
+        // Мейнтейнер приходит в документ ровно тогда, когда сверка покраснела. Не найдя ключей,
+        // он пойдёт править снапшот руками — а он собирается прогоном.
+        String doc = doc();
+        List<String> missing = List.of("inventory.update", "inventory.strict", "inventory.counts",
+                        "inventory.remove", "inventory.shapes", "inventory.compare").stream()
+                .filter(flag -> !doc.contains(flag))
+                .toList();
+        assertThat(missing)
+                .as("в docs/testing.md не названы ключи, которыми чинят упавшую сверку")
+                .isEmpty();
     }
 
     @Test
