@@ -418,6 +418,9 @@
                                  Правило записано, а не подразумевается именем класса. -->
                             <excludes>
                                 <exclude>**/inventory/ReportInventoryCheck.java</exclude>
+                                <!-- Считает выполненные тесты по отчётам ПЕРВОГО исполнения,
+                                     поэтому обязан идти вторым: здесь отчёты ещё дописываются. -->
+                                <exclude>**/inventory/TestCountCheck.java</exclude>
                             </excludes>
                         </configuration>
                     </execution>
@@ -557,6 +560,7 @@
                                 <configuration>
                                     <includes>
                                         <include>**/inventory/ReportInventoryCheck.java</include>
+                                        <include>**/inventory/TestCountCheck.java</include>
                                     </includes>
                                     <excludes combine.self="override"/>
                                     <runOrder>filesystem</runOrder>
