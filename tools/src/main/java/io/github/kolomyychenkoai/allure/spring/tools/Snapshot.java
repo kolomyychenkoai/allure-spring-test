@@ -32,6 +32,13 @@ final class Snapshot {
             return 2;
         }
         Path root = Path.of(args[0]);
+        if (!Files.isDirectory(root)) {
+            // Без этой проверки опечатка в пути давала снимок «тестов нет, дампов нет» с кодом 0,
+            // а два таких снимка совпадают между собой — A/B отрапортовал бы «библиотека ничего
+            // не изменила», не прочитав ни одного теста.
+            System.err.println("нет каталога сервиса: " + root);
+            return 2;
+        }
         List<String> lines = new ArrayList<>();
 
         collectTests(root.resolve("target").resolve("surefire-reports"), lines);

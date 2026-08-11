@@ -7,6 +7,20 @@ package io.github.kolomyychenkoai.allure.spring.tools;
  * ради метки времени — три формы одного и того же, расходившиеся при первой правке. Теперь
  * форма одна, а shell остался только там, где он и уместен: гонять прогоны и считать медианы.
  *
+ * <h2>Коды возврата</h2>
+ * Договор один на все подкоманды, потому что скрипты различают их именно по коду:
+ * <ul>
+ *   <li><b>0</b> — отработало;</li>
+ *   <li><b>1</b> — <b>проверка провалена</b>. Только у {@code attribution}: шаг уехал в чужой
+ *       кейс, маркеров нет вовсе, число маркеров не сошлось с ожидаемым. Сюда же попадает
+ *       отсутствие каталога результатов: для проверки это не ошибка вызова, а красный
+ *       результат — нечего проверять значит провал, а не «нарушений нет»;</li>
+ *   <li><b>2</b> — позвали неправильно либо данных нет: неизвестная подкоманда или флаг,
+ *       нет каталога, в каталоге нет ожидаемых файлов, нечисловой аргумент.</li>
+ * </ul>
+ * Зелёный код на пустом входе запрещён: «0 тестов, всё хорошо» читается как успех и прячет
+ * сломавшийся сбор.
+ *
  * @see <a href="../../../../../../../../docs/adr/0003-review-tooling-on-java.md">ADR 0003</a>
  */
 public final class ReviewTools {
@@ -23,14 +37,22 @@ public final class ReviewTools {
         System.setErr(new java.io.PrintStream(new java.io.FileOutputStream(java.io.FileDescriptor.err),
                 true, java.nio.charset.StandardCharsets.UTF_8));
 
+        System.exit(dispatch(args));
+    }
+
+    /**
+     * Разбор подкоманды отдельно от {@code main}: {@code main} только настраивает вывод
+     * и выходит с кодом, а сюда можно позвать из теста, не роняя JVM через {@code System.exit}.
+     */
+    static int dispatch(String[] args) throws Exception {
         if (args.length == 0) {
             System.err.println(usage());
-            System.exit(2);
+            return 2;
         }
         String[] rest = new String[args.length - 1];
         System.arraycopy(args, 1, rest, 0, rest.length);
 
-        int code = switch (args[0]) {
+        return switch (args[0]) {
             case "report-tree" -> ReportTree.run(rest);
             case "snapshot" -> Snapshot.run(rest);
             case "attribution" -> Attribution.run(rest);
@@ -46,7 +68,6 @@ public final class ReviewTools {
                 yield 2;
             }
         };
-        System.exit(code);
     }
 
     private static String usage() {

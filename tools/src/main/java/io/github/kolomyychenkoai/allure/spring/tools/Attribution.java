@@ -38,7 +38,17 @@ final class Attribution {
             return 2;
         }
         Path root = Path.of(args[0]);
-        int expected = args.length > 1 ? Integer.parseInt(args[1]) : 0;
+        int expected = 0;
+        if (args.length > 1) {
+            try {
+                expected = Integer.parseInt(args[1]);
+            } catch (NumberFormatException notANumber) {
+                // Трасса тут была бы худшим из ответов: гейт зовут из скрипта, и по коду 1
+                // его не отличить от настоящего провала проверки.
+                System.err.println("ожидаемое число маркеров должно быть числом, а не «" + args[1] + "»");
+                return 2;
+            }
+        }
         String prefix = args.length > 2 ? args[2] : "attr-";
 
         Path results = root.resolve("target").resolve("allure-results");

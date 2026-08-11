@@ -77,7 +77,19 @@ final class ReportTree {
         }
 
         Totals totals = new Totals();
-        List<Case> tests = read(resultsDir);
+        List<Case> tests;
+        try {
+            tests = read(resultsDir);
+        } catch (IOException unreadable) {
+            System.err.println(unreadable.getMessage());
+            return 2;
+        }
+        if (tests.isEmpty()) {
+            // «ОТЧЁТ: 0 тестов» с кодом 0 читалось бы как «всё в порядке, отчёт пуст».
+            // Пустой вход обязан быть красным: чаще всего это забытый прогон, а не пустой отчёт.
+            System.err.println("в " + resultsDir + " нет файлов *-result.json — сначала полный прогон");
+            return 2;
+        }
         StringBuilder out = new StringBuilder();
 
         out.append("=".repeat(100)).append('\n');
@@ -147,7 +159,13 @@ final class ReportTree {
         }
         List<Case> tests = new ArrayList<>();
         for (Path p : files) {
-            JsonNode node = MAPPER.readTree(Files.readString(p, StandardCharsets.UTF_8));
+            JsonNode node;
+            try {
+                node = MAPPER.readTree(Files.readString(p, StandardCharsets.UTF_8));
+            } catch (IOException broken) {
+                // Имя файла важнее трассы: битый результат чинят, открыв именно его.
+                throw new IOException("не разобрать " + p.getFileName() + ": " + broken.getMessage(), broken);
+            }
             Map<String, String> labels = new LinkedHashMap<>();
             for (JsonNode label : node.path("labels")) {
                 labels.put(label.path("name").asText(), label.path("value").asText());

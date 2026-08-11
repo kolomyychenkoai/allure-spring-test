@@ -31,6 +31,10 @@ set -u
 LIB=$(cd "$(dirname "$0")/.." && pwd)
 . "$LIB/scripts/_tools.sh"
 require_tools   # до первого прогона: в $( ) ошибка не прервала бы скрипт
+. "$LIB/scripts/require-jdk.sh"
+# Maven идёт по JAVA_HOME, а не по `java -version`. Без этой проверки сборка библиотеки
+# падает «release version 25 not supported» под -q, то есть вообще без текста ошибки.
+require_jdk
 HERE=${CONSUMERS_DIR:-~/projects/allure-consumers}
 HERE=${HERE/#\~/$HOME}
 [[ -d $HERE ]] || { echo "✗ нет каталога сервисов: $HERE — рецепт в docs/consumer-affects.md"; exit 1; }
@@ -56,6 +60,7 @@ fi
 echo "▸ ставим библиотеку в ~/.m2 (она не опубликована — потребитель берёт SNAPSHOT локально)"
 if ! (cd "$LIB" && mvn -q clean install -DskipTests); then
     echo "✗ не собралась сама библиотека — сравнивать нечего"
+    echo "  текст ошибки скрыт -q; повтори руками: (cd \"$LIB\" && mvn clean install -DskipTests)"
     exit 1
 fi
 
