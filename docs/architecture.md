@@ -14,7 +14,7 @@
 
 ---
 
-## 1. Что это и на чём стоит
+## 1. Что это такое и из чего собрано
 
 Библиотека делает Allure-отчёт для Spring-тестов **без единой строки в клиентских тестах**:
 достаточно положить jar на test-classpath, и он сам цепляется к MockMvc, RestAssured,
@@ -49,7 +49,7 @@ mvn clean test        # число тестов
 
 ---
 
-## 2. Маршрут чтения
+## 2. В каком порядке читать код
 
 Шесть шагов, восемь файлов, читать по порядку. В последней колонке стоит реальный объём,
 чтобы каждый сам прикинул время: скажем, у `AllureAdviceSupport` из 273 строк 124 занимают
@@ -70,7 +70,7 @@ mvn clean test        # число тестов
 
 ---
 
-## 3. Поток управления
+## 3. Как тест попадает в отчёт
 
 ```mermaid
 flowchart LR
@@ -158,7 +158,7 @@ cat src/main/resources/META-INF/spring.factories src/main/resources/META-INF/spr
 Колонка «нет технологии» проверяется тестом `unit/ListenerDegradationTest`: каждый листенер
 из `spring.factories` покрыт сценарием «библиотеки нет».
 
-### Цена нового модуля
+### Чего стоит новый модуль
 
 Чтобы добавить в эту карту строку, надо пройти семь шагов. Все семь видны на самом маленьком
 модуле, `awaitility/AllureAwaitilityListener`:
@@ -178,7 +178,7 @@ cat src/main/resources/META-INF/spring.factories src/main/resources/META-INF/spr
 
 ---
 
-## 6. Общая база `internal/` (12 классов + `package-info`)
+## 6. Общий код в `internal/` (12 классов + `package-info`)
 
 Публичного API у неё нет, это внутренний код, и `package-info` это фиксирует.
 
@@ -195,7 +195,7 @@ cat src/main/resources/META-INF/spring.factories src/main/resources/META-INF/spr
 
 ---
 
-## 7. Сквозные инварианты кода
+## 7. Общие инварианты кода
 
 Эти шесть правил повторяются во всех модулях.
 
@@ -229,7 +229,7 @@ cat src/main/resources/META-INF/spring.factories src/main/resources/META-INF/spr
 
 ---
 
-## 8. Жизненный цикл и разделяемое состояние
+## 8. Жизненный цикл и общее состояние
 
 Здесь перечислены типовые виды состояния, которое живёт дольше одного теста. Список
 неполный: полный собирает команда под таблицей.
@@ -244,7 +244,7 @@ cat src/main/resources/META-INF/spring.factories src/main/resources/META-INF/spr
 | `ClassValue` кэш распознавания | `JpaLaziness` | вместе с классом | не удерживает чужие загрузчики |
 
 ```bash
-# полный список разделяемого состояния (вывод не усекать)
+# полный список общего состояния (вывод не усекать)
 grep -rn "ThreadLocal<\|static final \(Map\|Set\|List\|Atomic\|ClassValue\)" src/main/java
 ```
 
@@ -254,7 +254,7 @@ grep -rn "ThreadLocal<\|static final \(Map\|Set\|List\|Atomic\|ClassValue\)" src
 
 ---
 
-## 9. Где сосредоточен риск
+## 9. Где самый большой риск
 
 Привязки к тому, что автор чужой библиотеки менять не обещал:
 
@@ -299,7 +299,7 @@ grep -rn "ThreadLocal<\|static final \(Map\|Set\|List\|Atomic\|ClassValue\)" src
 
 ---
 
-## 11. Долги и границы
+## 11. Чего не хватает
 
 - **Нижняя граница Spring Boot сборкой не проверяется**: профиль `compat-boot-min` не
   собирается после перехода на Boot 4.1 (`docs/compat-matrix.md`).
