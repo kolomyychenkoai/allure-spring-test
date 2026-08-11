@@ -4,8 +4,10 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 
+import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -49,7 +51,8 @@ final class Snapshot {
      * у класса, где все тесты в {@code @Nested}, там стоит 0 — на этом уже терялись тесты
      * при апгрейде.
      */
-    private static void collectTests(Path reports, List<String> lines) throws IOException {
+    private static void collectTests(Path reports, List<String> lines)
+            throws IOException, ParserConfigurationException {
         if (!Files.isDirectory(reports)) {
             return;
         }
@@ -60,7 +63,7 @@ final class Snapshot {
                 return name.startsWith("TEST-") && name.endsWith(".xml");
             }).sorted().toList();
         }
-        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        DocumentBuilderFactory factory = safeFactory();
         for (Path xml : files) {
             Document document;
             try {
@@ -77,6 +80,25 @@ final class Snapshot {
                         attribute(testCase, "classname"), attribute(testCase, "name"), outcome(testCase)));
             }
         }
+    }
+
+    /**
+     * Разбор XML без внешних сущностей: DOCTYPE запрещён, XInclude и подстановка сущностей
+     * выключены.
+     * <p>
+     * По умолчанию парсер сходил бы по ссылке из документа — прочитал бы локальный файл
+     * или дёрнул сеть. Отчёты surefire мы читаем из каталога ЧУЖОГО сервиса, то есть входные
+     * данные приходят снаружи, и доверять им нельзя.
+     */
+    private static DocumentBuilderFactory safeFactory() throws ParserConfigurationException {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+        factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        factory.setXIncludeAware(false);
+        factory.setExpandEntityReferences(false);
+        return factory;
     }
 
     private static String attribute(Element element, String name) {

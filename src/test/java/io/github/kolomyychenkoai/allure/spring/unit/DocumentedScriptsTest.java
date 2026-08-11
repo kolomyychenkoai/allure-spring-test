@@ -44,7 +44,7 @@ class DocumentedScriptsTest {
     private static Set<String> mentionedScripts() throws IOException {
         // Подчёркивание в имени обязательно: `_tools.sh` — общий кусок, который подключают
         // через source, и без него регулярка считала бы его неупомянутым, сколько его
-        // ни описывай (поймано при переезде оснастки на Java).
+        // ни описывай (поймано при переезде инструментов на Java).
         Pattern reference = Pattern.compile("scripts/([a-z0-9_-]+\\.(?:sh|py))");
         Set<String> found = new TreeSet<>();
         for (Path doc : documents()) {
@@ -100,12 +100,12 @@ class DocumentedScriptsTest {
     }
 
     @Test
-    @DisplayName("оснастку надо собрать, и об этом сказано там, где её берут в руки")
+    @DisplayName("инструменты надо собрать, и об этом сказано там, где их берут в руки")
     void toolsProjectIsDocumented() throws IOException {
         // Разбор данных живёт в отдельном maven-проекте `tools/`, и это единственное
-        // предусловие оснастки. Раньше предусловием был python3, и его не описывала ни одна
+        // предусловие инструментов. Раньше предусловием был python3, и его не описывала ни одна
         // дока — узнавали о нём падением. Гейт держит, чтобы история не повторилась.
-        assertThat(Path.of("tools/pom.xml")).as("проект оснастки пропал").exists();
+        assertThat(Path.of("tools/pom.xml")).as("проект инструментов пропал").exists();
 
         String howToBuild = "cd tools && mvn -q package";
         boolean documented = documents().stream().filter(Files::exists).anyMatch(doc -> {
@@ -116,7 +116,7 @@ class DocumentedScriptsTest {
             }
         });
         assertThat(documented)
-                .as("нигде не сказано, как собрать оснастку («%s») — предусловие снова "
+                .as("нигде не сказано, как собрать инструменты («%s») — предусловие снова "
                         + "придётся узнавать падением", howToBuild)
                 .isTrue();
 

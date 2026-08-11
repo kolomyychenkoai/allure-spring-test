@@ -45,14 +45,39 @@ final class ReportTree {
     private record Line(String text, String tail, String stepName) {
     }
 
-    private static int steps;
-    private static int attachments;
+    /** Счётчики обхода: живут ровно один запуск, поэтому передаются, а не лежат в статике. */
+    private static final class Totals {
+        private int steps;
+        private int attachments;
+    }
 
     static int run(String[] args) throws IOException {
-        String results = args.length > 0 ? args[0] : "target/allure-results";
-        boolean showAll = args.length > 1 && "--all".equals(args[1]);
+        // Аргументы разбираем строго: неизвестный флаг раньше проглатывался молча, и
+        // инструмент печатал витрину вместо запрошенного. Тихо делать не то, о чём попросили,
+        // хуже, чем отказаться.
+        String results = null;
+        boolean showAll = false;
+        for (String arg : args) {
+            if ("--all".equals(arg)) {
+                showAll = true;
+            } else if (arg.startsWith("-")) {
+                System.err.println("неизвестный аргумент: " + arg + " (ожидается --all)");
+                return 2;
+            } else if (results == null) {
+                results = arg;
+            } else {
+                System.err.println("каталог результатов указан дважды: " + results + " и " + arg);
+                return 2;
+            }
+        }
+        Path resultsDir = Path.of(results == null ? "target/allure-results" : results);
+        if (!Files.isDirectory(resultsDir)) {
+            System.err.println("нет каталога результатов: " + resultsDir);
+            return 2;
+        }
 
-        List<Case> tests = read(Path.of(results));
+        Totals totals = new Totals();
+        List<Case> tests = read(resultsDir);
         StringBuilder out = new StringBuilder();
 
         out.append("=".repeat(100)).append('\n');
@@ -68,8 +93,9 @@ final class ReportTree {
                         INTERNAL.equals(e.getKey()) ? "" : "   ← витрина, её и читает тестировщик")).append('\n'));
 
         List<String> noisy = new ArrayList<>();
+        boolean withInternal = showAll;
         List<Case> shown = tests.stream()
-                .filter(c -> showAll || !INTERNAL.equals(c.epic()))
+                .filter(c -> withInternal || !INTERNAL.equals(c.epic()))
                 .sorted(Comparator.comparing(Case::testClass).thenComparing(Case::name))
                 .toList();
 
@@ -84,7 +110,7 @@ final class ReportTree {
                     .append('\n');
 
             List<Line> lines = new ArrayList<>();
-            walk(c.node(), 2, lines);
+            walk(c.node(), 2, lines, totals);
             for (Line line : lines) {
                 out.append(line.text()).append(line.tail()).append('\n');
             }
@@ -92,7 +118,7 @@ final class ReportTree {
         }
 
         out.append('\n').append("=".repeat(100)).append('\n');
-        out.append("ИТОГО: шагов %d, вложений %d".formatted(steps, attachments)).append('\n');
+        out.append("ИТОГО: шагов %d, вложений %d".formatted(totals.steps, totals.attachments)).append('\n');
         if (noisy.isEmpty()) {
             out.append("\nСерий одинаковых шагов от %d подряд нет.".formatted(RUN)).append('\n');
         } else {
@@ -134,17 +160,17 @@ final class ReportTree {
         return tests;
     }
 
-    private static void walk(JsonNode node, int depth, List<Line> out) {
+    private static void walk(JsonNode node, int depth, List<Line> out, Totals totals) {
         for (JsonNode step : node.path("steps")) {
-            steps++;
+            totals.steps++;
             List<String> files = names(step.path("attachments"));
-            attachments += files.size();
+            totals.attachments += files.size();
             String status = "passed".equals(step.path("status").asText(""))
                     ? ""
                     : "  [%s]".formatted(statusOf(step).toUpperCase());
             String name = step.path("name").asText("");
             out.add(new Line("    ".repeat(depth) + "• " + name, status + braces(files), name));
-            walk(step, depth + 1, out);
+            walk(step, depth + 1, out, totals);
         }
     }
 
@@ -182,7 +208,16 @@ final class ReportTree {
         }
     }
 
+    /**
+     * Обрезка по КОДОВЫМ ТОЧКАМ, а не по символам UTF-16.
+     * <p>
+     * `substring` разрезал бы суррогатную пару пополам, и в вывод попала бы её половина —
+     * ровно то, на чём падал прежний питон. Плюс питон резал по кодовым точкам, а расхождение
+     * в длине сломало бы побайтовую сверку старого и нового вывода.
+     */
     private static String cut(String value, int limit) {
-        return value.length() <= limit ? value : value.substring(0, limit);
+        return value.codePointCount(0, value.length()) <= limit
+                ? value
+                : value.substring(0, value.offsetByCodePoints(0, limit));
     }
 }

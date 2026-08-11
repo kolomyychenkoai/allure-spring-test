@@ -1,7 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.tools;
 
 /**
- * Единственный вход в оснастку ревью: подкоманда выбирает инструмент.
+ * Единственный вход в инструменты ревью: подкоманда выбирает инструмент.
  * <p>
  * Раньше это были два питон-скрипта, heredoc внутри shell-скрипта и инлайн {@code python3 -c}
  * ради метки времени — три формы одного и того же, расходившиеся при первой правке. Теперь
@@ -15,7 +15,7 @@ public final class ReviewTools {
     }
 
     public static void main(String[] args) throws Exception {
-        // Вывод жёстко в UTF-8, а не в кодировку локали. Скрипты оснастки намеренно работают
+        // Вывод жёстко в UTF-8, а не в кодировку локали. Скрипты ревью намеренно работают
         // под LC_ALL=C (иначе BSD sed и grep спотыкаются о кириллицу), и в этой локали JVM
         // печатала бы весь русский текст вопросительными знаками. Поймано сверкой с эталоном.
         System.setOut(new java.io.PrintStream(new java.io.FileOutputStream(java.io.FileDescriptor.out),
@@ -51,7 +51,7 @@ public final class ReviewTools {
 
     private static String usage() {
         return """
-                Оснастка ревью. Использование: java -jar review-tools.jar <подкоманда> [аргументы]
+                Инструменты ревью. Использование: java -jar review-tools.jar <подкоманда> [аргументы]
 
                   report-tree <каталог-результатов> [--all]     дерево шагов отчёта
                   snapshot    <каталог-сервиса>                 исходы тестов + поведение
