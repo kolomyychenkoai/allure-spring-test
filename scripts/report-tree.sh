@@ -44,79 +44,13 @@ if [ ! -d "$RESULTS" ] || [ -z "$(ls -A "$RESULTS" 2>/dev/null)" ]; then
     exit 2
 fi
 
-command -v python3 >/dev/null 2>&1 || { echo "нужен python3" >&2; exit 2; }
+. "$(dirname "$0")/_tools.sh"
 
-SHOW_ALL="$SHOW_ALL" python3 - "$RESULTS" <<'PY'
-import json, os, sys, glob, collections, itertools
-
-results, show_all = sys.argv[1], os.environ.get("SHOW_ALL") == "1"
-INTERNAL = "Внутренние проверки библиотеки"
-RUN = 5  # серия одинаковых шагов подряд, с которой начинается шум
-
-tests = []
-for path in sorted(glob.glob(os.path.join(results, "*-result.json"))):
-    with open(path, encoding="utf-8") as fh:
-        d = json.load(fh)
-    labels = {l["name"]: l["value"] for l in d.get("labels", [])}
-    tests.append((labels.get("epic") or "—", labels.get("testClass", "?").split(".")[-1], d))
-
-steps = attachments = 0
-def walk(node, depth, out):
-    global steps, attachments
-    for s in node.get("steps", []):
-        steps += 1
-        names = [a.get("name", "?") for a in s.get("attachments", [])]
-        attachments += len(names)
-        status = "" if s.get("status") == "passed" else "  [%s]" % (s.get("status") or "?").upper()
-        tail = "   {%s}" % ", ".join(names) if names else ""
-        out.append(("    " * depth + "• " + s.get("name", ""), status + tail, s.get("name", "")))
-        walk(s, depth + 1, out)
-
-by_epic = collections.Counter(e for e, _, _ in tests)
-print("=" * 100)
-print("ОТЧЁТ: %d тестов" % len(tests))
-for epic, n in by_epic.most_common():
-    print("   %5d  %s%s" % (n, epic, "   ← витрина, её и читает тестировщик" if epic != INTERNAL else ""))
-
-noisy = []
-shown = [t for t in tests if show_all or t[0] != INTERNAL]
-for cls, group in itertools.groupby(sorted(shown, key=lambda t: (t[1], t[2].get("name", ""))), key=lambda t: t[1]):
-    print("\n" + "=" * 100)
-    print(cls)
-    for _, _, d in group:
-        files = [a.get("name", "?") for a in d.get("attachments", [])]
-        print("  ТЕСТ: %s%s" % (d.get("name", ""), "   {%s}" % ", ".join(files) if files else ""))
-        out = []
-        walk(d, 2, out)
-        for line, tail, _ in out:
-            print(line + tail)
-        # серии одинаковых имён подряд — то, что топит смысловые шаги в служебных
-        prev, run = None, 0
-        for _, _, name in out:
-            if name == prev:
-                run += 1
-                if run + 1 == RUN:
-                    noisy.append((cls, d.get("name", "")[:50], name))
-            else:
-                prev, run = name, 0
-
-print("\n" + "=" * 100)
-print("ИТОГО: шагов %d, вложений %d" % (steps, attachments))
-if noisy:
-    print("\nСЮДА СМОТРЕТЬ — серии одинаковых шагов от %d подряд (смысловой шаг тонет):" % RUN)
-    for cls, test, name in noisy:
-        print("   %s :: %s → «%s»" % (cls, test, name[:60]))
-    print("   Решает человек: это может быть служебная кухня инструмента (тогда вопрос —")
-    print("   увидит ли такое потребитель) либо реальный дефект имён.")
-else:
-    print("\nСерий одинаковых шагов от %d подряд нет." % RUN)
-print("""
-Что проверять глазами (docs/acceptance-report-standard.md):
-  · понятно ли ПО ИМЕНАМ, что проверялось, — не открывая код теста;
-  · верна ли вложенность (SQL внутри вызова репозитория, тела внутри HTTP-шага);
-  · нет ли технического мусора: Класс@хэш, [B@…, сырой toString;
-  · нет ли шагов, чьё имя не отвечает «что именно проверили».""")
-PY
+if [ "$SHOW_ALL" = "1" ]; then
+    tools report-tree "$RESULTS" --all
+else
+    tools report-tree "$RESULTS"
+fi
 
 if [ "$OPEN_HTML" = "1" ]; then
     echo

@@ -506,8 +506,12 @@ inline mock maker из Mockito 5.x), вручную не задирай.
   `scripts/report-tree.sh` — дерево шагов витрины: прочитать отчёт глазами, как его читает
   ручной тестировщик (проход 2.6 playbook'а — **до** того, как показывать отчёт кому-либо);
   `scripts/compat-matrix.sh` — границы версий; `scripts/repeat.sh` — зависимость от порядка тестов;
-  `scripts/consumer-matrix.sh` — A/B на сервисах-потребителях (+ `consumer-snapshot.py`,
-  `consumer-attribution.py`, `consumer-overhead.sh`; рецепт — `docs/consumer-affects.md`).
+  `scripts/consumer-matrix.sh` — A/B на сервисах-потребителях (+ `consumer-overhead.sh`;
+  рецепт — `docs/consumer-affects.md`). Разбор данных делает `tools/` — отдельный
+  maven-проект: `cd tools && mvn -q package`, дальше скрипты находят jar сами через
+  `scripts/_tools.sh`. Собирается независимо от библиотеки, чтобы диагностика работала
+  и на сломанной сборке. У самих инструментов 31 тест, они идут при каждой их сборке
+  (`docs/adr/0003-review-tooling-on-java.md`).
 - `docs/adr/0001-assertj-instrumentation.md` — решение по самому хрупкому узлу (AssertJ).
 - `docs/adr/0002-allure-commons-compile-scope.md` — почему единственная compile-зависимость
   остаётся compile, хотя это навязывает версию потребителю.

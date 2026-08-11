@@ -19,14 +19,14 @@
 | **поведение приложения** | тела ответов, результаты вызовов и **весь выполненный SQL во всех трёх сервисах** — своими рекордерами, не datasource-proxy (тот приезжает с библиотекой и есть только в одной стороне) | ловит «тесты зелёные, а приложение стало вести себя иначе» |
 
 Запуск: `scripts/consumer-matrix.sh`; снимок одного прогона строит
-`scripts/consumer-snapshot.py` (его зовёт харнесс, но он и самостоятелен — удобно,
+подкоманда `snapshot` (её зовёт харнесс, но она и самостоятельна — удобно,
 когда надо посмотреть один прогон, не запуская сравнение).
 
 ⚠️ **Совпадение снимков засчитывается только при непустом прогоне.** Два пустых снимка тоже
 идентичны, поэтому харнесс сперва требует от КАЖДОЙ стороны хотя бы `MIN_TESTS` тестов
 (по умолчанию 1) и непустой канал поведения, и лишь потом сравнивает. Без этого порога
 несобравшийся mvn или неотработавший рекордер давали бы «✅ библиотека ничего не изменила» —
-ту же ложь, от которой в `consumer-attribution.py` стоит гейт на число маркеров.
+ту же ложь, от которой в подкоманде `attribution` стоит гейт на число маркеров.
 
 Рекордеры у каждого сервиса свои, под его стек: Hibernate `StatementInspector` в `svc-a`,
 `io.r2dbc.proxy` в `svc-b`, декоратор `DataSource` в `svc-c`. Дефект №1 нашёлся именно
@@ -83,7 +83,7 @@ TestRestTemplate; RestAssured + MockMvc), а в `svc-a` одна и та же в
 ### Атрибуция шагов: обещание README проверено, а не принято на слово
 
 A/B видит только «тесты не упали». Само обещание — что шаг попадает в СВОЙ тест-кейс —
-проверяет отдельный чекер `scripts/consumer-attribution.py`: каждый тест витрины метит свои
+проверяет отдельная подкоманда `attribution`: каждый тест витрины метит свои
 шаги строкой `attr-<n>`, чекер строит «маркер → множество кейсов» и требует 1:1.
 
 | режим | результат |
@@ -247,6 +247,9 @@ EclipseLink, а не одноимённых двойниках), `unit/AllureAdv
 # 1. библиотека в локальный ~/.m2 (она не опубликована)
 cd ~/projects/allure-spring-test && mvn clean install -DskipTests
 
+# 1a. инструменты ревью: их собирают отдельно, шаги 4–6 без них не работают
+cd ~/projects/allure-spring-test/tools && mvn -q package
+
 # 2. каталог потребителей (можно переопределить: CONSUMERS_DIR=...)
 mkdir -p ~/projects/allure-consumers && echo 25 > ~/projects/allure-consumers/.java-version
 
@@ -262,7 +265,8 @@ MODE=forked     ~/projects/allure-spring-test/scripts/consumer-matrix.sh    # fo
 MODE=concurrent ~/projects/allure-spring-test/scripts/consumer-matrix.sh svc-a-servlet
 
 # 5. атрибуция шагов — что шаг лёг в СВОЙ кейс (ожидаем ровно 7 маркеров)
-python3 ~/projects/allure-spring-test/scripts/consumer-attribution.py ~/projects/allure-consumers/svc-a-servlet 7
+java -jar ~/projects/allure-spring-test/tools/target/review-tools.jar \
+    attribution ~/projects/allure-consumers/svc-a-servlet 7
 
 # 6. накладные расходы (5 прогонов на сторону, медиана + разброс, миллисекунды)
 ~/projects/allure-spring-test/scripts/consumer-overhead.sh 5
@@ -281,7 +285,7 @@ python3 ~/projects/allure-spring-test/scripts/consumer-attribution.py ~/projects
   нужен `MERGE`, а не `INSERT`;
 - **порядок ключей JSON**: `Map.of` его не хранит и меняет от запуска к запуску. Снимок
   поведения расходился бы сам по себе — в контроллерах нужен `LinkedHashMap`. Эту ошибку
-  A/B нашёл в собственной оснастке на втором прогоне;
+  A/B нашёл в собственных инструментах на втором прогоне;
 - **`@EmbeddedKafka` требует `auto-offset-reset=earliest`** и явных (де)сериализаторов.
   Без первого консьюмер стартует с `latest` и не видит уже отправленное сообщение — тест
   ждёт до таймаута. ⚠️ Симптом обманчив: в логе при этом шумит остановка брокера

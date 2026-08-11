@@ -29,6 +29,12 @@
 
 set -u
 LIB=$(cd "$(dirname "$0")/.." && pwd)
+. "$LIB/scripts/_tools.sh"
+require_tools   # до первого прогона: в $( ) ошибка не прервала бы скрипт
+. "$LIB/scripts/require-jdk.sh"
+# Maven идёт по JAVA_HOME, а не по `java -version`. Без этой проверки сборка библиотеки
+# падает «release version 25 not supported» под -q, то есть вообще без текста ошибки.
+require_jdk
 HERE=${CONSUMERS_DIR:-~/projects/allure-consumers}
 HERE=${HERE/#\~/$HOME}
 [[ -d $HERE ]] || { echo "✗ нет каталога сервисов: $HERE — рецепт в docs/consumer-affects.md"; exit 1; }
@@ -54,6 +60,7 @@ fi
 echo "▸ ставим библиотеку в ~/.m2 (она не опубликована — потребитель берёт SNAPSHOT локально)"
 if ! (cd "$LIB" && mvn -q clean install -DskipTests); then
     echo "✗ не собралась сама библиотека — сравнивать нечего"
+    echo "  текст ошибки скрыт -q; повтори руками: (cd \"$LIB\" && mvn clean install -DskipTests)"
     exit 1
 fi
 
@@ -69,7 +76,7 @@ for svc in "${services[@]}"; do
         [[ $phase == with ]] && args+=(-Pallure-lib)
         echo "  ▸ прогон $phase: mvn ${args[*]}"
         (cd "$svc" && mvn -q "${args[@]}" > "$HERE/$svc-$MODE-$phase.log" 2>&1)
-        python3 "$LIB/scripts/consumer-snapshot.py" "$svc" > "$HERE/$svc-$MODE-$phase.snapshot"
+        tools snapshot "$svc" > "$HERE/$svc-$MODE-$phase.snapshot"
     done
 
     # ⚠️ Порог ДО сравнения: два ПУСТЫХ снимка тоже совпадают (см. MIN_TESTS в шапке).

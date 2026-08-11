@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>io.github.kolomyychenkoai</groupId>
+    <artifactId>review-tools</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+    <name>review-tools</name>
+    <description>Разбор данных для процедуры ревью: дерево отчёта, снимок прогона, атрибуция шагов</description>
+
+    <!--
+      САМОСТОЯТЕЛЬНЫЙ проект, а НЕ модуль библиотеки — и это главное решение здесь.
+
+      Инструменты диагностические: ими смотрят, что сломалось. Будь они модулем, их сборка
+      падала бы вместе с библиотекой — ровно тогда, когда они нужнее всего. Отдельный pom
+      компилирует четыре файла и не знает про состояние соседа.
+
+      Второе следствие: pom самой библиотеки не трогается вообще, в её jar отсюда ничего
+      не попадает.
+
+      Разбор: docs/adr/0003-review-tooling-on-java.md
+    -->
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.release>17</maven.compiler.release>
+        <jackson.version>2.21.4</jackson.version>
+        <shade.version>3.6.0</shade.version>
+        <junit.version>5.14.1</junit.version>
+        <assertj.version>3.27.6</assertj.version>
+    </properties>
+
+    <dependencies>
+        <!-- JSON: в JDK парсера нет. XML берём штатным javax.xml, там зависимость не нужна. -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+
+        <!--
+          Тесты идут на фазе package, то есть при КАЖДОЙ сборке инструментов, а гейт свежести
+          в scripts/_tools.sh заставляет пересобирать после любой правки исходника. Отдельного
+          шага «прогнать тесты инструментов» в процедуре ревью поэтому не появляется.
+        -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <version>${assertj.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>review-tools</finalName>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>${shade.version}</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <!-- Один самодостаточный jar: скриптам не надо знать про classpath,
+                                 а в ~/.m2 версий jackson-databind лежит шесть и руками их
+                                 не выберешь. -->
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
+                            <transformers>
+                                <transformer
+                                        implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>io.github.kolomyychenkoai.allure.spring.tools.ReviewTools</mainClass>
+                                </transformer>
+                            </transformers>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                        <exclude>module-info.class</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

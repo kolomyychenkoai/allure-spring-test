@@ -42,7 +42,10 @@ class DocumentedScriptsTest {
     }
 
     private static Set<String> mentionedScripts() throws IOException {
-        Pattern reference = Pattern.compile("scripts/([a-z0-9-]+\\.(?:sh|py))");
+        // Подчёркивание в имени обязательно: `_tools.sh` — общий кусок, который подключают
+        // через source, и без него регулярка считала бы его неупомянутым, сколько его
+        // ни описывай (поймано при переезде инструментов на Java).
+        Pattern reference = Pattern.compile("scripts/([a-z0-9_-]+\\.(?:sh|py))");
         Set<String> found = new TreeSet<>();
         for (Path doc : documents()) {
             if (!Files.exists(doc)) {
@@ -94,6 +97,33 @@ class DocumentedScriptsTest {
                 .as("инструмент, о котором не сказано ни в README, ни в docs/, ни в шаблоне PR, "
                         + "не будет запущен никогда — впиши его в процедуру либо удали")
                 .isEmpty();
+    }
+
+    @Test
+    @DisplayName("инструменты надо собрать, и об этом сказано там, где их берут в руки")
+    void toolsProjectIsDocumented() throws IOException {
+        // Разбор данных живёт в отдельном maven-проекте `tools/`, и это единственное
+        // предусловие инструментов. Раньше предусловием был python3, и его не описывала ни одна
+        // дока — узнавали о нём падением. Гейт держит, чтобы история не повторилась.
+        assertThat(Path.of("tools/pom.xml")).as("проект инструментов пропал").exists();
+
+        String howToBuild = "cd tools && mvn -q package";
+        boolean documented = documents().stream().filter(Files::exists).anyMatch(doc -> {
+            try {
+                return Files.readString(doc, StandardCharsets.UTF_8).contains(howToBuild);
+            } catch (IOException unreadable) {
+                return false;
+            }
+        });
+        assertThat(documented)
+                .as("нигде не сказано, как собрать инструменты («%s») — предусловие снова "
+                        + "придётся узнавать падением", howToBuild)
+                .isTrue();
+
+        assertThat(Files.readString(Path.of("scripts/_tools.sh"), StandardCharsets.UTF_8))
+                .as("общий кусок скриптов перестал объяснять, что делать, когда jar не собран — "
+                        + "вернётся разнобой, ради устранения которого он и появился")
+                .contains(howToBuild);
     }
 
     @Test

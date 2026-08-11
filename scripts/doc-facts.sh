@@ -23,7 +23,9 @@ FILE=${1:?укажи файл, напр. docs/architecture.md}
 REV=${2:-}
 
 text() {
-    if [ -n "$REV" ]; then git show "$REV:$FILE"; else cat "$FILE"; fi
+    # Ошибки чтения глушим: своё сообщение ниже понятнее, чем «cat: нет такого файла»,
+    # а два сообщения подряд читаются как две разные беды.
+    if [ -n "$REV" ]; then git show "$REV:$FILE" 2>/dev/null; else cat "$FILE" 2>/dev/null; fi
 }
 
 BODY=$(text) || { echo "✗ не прочитать $FILE ${REV:+в ревизии $REV}"; exit 1; }

@@ -6,7 +6,7 @@
 # обязателен: на одной машине соседние прогоны гуляют, и дельта меньше разброса — это шум,
 # а не замер. Подавать такую дельту как результат нельзя.
 #
-# Время берём в МИЛЛИСЕКУНДАХ через python3: дельта тут порядка секунды, и посекундный
+# Время берём в МИЛЛИСЕКУНДАХ через инструменты ревью: дельта тут порядка секунды, и посекундный
 # `date +%s` мерил бы на грани собственного разрешения. macOS `date` не умеет %3N,
 # а bash 3.2 не знает EPOCHREALTIME.
 #
@@ -17,6 +17,12 @@
 
 set -u
 LIB=$(cd "$(dirname "$0")/.." && pwd)
+. "$LIB/scripts/_tools.sh"
+require_tools   # до первого прогона: в $( ) ошибка не прервала бы скрипт
+. "$LIB/scripts/require-jdk.sh"
+# Maven идёт по JAVA_HOME, а не по `java -version`. Без этой проверки сборка библиотеки
+# падает «release version 25 not supported» под -q, то есть вообще без текста ошибки.
+require_jdk
 HERE=${CONSUMERS_DIR:-~/projects/allure-consumers}
 HERE=${HERE/#\~/$HOME}
 [[ -d $HERE ]] || { echo "✗ нет каталога сервисов: $HERE — рецепт в docs/consumer-affects.md"; exit 1; }
@@ -43,9 +49,9 @@ measure() {
 
     local times=() start i
     for ((i = 0; i < RUNS; i++)); do
-        start=$(python3 -c 'import time;print(int(time.time()*1000))')
+        start=$(tools now)
         (cd "$svc" && mvn -q "${args[@]}" > /dev/null 2>&1)
-        times+=($(($(python3 -c 'import time;print(int(time.time()*1000))') - start)))
+        times+=($(($(tools now) - start)))
     done
 
     local sorted
