@@ -29,6 +29,8 @@
 
 set -u
 LIB=$(cd "$(dirname "$0")/.." && pwd)
+. "$LIB/scripts/_tools.sh"
+require_tools   # до первого прогона: в $( ) ошибка не прервала бы скрипт
 HERE=${CONSUMERS_DIR:-~/projects/allure-consumers}
 HERE=${HERE/#\~/$HOME}
 [[ -d $HERE ]] || { echo "✗ нет каталога сервисов: $HERE — рецепт в docs/consumer-affects.md"; exit 1; }
@@ -69,7 +71,7 @@ for svc in "${services[@]}"; do
         [[ $phase == with ]] && args+=(-Pallure-lib)
         echo "  ▸ прогон $phase: mvn ${args[*]}"
         (cd "$svc" && mvn -q "${args[@]}" > "$HERE/$svc-$MODE-$phase.log" 2>&1)
-        python3 "$LIB/scripts/consumer-snapshot.py" "$svc" > "$HERE/$svc-$MODE-$phase.snapshot"
+        tools snapshot "$svc" > "$HERE/$svc-$MODE-$phase.snapshot"
     done
 
     # ⚠️ Порог ДО сравнения: два ПУСТЫХ снимка тоже совпадают (см. MIN_TESTS в шапке).

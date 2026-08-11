@@ -1,5 +1,7 @@
 # Maven
 /target/
+# сборка оснастки ревью: отдельный проект, свой target
+tools/target/
 
 # Allure
 /allure-results/
