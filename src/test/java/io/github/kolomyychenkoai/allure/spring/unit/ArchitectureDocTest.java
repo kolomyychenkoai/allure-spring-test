@@ -124,7 +124,9 @@ class ArchitectureDocTest {
         Map<String, String> expected = new LinkedHashMap<>();
         expected.put("классы и строки src/main",
                 "**%d классов / %d строк**".formatted(mainSources().size(), mainLines));
-        expected.put("тест-классы", "**%d класса**".formatted(testClasses));
+        // Форма слова подобрана под текущее число. Изменится так, что поедет падеж, —
+        // тест скажет поправить и текст, и этот шаблон: врать документу дороже.
+        expected.put("тест-классы", "**%d классов**".formatted(testClasses));
         expected.put("листенеры", "%d листенеров".formatted(entryPoints(FACTORIES).size()));
         expected.put("автоконфиги", "%d автоконфига".formatted(entryPoints(IMPORTS).size()));
         expected.put("классы internal", "(%d классов + `package-info`)".formatted(internalClasses));
