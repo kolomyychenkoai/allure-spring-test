@@ -51,4 +51,14 @@ public class FakeDataSource extends AbstractDataSource {
     public Connection getConnection(String username, String password) {
         return connection;
     }
+
+    /**
+     * Своё имя вместо {@code Класс@хэш}. Без него ассерт по этому объекту тащит в ИМЯ ШАГА
+     * identity-хэш, а он плавает от прогона к прогону — правило гигиены имён из
+     * {@code docs/acceptance-report-standard.md} запрещает такое ровно поэтому.
+     */
+    @Override
+    public String toString() {
+        return "пул " + name;
+    }
 }

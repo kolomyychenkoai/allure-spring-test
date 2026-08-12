@@ -11,7 +11,14 @@ import java.sql.Connection;
  */
 public class FinalMethodDataSource extends AbstractDataSource {
 
-    private final String stamp = "настоящее значение";
+    private final String stamp;
+
+    public FinalMethodDataSource() {
+        // Значение из конструктора, а НЕ инициализатор поля константой: константу javac
+        // подставляет прямо в тело метода, и чтения поля в байткоде не остаётся — проверка
+        // «на пустом подклассе вернулся бы null» стала бы зелёной по неверной причине.
+        this.stamp = "настоящее".concat(" значение");
+    }
 
     /** Метод, который CGLIB не переопределит: читает поле, поэтому подмена была бы заметна. */
     public final String stamp() {

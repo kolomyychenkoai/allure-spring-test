@@ -33,4 +33,16 @@ public final class AllureInstrumentationLogger {
     public static void warn(String component, Throwable t) {
         LOGGER.log(Level.WARNING, t, () -> "[Allure " + component + "] сбой инструментирования (тест не затронут)");
     }
+
+    /**
+     * Сказать о СПРОЕКТИРОВАННОМ исходе — например о том, что модуль сознательно не стал
+     * перехватывать чужой объект и часть отчёта будет беднее.
+     * <p>
+     * Отдельно от {@link #warn(String, Throwable)} намеренно: там слово «сбой» и стек, и на
+     * штатной ветке это врёт дважды. Потребитель, увидевший стек при каждом старте контекста,
+     * идёт заводить issue вместо того, чтобы прочитать причину.
+     */
+    public static void note(String component, String message) {
+        LOGGER.log(Level.WARNING, () -> "[Allure " + component + "] " + message);
+    }
 }

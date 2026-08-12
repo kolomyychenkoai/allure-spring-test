@@ -30,7 +30,7 @@ public class AllureDataSourceAutoConfiguration {
         return new BeanPostProcessor() {
             @Override
             public Object postProcessAfterInitialization(Object bean, String beanName) {
-                return AllureDataSourceProxies.wrap(bean);
+                return AllureDataSourceProxies.wrap(bean, beanName);
             }
         };
     }

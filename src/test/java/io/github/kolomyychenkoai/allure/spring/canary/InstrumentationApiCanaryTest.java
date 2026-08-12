@@ -197,6 +197,25 @@ class InstrumentationApiCanaryTest {
     }
 
     @Test
+    @DisplayName("HikariCP: у пула нет final-методов, иначе обёртка DataSource перестанет его проксировать")
+    void hikariStaysProxyable() {
+        // Вся правка по issue #54 стоит на том, что подкласс HikariDataSource завести можно.
+        // Появится final-метод при апгрейде пула — SQL пропадёт у ВСЕХ потребителей разом,
+        // и без этой канарейки диагноз был бы «отчёт разошёлся с эталоном» вместо причины.
+        for (Class<?> type = com.zaxxer.hikari.HikariDataSource.class;
+             type != null && type != Object.class; type = type.getSuperclass()) {
+            for (java.lang.reflect.Method method : type.getDeclaredMethods()) {
+                int modifiers = method.getModifiers();
+                require(!java.lang.reflect.Modifier.isFinal(modifiers)
+                                || java.lang.reflect.Modifier.isStatic(modifiers)
+                                || java.lang.reflect.Modifier.isPrivate(modifiers),
+                        "у HikariDataSource появился final-метод " + method.getName()
+                                + " → AllureDataSourceProxies перестанет проксировать пул, SQL исчезнет из отчёта");
+            }
+        }
+    }
+
+    @Test
     @DisplayName("datasource-proxy: ExecutionInfo/QueryInfo + форма ParameterSetOperation (инлайн значений SQL)")
     void dataSourceProxyApi() {
         require(classPresent("net.ttddyy.dsproxy.ExecutionInfo"), "datasource-proxy ExecutionInfo уехал → AllureDataSourceListener");
