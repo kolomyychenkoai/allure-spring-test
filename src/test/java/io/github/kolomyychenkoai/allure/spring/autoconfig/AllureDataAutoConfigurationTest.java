@@ -665,7 +665,14 @@ class AllureDataAutoConfigurationTest {
         // Обе ветки «цель не прочитана» обязаны оставлять след, а не только та, что с броском.
         // Мутация: убрать trace у ветки чужого типа возврата → RED.
         assertThat(said).singleElement()
-                .satisfies(record -> assertThat(record.getMessage()).contains("а не пул"));
+                .satisfies(record -> {
+                    assertThat(record.getMessage()).contains("а не пул");
+                    // ⚠️ Уровень проверяем ЗДЕСЬ, а не соседним тестом: singleElement уже требует,
+                    // чтобы запись была, поэтому обе половины — «след есть» и «он не громче FINE» —
+                    // держит один ассерт, без вырожденности пустого списка.
+                    // Мутация: заменить trace на note → след станет видимым у каждого потребителя → RED.
+                    assertThat(record.getLevel()).isEqualTo(Level.FINE);
+                });
     }
 
     @Test
@@ -677,17 +684,27 @@ class AllureDataAutoConfigurationTest {
         AwkwardAccessorDataSource.ThrowingAccessor pool =
                 new AwkwardAccessorDataSource.ThrowingAccessor("бросающий акцессор");
         List<Object> result = new ArrayList<>();
+        Logger logger = AllureInstrumentationLogger.logger();
+        Level previous = logger.getLevel();
 
-        List<LogRecord> said = logWhile(() -> result.add(wrap(pool)));
+        List<LogRecord> said;
+        logger.setLevel(Level.FINE);
+        try {
+            said = logWhile(() -> result.add(wrap(pool)));
+        } finally {
+            logger.setLevel(previous);
+        }
 
         assertThat(result.get(0)).isInstanceOf(AllureProxiedDataSource.class);
-        // ⚠️ Проверяем УРОВЕНЬ, а не молчание: печатается запись или нет, зависит от настроек
-        // логирования вокруг, и «пусто» было зелёным в одиночку и красным в полном прогоне.
-        // Инвариант же в другом: этот след не имеет права стать видимым по умолчанию.
-        assertThat(said).allSatisfy(record -> assertThat(record.getLevel())
-                .as("след про непрочитанную цель поднялся выше FINE: он для разбора жалобы, "
-                        + "а не для каждого старта контекста у потребителя")
-                .isEqualTo(Level.FINE));
+        // ⚠️ Уровень поднимаем САМИ и требуем singleElement: иначе проверка зависит от настроек
+        // логирования вокруг. Сперва тест проверял молчание — был зелёным в одиночку и красным
+        // в полном прогоне; потом allSatisfy — стал зелёным в полном и пустым в одиночку.
+        // Инвариант же наш и простой: запись есть, и она не громче FINE.
+        assertThat(said).singleElement()
+                .satisfies(record -> assertThat(record.getLevel())
+                        .as("след про непрочитанную цель поднялся выше FINE: он для разбора "
+                                + "жалобы, а не для каждого старта контекста у потребителя")
+                        .isEqualTo(Level.FINE));
         assertThat(pool.accessorCalls())
                 .as("бросающий акцессор позван повторно: у чужого ленивого резолва это соединение, "
                         + "метрика отказа или счётчик размыкателя — по разу на каждого кандидата")
