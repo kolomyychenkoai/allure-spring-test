@@ -5,7 +5,6 @@ import io.qameta.allure.Epic;
 import io.github.kolomyychenkoai.allure.spring.data.AllureDataSourceAutoConfiguration;
 import io.github.kolomyychenkoai.allure.spring.data.AllureDataJpaAutoConfiguration;
 
-import io.github.kolomyychenkoai.allure.spring.data.internal.AllureDataSourceProxies;
 import io.github.kolomyychenkoai.allure.spring.data.internal.AllureDataSourceProxies.AllureProxiedDataSource;
 import io.github.kolomyychenkoai.allure.spring.data.internal.AllureRepositoryAspect;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
@@ -107,9 +106,14 @@ class AllureDataAutoConfigurationTest {
 
     /** Один запрос через переданный пул. Проверяем ЧИСЛО шагов, содержимое не важно. */
     private static void select(DataSource dataSource) {
+        query(dataSource, "select 1");
+    }
+
+    /** Произвольный запрос: нужен там, где шаги должны РАЗЛИЧАТЬСЯ по имени. */
+    private static void query(DataSource dataSource, String sql) {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {
-            statement.execute("select 1");
+            statement.execute(sql);
         } catch (Exception broken) {
             throw new IllegalStateException(broken);
         }
@@ -397,6 +401,11 @@ class AllureDataAutoConfigurationTest {
         public DataSource getTargetDataSource() {
             return super.getTargetDataSource();
         }
+
+        @Override
+        public String toString() {
+            return "приватная обёртка";
+        }
     }
 
     @Test
@@ -453,6 +462,11 @@ class AllureDataAutoConfigurationTest {
         protected Object determineCurrentLookupKey() {
             return "тенант";
         }
+
+        @Override
+        public String toString() {
+            return "роутер тенантов";
+        }
     }
 
     @Test
@@ -463,10 +477,22 @@ class AllureDataAutoConfigurationTest {
         // HikariDataSource(...)); }`), через постпроцессор не проходит, и обернуть внешний бин —
         // единственный шанс на SQL. Мутация: гасить ЛЮБУЮ известную цепочку, а не только свою
         // (`target instanceof DataSource && target != node`) → RED.
-        DataSource raw = new FakeDataSource("сырой, не через постпроцессор");
+        HikariDataSource raw = h2Pool("raw-chain");
+        DataSource wrapped = (DataSource) wrap(new LazyConnectionDataSourceProxy(raw));
 
-        assertThat(wrap(new LazyConnectionDataSourceProxy(raw)))
-                .isInstanceOf(AllureProxiedDataSource.class);
+        assertThat(wrapped).isInstanceOf(AllureProxiedDataSource.class);
+
+        // Маркера мало: ленивый прокси спрашивает цель ОТЛОЖЕННО, и именно через эту
+        // отложенность в обёртке живут два механизма. Считаем шаги, а не признак.
+        InMemoryAllure allure = new InMemoryAllure().install();
+        try {
+            TestResult recorded = allure.run("выборка через ленивый прокси", () -> select(wrapped));
+
+            assertThat(sqlSteps(recorded)).hasSize(1);
+        } finally {
+            allure.uninstall();
+            raw.close();
+        }
     }
 
     @Test
@@ -561,8 +587,9 @@ class AllureDataAutoConfigurationTest {
             TestResult recorded = allure.run("выдача с резолвом тенанта", () -> select(wrappedMain));
 
             assertThat(sqlSteps(recorded))
-                    .as("поведение изменилось: вложенный запрос резолва теперь виден или пропал главный")
-                    .hasSize(1);
+                    .as("уцелеть обязан шаг ГЛАВНОГО пула: вложенный резолв глушится счётчиком, "
+                            + "и различить два исхода можно только по имени шага")
+                    .containsExactly("SQL SELECT");
         } finally {
             allure.uninstall();
             main.close();
@@ -582,7 +609,10 @@ class AllureDataAutoConfigurationTest {
 
         @Override
         public Connection getConnection() throws java.sql.SQLException {
-            select(metadata);
+            // Запрос С ТАБЛИЦЕЙ: имя шага станет «SQL SELECT information_schema.tables»
+            // и будет отличаться от голого «SQL SELECT» главного пула. Иначе тест не отличит
+            // «пропал вложенный» от «пропал главный» — оба шага звались бы одинаково.
+            query(metadata, "select count(*) from information_schema.tables");
             return super.getConnection();
         }
     }
@@ -634,6 +664,10 @@ class AllureDataAutoConfigurationTest {
                 new AwkwardAccessorDataSource.ThrowingAccessor("бросающий акцессор");
 
         assertThat(wrap(pool)).isInstanceOf(AllureProxiedDataSource.class);
+        assertThat(pool.accessorCalls())
+                .as("бросающий акцессор позван повторно: у чужого ленивого резолва это соединение, "
+                        + "метрика отказа или счётчик размыкателя — по разу на каждого кандидата")
+                .isEqualTo(1);
     }
 
     @Test
@@ -647,9 +681,17 @@ class AllureDataAutoConfigurationTest {
                 new AwkwardAccessorDataSource.SelfReferencing("сам на себя");
 
         assertThat(wrap(pool)).isInstanceOf(AllureProxiedDataSource.class);
+        // ⚠️ Число ЛИТЕРАЛОМ, а не из константы: сравнение предела с самим собой — тавтология,
+        // обе стороны уехали бы вместе, и рост со восьми до миллиона остался бы зелёным.
+        // Нижняя граница нужна тоже: ноль вызовов означает мёртвый обход.
+        // ⚠️ @Timeout сюда не ставим: недекларативный прерывает поток (из-за чего и убрали
+        // assertTimeoutPreemptively), а декларативный бесконечный цикл не рвёт вовсе. Зависание
+        // ловит таймаут мутационного харнесса — там ему и место.
+        // ⚠️ Верхняя граница равна пределу только потому, что у фикстуры ОДИН акцессор:
+        // добавишь второй — счёт вырастет кратно при том же пределе.
         assertThat(pool.accessorCalls())
-                .as("обход спросил цель больше раз, чем разрешает предел")
-                .isLessThanOrEqualTo(AllureDataSourceProxies.CHAIN_LIMIT);
+                .as("обход спросил цель больше раз, чем разрешает предел (или не спросил вовсе)")
+                .isBetween(1, 8);
     }
 
     @Test

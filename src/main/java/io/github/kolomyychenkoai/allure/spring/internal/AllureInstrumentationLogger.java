@@ -35,6 +35,15 @@ public final class AllureInstrumentationLogger {
     }
 
     /**
+     * След для отладки: то, что при обычном прогоне шумом было бы, а при разборе жалобы
+     * нужно. Уровень {@link Level#FINE} — по умолчанию не печатается, включается
+     * {@code logger().setLevel(Level.FINE)}, как и обещает javadoc класса.
+     */
+    public static void trace(String component, String message) {
+        LOGGER.log(Level.FINE, () -> "[Allure " + component + "] " + message);
+    }
+
+    /**
      * Сказать о СПРОЕКТИРОВАННОМ исходе — например о том, что модуль сознательно не стал
      * перехватывать чужой объект и часть отчёта будет беднее.
      * <p>

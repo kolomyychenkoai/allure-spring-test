@@ -160,11 +160,12 @@ public final class AllureDataSourceProxies {
      * Spring, плюс запас на несколько целей у роутера. Предел держит и циклы: чужой бин вправе
      * вернуть из акцессора самого себя, а зациклиться на старте контекста потребителя нельзя.
      * <p>
-     * Публичная, потому что предел читает страж {@code autoconfig/AllureDataAutoConfigurationTest}:
-     * копия числом сторожила бы своё представление о пределе, а не сам предел. Обход идёт
-     * на КАЖДОМ бине {@code DataSource} у потребителя, поэтому вырасти незаметно он не должен.
+     * ⚠️ Страж в тестах морозит это число ЛИТЕРАЛОМ, а не читает отсюда: сравнение константы
+     * с самой собой — тавтология, обе стороны уехали бы вместе. Обход идёт на КАЖДОМ бине
+     * {@code DataSource} у потребителя, поэтому рост предела обязан быть осознанной правкой
+     * двух мест. Тот же приём в проекте морозит {@code maven.compiler.release}.
      */
-    public static final int CHAIN_LIMIT = 8;
+    private static final int CHAIN_LIMIT = 8;
 
     private AllureDataSourceProxies() {
     }
@@ -311,11 +312,12 @@ public final class AllureDataSourceProxies {
     /**
      * Значение акцессора или {@code null}, если его нет, он не про цели или бросил.
      * <p>
-     * Метод ищем на первом ПУБЛИЧНОМ классе иерархии, а не на классе объекта: у приватной
-     * обёртки потребителя ({@code private static class TenantRouter extends
+     * У приватной обёртки потребителя ({@code private static class TenantRouter extends
      * AbstractRoutingDataSource}) вызов метода, объявленного в непубличном классе, бросает
-     * {@code IllegalAccessException}, и защита молча выключалась бы — замерено.
-     * Виртуальная диспетчеризация всё равно приводит к переопределению.
+     * {@code IllegalAccessException} — ДО выполнения тела. Поэтому такой кандидат просто
+     * уводит поиск дальше, к публичному предку или интерфейсу, где то же переопределение
+     * доступно (диспетчеризация виртуальная). Отдельной предпроверки на публичность здесь
+     * не нужно — она была, и мутация показала, что не стережёт ничего.
      * {@code setAccessible} не годится: он потянул бы {@code --add-opens} у потребителя.
      * <p>
      * Тип возврата сверяем ДО вызова: у чужого класса метод с таким именем может значить что
@@ -323,9 +325,6 @@ public final class AllureDataSourceProxies {
      */
     private static Object read(Object target, String accessor) {
         for (Class<?> declaring : declarationCandidates(target.getClass())) {
-            if (!Modifier.isPublic(declaring.getModifiers())) {
-                continue;
-            }
             try {
                 Method method = declaring.getMethod(accessor);
                 Class<?> returns = method.getReturnType();
@@ -333,11 +332,21 @@ public final class AllureDataSourceProxies {
                     return null;
                 }
                 return method.invoke(target);
-            } catch (Throwable lookFurther) {
-                // И «метода тут нет», и «вызов не удался» значат одно: доступного объявления
-                // здесь не нашлось — ищем дальше. Обрыв поиска на первом же сбое выключал бы
-                // защиту у бина, чей акцессор объявлен ниже по списку.
+            } catch (NoSuchMethodException | IllegalAccessException lookFurther) {
+                // До ТЕЛА чужого метода не дошли: объявления здесь нет либо оно недоступно.
+                // Перебор кандидатов честен — обрыв на первом промахе выключал бы защиту
+                // у бина, чей акцессор объявлен ниже по списку.
                 continue;
+            } catch (Throwable calledAndFailed) {
+                // Тело выполнилось и бросило. Диспетчеризация виртуальная, поэтому следующий
+                // кандидат позвал бы ТО ЖЕ переопределение с тем же исходом — пользы ноль,
+                // а побочный эффект чужого резолва (соединение, метрика отказа, счётчик
+                // размыкателя) повторился бы по разу на каждое объявление. Замерено: 3 вызова
+                // при трёх кандидатах.
+                AllureInstrumentationLogger.trace("DbDataSource", "акцессор " + accessor + " у "
+                        + ClassUtils.getUserClass(target.getClass()).getName() + " бросил, цель не прочитана"
+                        + " — защита от задвоения SQL для этого бина не сработает");
+                return null;
             }
         }
         return null;

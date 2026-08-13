@@ -40,14 +40,33 @@ public final class AwkwardAccessorDataSource {
         }
     }
 
-    /** Акцессор, который бросает: обход обязан молча пойти дальше. */
-    public static class ThrowingAccessor extends FakeDataSource {
+    /**
+     * Акцессор, который бросает: обход обязан молча пойти дальше, но позвать его ОДИН раз.
+     * <p>
+     * ⚠️ Реализует {@link TargetAware} НАМЕРЕННО: кандидатов на объявление должно быть
+     * несколько (свой класс и интерфейс), иначе повторный вызов не воспроизводится и страж
+     * ничего не стережёт — замерено ревьюерами.
+     */
+    public static class ThrowingAccessor extends FakeDataSource implements TargetAware {
+
+        private int accessorCalls;
 
         public ThrowingAccessor(String name) {
             super(name);
         }
 
+        /**
+         * Сколько раз обход дёрнул бросающий акцессор. Ленивый резолв редко бывает без
+         * побочных эффектов, поэтому повтор — не мелочь: замерено, что при поиске «дальше
+         * по кандидатам» число вызовов растёт вместе с глубиной иерархии.
+         */
+        public int accessorCalls() {
+            return accessorCalls;
+        }
+
+        @Override
         public DataSource getTargetDataSource() {
+            accessorCalls++;
             throw new IllegalStateException("резолв цели вне контекста тенанта");
         }
     }
