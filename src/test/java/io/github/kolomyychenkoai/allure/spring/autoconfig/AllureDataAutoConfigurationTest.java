@@ -9,12 +9,13 @@ import io.github.kolomyychenkoai.allure.spring.data.internal.AllureDataSourcePro
 import io.github.kolomyychenkoai.allure.spring.data.internal.AllureRepositoryAspect;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
-import io.github.kolomyychenkoai.allure.spring.support.jdbc.DelegatingLikeDataSource;
 import io.github.kolomyychenkoai.allure.spring.support.jdbc.ExtraOverloadDataSource;
 import io.github.kolomyychenkoai.allure.spring.support.jdbc.FakeDataSource;
 import io.github.kolomyychenkoai.allure.spring.support.jdbc.FinalDataSource;
 import io.github.kolomyychenkoai.allure.spring.support.jdbc.FinalMethodDataSource;
 import io.github.kolomyychenkoai.allure.spring.support.jdbc.HiddenFinalMethodDataSource;
+import io.github.kolomyychenkoai.allure.spring.support.jdbc.OpaqueDelegatingDataSource;
+import io.github.kolomyychenkoai.allure.spring.support.jdbc.SealedDataSource;
 import io.qameta.allure.model.StepResult;
 import io.qameta.allure.model.TestResult;
 import net.ttddyy.dsproxy.support.ProxyDataSource;
@@ -30,6 +31,9 @@ import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.jdbc.datasource.DelegatingDataSource;
+import org.springframework.jdbc.datasource.LazyConnectionDataSourceProxy;
+import org.springframework.jdbc.datasource.lookup.AbstractRoutingDataSource;
 
 import javax.sql.DataSource;
 import java.lang.reflect.Proxy;
@@ -37,6 +41,7 @@ import java.sql.Connection;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.logging.Handler;
 import java.util.logging.LogRecord;
@@ -88,6 +93,24 @@ class AllureDataAutoConfigurationTest {
             logger.removeHandler(collector);
         }
         return records;
+    }
+
+    /** Шаги отчёта, которые дал SQL-листенер: по ним и видно задвоение. */
+    private static List<String> sqlSteps(TestResult recorded) {
+        return recorded.getSteps().stream()
+                .map(StepResult::getName)
+                .filter(name -> name.startsWith("SQL "))
+                .toList();
+    }
+
+    /** Один запрос через переданный пул. Проверяем ЧИСЛО шагов, содержимое не важно. */
+    private static void select(DataSource dataSource) {
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement()) {
+            statement.execute("select 1");
+        } catch (Exception broken) {
+            throw new IllegalStateException(broken);
+        }
     }
 
     private static HikariDataSource h2Pool(String database) {
@@ -165,18 +188,11 @@ class AllureDataAutoConfigurationTest {
         DataSource wrapped = (DataSource) wrap(pool);
         InMemoryAllure allure = new InMemoryAllure().install();
         try {
-            TestResult recorded = allure.run("выборка", () -> {
-                try (Connection connection = wrapped.getConnection();
-                     Statement statement = connection.createStatement()) {
-                    statement.execute("select 1");
-                } catch (Exception broken) {
-                    throw new IllegalStateException(broken);
-                }
-            });
+            TestResult recorded = allure.run("выборка", () -> select(wrapped));
 
-            assertThat(recorded.getSteps()).extracting(StepResult::getName)
+            assertThat(sqlSteps(recorded))
                     .as("реальный SQL не доехал до отчёта — значит обёртка есть, а канала нет")
-                    .anyMatch(name -> name.startsWith("SQL "));
+                    .isNotEmpty();
         } finally {
             allure.uninstall();
             pool.close();
@@ -204,11 +220,16 @@ class AllureDataAutoConfigurationTest {
     @DisplayName("getConnection() уходит в datasource-proxy — иначе SQL в отчёт не попадёт")
     void routesGetConnectionThroughDataSourceProxy() throws Exception {
         // Мутация: убрать advisor → вернётся то же соединение, что у пула → RED.
+        // ⚠️ Сравниваем ссылки булевым выражением, а не isNotSameAs(соединение): ассерт по
+        // объекту тащит в ИМЯ ШАГА toString обёртки datasource-proxy — «$Proxy243», где номер
+        // плавает от прогона к прогону. Своё же правило гигиены имён это запрещает.
         FakeDataSource original = new FakeDataSource("основной");
 
         DataSource wrapped = (DataSource) wrap(original);
 
-        assertThat(wrapped.getConnection()).isNotSameAs(original.rawConnection());
+        assertThat(wrapped.getConnection() == original.rawConnection())
+                .as("соединение отдано мимо datasource-proxy — SQL этого пула в отчёт не попадёт")
+                .isFalse();
     }
 
     @Test
@@ -219,7 +240,9 @@ class AllureDataAutoConfigurationTest {
 
         DataSource wrapped = (DataSource) wrap(original);
 
-        assertThat(wrapped.getConnection("u", "p")).isNotSameAs(original.rawConnection());
+        assertThat(wrapped.getConnection("u", "p") == original.rawConnection())
+                .as("перегрузка с логином отдана мимо datasource-proxy")
+                .isFalse();
     }
 
     @Test
@@ -267,15 +290,139 @@ class AllureDataAutoConfigurationTest {
     }
 
     @Test
-    @DisplayName("обёртка над нашим прокси не даёт второго слоя — иначе SQL задвоится")
-    void doesNotWrapChainOverOwnProxy() {
-        // LazyConnectionDataSourceProxy/AbstractRoutingDataSource поверх пула — это ДВА бина.
-        // Мутация: убрать проверку wrapsOurProxy → появится второй слой, и каждый запрос
-        // попадёт в отчёт дважды → RED.
-        DataSource inner = (DataSource) wrap(new FakeDataSource("внутренний"));
-        DelegatingLikeDataSource outer = new DelegatingLikeDataSource(inner);
+    @DisplayName("цепочка из трёх бинов Spring пишет запрос ОДИН раз")
+    void chainOfSpringBeansLogsQueryOnce() throws Exception {
+        // Мультиарендная раскладка из документации Spring: lazy → routing → пул. Обёрнуты все
+        // три, дубли гасит счётчик глубины. Классы берём НАСТОЯЩИЕ: самодельная фикстура
+        // подтверждала бы сама себя, а тут проверяется наша совместимость со Spring.
+        // Мутация: убрать гард HANDING_OUT → шагов станет больше одного → RED.
+        HikariDataSource pool = h2Pool("chain");
+        DataSource wrappedPool = (DataSource) wrap(pool);
+        TenantRouting routing = new TenantRouting();
+        routing.setDefaultTargetDataSource(wrappedPool);
+        routing.setTargetDataSources(Map.of("тенант", wrappedPool));
+        routing.afterPropertiesSet();
+        DataSource wrappedRouting = (DataSource) wrap(routing);
+        DataSource wrappedLazy = (DataSource) wrap(new LazyConnectionDataSourceProxy(wrappedRouting));
 
-        assertThat(wrap(outer)).isSameAs(outer);
+        // Считает самый внутренний слой, внешние пропускаются: у них внутри уже наш прокси.
+        assertThat(wrappedPool).isInstanceOf(AllureProxiedDataSource.class);
+        assertThat(wrappedRouting).isNotInstanceOf(AllureProxiedDataSource.class);
+        assertThat(wrappedLazy).isNotInstanceOf(AllureProxiedDataSource.class);
+
+        InMemoryAllure allure = new InMemoryAllure().install();
+        try {
+            TestResult recorded = allure.run("выборка через цепочку", () -> select(wrappedLazy));
+
+            assertThat(sqlSteps(recorded))
+                    .as("запрос попал в отчёт столько раз, сколько слоёв обёртки — ручник "
+                            + "прочитает это как лишние обращения к базе")
+                    .hasSize(1);
+        } finally {
+            allure.uninstall();
+            pool.close();
+        }
+    }
+
+    @Test
+    @DisplayName("два разных пула в одном тесте пишут по своему шагу — гард не глушит лишнего")
+    void independentPoolsBothLog() throws Exception {
+        // Обратная сторона гарда. Мутация: не снимать HANDING_OUT в finally → второй пул
+        // промолчит → RED.
+        HikariDataSource first = h2Pool("guard-one");
+        HikariDataSource second = h2Pool("guard-two");
+        DataSource wrappedFirst = (DataSource) wrap(first);
+        DataSource wrappedSecond = (DataSource) wrap(second);
+
+        InMemoryAllure allure = new InMemoryAllure().install();
+        try {
+            TestResult recorded = allure.run("две выборки", () -> {
+                select(wrappedFirst);
+                select(wrappedSecond);
+            });
+
+            assertThat(sqlSteps(recorded)).hasSize(2);
+        } finally {
+            allure.uninstall();
+            first.close();
+            second.close();
+        }
+    }
+
+    @Test
+    @DisplayName("приватный класс обёртки не выключает защиту от задвоения")
+    void privateWrapperClassIsStillRecognised() {
+        // getMethod у НЕпубличного класса даёт метод, а invoke на нём бросает
+        // IllegalAccessException — защита молча выключалась бы, и SQL задвоился. Форма живая:
+        // private static class TenantRouter extends AbstractRoutingDataSource.
+        // Мутация: искать акцессор на target.getClass(), а не на публичном предке → RED.
+        DataSource inner = (DataSource) wrap(new FakeDataSource("внутренний"));
+
+        assertThat(wrap(new PrivateDelegating(inner))).isInstanceOf(PrivateDelegating.class)
+                .isNotInstanceOf(AllureProxiedDataSource.class);
+    }
+
+    /** Обёртка, объявленная приватным классом: акцессор виден только через публичного предка. */
+    private static class PrivateDelegating extends DelegatingDataSource {
+        PrivateDelegating(DataSource target) {
+            super(target);
+        }
+
+        @Override
+        public DataSource getTargetDataSource() {
+            return super.getTargetDataSource();
+        }
+    }
+
+    @Test
+    @DisplayName("декоратор с неизвестным акцессором тоже пишет запрос один раз")
+    void opaqueDecoratorChainLogsQueryOnce() throws Exception {
+        // Структурная проверка тут слепа: цель зовётся getDelegate. Работает счётчик глубины.
+        // Мутация: убрать проверку HANDING_OUT в connection(...) → два шага на запрос → RED.
+        HikariDataSource pool = h2Pool("opaque");
+        DataSource wrappedPool = (DataSource) wrap(pool);
+        DataSource wrappedDecorator = (DataSource) wrap(new OpaqueDelegatingDataSource(wrappedPool));
+
+        assertThat(wrappedDecorator)
+                .as("декоратор с чужим акцессором обёрнут — иначе тест проверял бы не тот механизм")
+                .isInstanceOf(AllureProxiedDataSource.class);
+
+        InMemoryAllure allure = new InMemoryAllure().install();
+        try {
+            TestResult recorded = allure.run("выборка через декоратор", () -> select(wrappedDecorator));
+
+            assertThat(sqlSteps(recorded)).hasSize(1);
+        } finally {
+            allure.uninstall();
+            pool.close();
+        }
+    }
+
+    @Test
+    @DisplayName("сбой построения прокси гасится: отдаём бин и пишем предупреждение со стеком")
+    void proxyBuildFailureDegradesToOriginal() {
+        // Единственная фикстура, доезжающая до ProxyFactory: класс запечатан, и подкласс
+        // отбрасывает JVM. Все прочие негодные пулы отсекает предпроверка раньше, поэтому
+        // без этого теста сеть безопасности снималась при зелёной сборке (проверено мутацией).
+        // Мутация: в catch (Throwable) бросить вместо возврата бина → RED.
+        SealedDataSource original = new SealedDataSource();
+        List<Object> result = new ArrayList<>();
+
+        List<LogRecord> said = logWhile(() -> result.add(wrap(original)));
+
+        assertThat(result).containsExactly(original);
+        assertThat(said).singleElement()
+                .satisfies(record -> assertThat(record.getThrown())
+                        .as("сбой построения — не штатная ступень: он обязан прийти со стеком")
+                        .isNotNull());
+    }
+
+    /** Роутер тенантов: именованный класс, потому что анонимный неявно final и не проксируется. */
+    static class TenantRouting extends AbstractRoutingDataSource {
+        @Override
+        protected Object determineCurrentLookupKey() {
+            return "тенант";
+        }
     }
 
     @Test
@@ -296,7 +443,7 @@ class AllureDataAutoConfigurationTest {
 
     @Test
     @DisplayName("бин-JDK-прокси оборачивается по интерфейсам, а не отбрасывается")
-    void jdkProxyIsWrappedByInterfaces() {
+    void jdkProxyIsWrappedByInterfaces() throws Exception {
         // Так устроен DataSource встроенной базы (EmbeddedDatabaseBuilder) и чужие декораторы
         // по интерфейсу. У JDK-прокси ВСЕ методы final, поэтому предпроверка отбросила бы его
         // и SQL пропал бы молча. Мутация: убрать ветку byInterfaces → RED.
@@ -305,13 +452,20 @@ class AllureDataAutoConfigurationTest {
                 getClass().getClassLoader(), new Class<?>[]{DataSource.class},
                 (proxy, method, args) -> method.invoke(real, args));
 
-        assertThat(wrap(jdkProxy)).isInstanceOf(AllureProxiedDataSource.class);
+        Object wrapped = wrap(jdkProxy);
+
+        assertThat(wrapped).isInstanceOf(AllureProxiedDataSource.class);
+        assertThat(((DataSource) wrapped).getConnection() == real.rawConnection())
+                .as("по ветке для JDK-прокси соединение отдаётся мимо datasource-proxy — "
+                        + "маркер есть, а SQL такого пула в отчёт не попадает")
+                .isFalse();
     }
 
     @Test
     @DisplayName("final-класс: отдаём исходный бин и говорим почему")
     void finalClassDegradesToOriginal() {
-        // Подкласс завести нельзя. Мутация: убрать catch (Throwable) → AopConfigException → RED.
+        // Подкласс завести нельзя. Мутация: убрать ветку final-класса в cannotSubclass → уйдём
+        // в catch (Throwable), и вместо строки причины появится стек «сбой» → RED.
         FinalDataSource original = new FinalDataSource();
         List<Object> result = new ArrayList<>();
 
@@ -348,8 +502,15 @@ class AllureDataAutoConfigurationTest {
         // Мутация: считать предпроверку через getMethods() вместо обхода иерархии
         // getDeclaredMethods() → пул заведут в подкласс-ловушку → RED.
         HiddenFinalMethodDataSource original = new HiddenFinalMethodDataSource();
+        List<Object> result = new ArrayList<>();
 
-        assertThat(wrap(original)).isSameAs(original);
+        List<LogRecord> said = logWhile(() -> result.add(wrap(original)));
+
+        assertThat(result).containsExactly(original);
+        assertThat(said).singleElement()
+                .satisfies(record -> assertThat(record.getMessage())
+                        .as("причина названа не та: ветка могла сработать по классу, а не по методу")
+                        .contains("stamp"));
     }
 
     @Test
@@ -357,7 +518,7 @@ class AllureDataAutoConfigurationTest {
     void alreadyAopProxiedNamesTheRealReason() {
         // У чужого CGLIB-прокси final ВСЕ сгенерированные методы, и указание на любой из них
         // отправляет читателя искать несуществующую проблему в JDBC API.
-        // Мутация: убрать ветку SpringProxy в cannotProxy → в тексте окажется имя метода → RED.
+        // Мутация: убрать ветку SpringProxy в cannotSubclass → в тексте окажется имя метода → RED.
         ProxyFactory foreign = new ProxyFactory(new FakeDataSource("чужой"));
         foreign.setProxyTargetClass(true);
         Object aopProxied = foreign.getProxy();

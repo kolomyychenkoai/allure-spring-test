@@ -199,6 +199,7 @@ class InstrumentationApiCanaryTest {
     @Test
     @DisplayName("HikariCP: у пула нет final-методов, иначе обёртка DataSource перестанет его проксировать")
     void hikariStaysProxyable() {
+        // Правило дублирует AllureDataSourceProxies.finalMethod — при его правке чинить оба места.
         // Вся правка по issue #54 стоит на том, что подкласс HikariDataSource завести можно.
         // Появится final-метод при апгрейде пула — SQL пропадёт у ВСЕХ потребителей разом,
         // и без этой канарейки диагноз был бы «отчёт разошёлся с эталоном» вместо причины.
