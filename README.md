@@ -231,8 +231,9 @@ Maven:
 > при этом он ещё и берёт соединение отложенно либо в другом потоке, оба слоя посчитают запрос
 > сами. Разобраться помогает след — он пишется на уровне FINE и по умолчанию молчит.
 >
-> **В Spring Boot** (обычный случай) хватит строки в `application-test.yml` или
-> `@TestPropertySource`:
+> **В Spring Boot** (обычный случай) хватит одной строки в `src/test/resources/application.yml` —
+> он читается всегда. ⚠️ `application-test.yml` сюда НЕ годится без оговорки: это профильный
+> файл, и без активного профиля `test` его не прочитает никто.
 >
 > ```yaml
 > logging.level.io.github.kolomyychenkoai.allure.spring: DEBUG

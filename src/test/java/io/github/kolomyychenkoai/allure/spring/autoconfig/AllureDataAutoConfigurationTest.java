@@ -38,6 +38,9 @@ import org.springframework.jdbc.datasource.lookup.AbstractRoutingDataSource;
 
 import javax.sql.DataSource;
 import java.lang.reflect.Proxy;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.Statement;
 import java.util.ArrayList;
@@ -709,6 +712,70 @@ class AllureDataAutoConfigurationTest {
                 .as("бросающий акцессор позван повторно: у чужого ленивого резолва это соединение, "
                         + "метрика отказа или счётчик размыкателя — по разу на каждого кандидата")
                 .isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("рецепт включения следа из README действительно работает")
+    void documentedTraceRecipeWorks() throws Exception {
+        // ⚠️ Обещание без стража: рецепт в README уже дважды был неверным. Первый раз он звал
+        // поднять уровень только логгеру — на голом JUL запись умирает на обработчике, у него
+        // свой уровень INFO. Тест выполняет ровно то, что написано в README, и требует, чтобы
+        // след дошёл; заодно проверяет, что обе строки рецепта в тексте остались.
+        String readme = Files.readString(Path.of("README.md"), StandardCharsets.UTF_8);
+        assertThat(readme)
+                .as("из README пропала половина рецепта — та, без которой он молчит")
+                .contains("lib.setLevel(Level.FINE)")
+                .contains("console.setLevel(Level.FINE)");
+
+        AwkwardAccessorDataSource.ThrowingAccessor pool =
+                new AwkwardAccessorDataSource.ThrowingAccessor("бросающий акцессор");
+        Logger logger = AllureInstrumentationLogger.logger();
+        Level previous = logger.getLevel();
+        List<LogRecord> reachedHandler = new ArrayList<>();
+        List<LogRecord> filteredOut = new ArrayList<>();
+
+        logger.setLevel(Level.FINE);
+        try {
+            // Обработчик с уровнем рецепта — след обязан дойти.
+            withHandler(Level.FINE, reachedHandler, () -> wrap(pool));
+            // Обработчик с уровнем по умолчанию (как у корневого ConsoleHandler) — не дойдёт.
+            // Это и есть причина, по которой в рецепте ДВЕ строки, а не одна.
+            withHandler(Level.INFO, filteredOut, () -> wrap(pool));
+        } finally {
+            logger.setLevel(previous);
+        }
+
+        assertThat(reachedHandler).as("рецепт из README следа не даёт").hasSize(1);
+        assertThat(filteredOut).as("одного уровня логгера хватило — тогда вторая строка "
+                + "рецепта лишняя, и README вводит в заблуждение").isEmpty();
+    }
+
+    /** Собрать записи обработчиком с заданным уровнем: у обработчика он свой, и это ловушка. */
+    private static void withHandler(Level level, List<LogRecord> into, Runnable action) {
+        Handler collector = new Handler() {
+            @Override
+            public void publish(LogRecord record) {
+                if (isLoggable(record)) {
+                    into.add(record);
+                }
+            }
+
+            @Override
+            public void flush() {
+            }
+
+            @Override
+            public void close() {
+            }
+        };
+        collector.setLevel(level);
+        Logger logger = AllureInstrumentationLogger.logger();
+        logger.addHandler(collector);
+        try {
+            action.run();
+        } finally {
+            logger.removeHandler(collector);
+        }
     }
 
     @Test
