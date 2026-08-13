@@ -9,6 +9,7 @@ import io.github.kolomyychenkoai.allure.spring.data.internal.AllureDataSourcePro
 import io.github.kolomyychenkoai.allure.spring.data.internal.AllureRepositoryAspect;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
+import io.github.kolomyychenkoai.allure.spring.support.jdbc.AwkwardAccessorDataSource;
 import io.github.kolomyychenkoai.allure.spring.support.jdbc.ExtraOverloadDataSource;
 import io.github.kolomyychenkoai.allure.spring.support.jdbc.FakeDataSource;
 import io.github.kolomyychenkoai.allure.spring.support.jdbc.FinalDataSource;
@@ -39,6 +40,7 @@ import javax.sql.DataSource;
 import java.lang.reflect.Proxy;
 import java.sql.Connection;
 import java.sql.Statement;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -48,6 +50,7 @@ import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 /**
  * Уровень A: авто-конфиги БД и обёртка бина {@code DataSource}.
@@ -209,11 +212,22 @@ class AllureDataAutoConfigurationTest {
 
         ExtraOverloadDataSource wrapped = (ExtraOverloadDataSource) wrap(original);
 
-        assertThat(wrapped.getConnection(new Properties()))
+        Properties labels = new Properties();
+        labels.setProperty("tenant", "первый");
+
+        assertThat(wrapped.getConnection(labels))
                 .as("перегрузка с метками соединения обязана дойти до пула нетронутой")
                 .isSameAs(original.rawConnection());
-        assertThat(wrapped.getConnection("u", "p", new Properties()))
-                .isSameAs(original.rawConnection());
+        assertThat(original.lastLabels())
+                .as("метки соединения потерялись по дороге — пул отдаст не то соединение")
+                .isSameAs(labels);
+
+        Properties other = new Properties();
+        other.setProperty("tenant", "второй");
+        assertThat(wrapped.getConnection("u", "p", other)).isSameAs(original.rawConnection());
+        assertThat(original.lastLabels())
+                .as("третий аргумент выброшен молча — ровно то, чем опасен позиционный разбор")
+                .isSameAs(other);
     }
 
     @Test
@@ -243,6 +257,10 @@ class AllureDataAutoConfigurationTest {
         assertThat(wrapped.getConnection("u", "p") == original.rawConnection())
                 .as("перегрузка с логином отдана мимо datasource-proxy")
                 .isFalse();
+        assertThat(original.lastUsername())
+                .as("аргументы дошли до пула переставленными — соединение возьмут не под тем пользователем")
+                .isEqualTo("u");
+        assertThat(original.lastPassword()).isEqualTo("p");
     }
 
     @Test
@@ -295,7 +313,10 @@ class AllureDataAutoConfigurationTest {
         // Мультиарендная раскладка из документации Spring: lazy → routing → пул. Обёрнуты все
         // три, дубли гасит счётчик глубины. Классы берём НАСТОЯЩИЕ: самодельная фикстура
         // подтверждала бы сама себя, а тут проверяется наша совместимость со Spring.
-        // Мутация: убрать гард HANDING_OUT → шагов станет больше одного → RED.
+        // Мутация: убрать структурную проверку wrapsOurProxy → внешние бины тоже обернутся,
+        // и шагов станет больше одного → RED. (Гард HANDING_OUT здесь ни при чём: нашим
+        // прокси является только пул, вложенного перехвата в цепочке нет — стережёт гард
+        // соседний тест про непрозрачный декоратор.)
         HikariDataSource pool = h2Pool("chain");
         DataSource wrappedPool = (DataSource) wrap(pool);
         TenantRouting routing = new TenantRouting();
@@ -412,9 +433,14 @@ class AllureDataAutoConfigurationTest {
 
         assertThat(result).containsExactly(original);
         assertThat(said).singleElement()
-                .satisfies(record -> assertThat(record.getThrown())
-                        .as("сбой построения — не штатная ступень: он обязан прийти со стеком")
-                        .isNotNull());
+                .satisfies(record -> {
+                    assertThat(record.getThrown())
+                            .as("сбой построения — не штатная ступень: он обязан прийти со стеком")
+                            .isNotNull();
+                    assertThat(record.getMessage())
+                            .as("без слова про инструментирование строка неотличима от чужого шума")
+                            .contains("DbDataSource");
+                });
     }
 
     /** Роутер тенантов: именованный класс, потому что анонимный неявно final и не проксируется. */
@@ -426,11 +452,72 @@ class AllureDataAutoConfigurationTest {
     }
 
     @Test
+    @DisplayName("цель роутера видна и через карту, а не только через default-цель")
+    void routingTargetsMapIsWalked() {
+        // У AbstractRoutingDataSource цели лежат в КАРТЕ, и без её обхода мы бы увидели только
+        // default-цель. Роутер без default-цели — единственный способ дойти до этой ветки.
+        // Мутация: убрать разворот Map в targets(...) → роутер обернётся вторым слоем → RED.
+        DataSource inner = (DataSource) wrap(new FakeDataSource("внутренний"));
+        TenantRouting routing = new TenantRouting();
+        routing.setTargetDataSources(Map.of("тенант", inner));
+        routing.afterPropertiesSet();
+
+        assertThat(wrap(routing)).isSameAs(routing);
+    }
+
+    @Test
+    @DisplayName("акцессор с чужим типом возврата не зовётся вовсе")
+    void accessorOfForeignReturnTypeIsNotCalled() {
+        // Одноимённый метод у чужого класса вправе значить что угодно, и звать его «вдруг
+        // подойдёт» мы не вправе: у потребителя за таким именем может стоять ленивый резолв.
+        // ⚠️ Проверяем ФАКТ ВЫЗОВА, а не результат обёртки: строку, которую метод вернул бы,
+        // обход дальше игнорирует, и по результату лишний вызов неотличим — выяснено мутацией.
+        // Мутация: убрать сверку типа возврата в read(...) → акцессор будет позван → RED.
+        AwkwardAccessorDataSource.ForeignReturnType pool =
+                new AwkwardAccessorDataSource.ForeignReturnType("чужой акцессор");
+
+        Object wrapped = wrap(pool);
+
+        assertThat(pool.wasCalled())
+                .as("позвали чужой метод только потому, что имя совпало")
+                .isFalse();
+        assertThat(wrapped).isInstanceOf(AllureProxiedDataSource.class);
+    }
+
+    @Test
+    @DisplayName("бросок из чужого акцессора не роняет обёртку")
+    void throwingAccessorDoesNotBreakWrapping() {
+        // Резолв цели у самописного роутера вправе упасть вне контекста тенанта. Мутация:
+        // убрать catch (Throwable) в read(...) → исключение уйдёт наружу и обёртка отдаст
+        // исходный бин через общий catch → RED.
+        AwkwardAccessorDataSource.ThrowingAccessor pool =
+                new AwkwardAccessorDataSource.ThrowingAccessor("бросающий акцессор");
+
+        assertThat(wrap(pool)).isInstanceOf(AllureProxiedDataSource.class);
+    }
+
+    @Test
+    @DisplayName("обёртка, ссылающаяся сама на себя, не зацикливает обход")
+    void selfReferencingWrapperTerminates() {
+        // Предел CHAIN_LIMIT держит не только глубину, но и цикл. Мутация: убрать условие
+        // visited < CHAIN_LIMIT → обход не завершится, тест повиснет и упадёт по таймауту.
+        AwkwardAccessorDataSource.SelfReferencing pool =
+                new AwkwardAccessorDataSource.SelfReferencing("сам на себя");
+
+        assertTimeoutPreemptively(Duration.ofSeconds(5),
+                () -> assertThat(wrap(pool)).isInstanceOf(AllureProxiedDataSource.class));
+    }
+
+    @Test
     @DisplayName("чужой ProxyDataSource не оборачивается второй раз (тот же объект)")
     void doesNotWrapProxyDataSource() {
         ProxyDataSource already = ProxyDataSourceBuilder.create(new FakeDataSource("основной")).build();
+        List<Object> result = new ArrayList<>();
 
-        assertThat(wrap(already)).isSameAs(already);
+        List<LogRecord> said = logWhile(() -> result.add(wrap(already)));
+
+        assertThat(result).containsExactly(already);
+        assertThat(said).as("чужой ProxyDataSource — не деградация, а короткий путь: лог молчит").isEmpty();
     }
 
     @Test
@@ -444,8 +531,10 @@ class AllureDataAutoConfigurationTest {
     @Test
     @DisplayName("бин-JDK-прокси оборачивается по интерфейсам, а не отбрасывается")
     void jdkProxyIsWrappedByInterfaces() throws Exception {
-        // Так устроен DataSource встроенной базы (EmbeddedDatabaseBuilder) и чужие декораторы
-        // по интерфейсу. У JDK-прокси ВСЕ методы final, поэтому предпроверка отбросила бы его
+        // Так устроены чужие декораторы по интерфейсу и Spring AOP в режиме
+        // proxyTargetClass=false. ⚠️ Встроенная база сюда НЕ относится, хоть и напрашивается:
+        // EmbeddedDatabaseFactory$EmbeddedDataSourceProxy — обычный класс, проверено javap.
+        // У JDK-прокси ВСЕ методы final, поэтому предпроверка отбросила бы такой бин
         // и SQL пропал бы молча. Мутация: убрать ветку byInterfaces → RED.
         FakeDataSource real = new FakeDataSource("встроенная");
         DataSource jdkProxy = (DataSource) Proxy.newProxyInstance(
@@ -490,9 +579,11 @@ class AllureDataAutoConfigurationTest {
         assertThat(result).containsExactly(original);
         assertThat(said).singleElement()
                 .satisfies(record -> assertThat(record.getMessage())
-                        .as("по строке в логе должно быть понятно, какой пул ослеп и из-за чего")
+                        .as("по строке в логе должно быть понятно, какой пул ослеп и из-за чего; "
+                                + "метод обязан быть наименьшим по имени, иначе он плавает между прогонами")
                         .contains("FinalMethodDataSource")
-                        .contains("stamp"));
+                        .contains("stamp")
+                        .doesNotContain("zzzAnotherFinal"));
     }
 
     @Test
@@ -509,7 +600,9 @@ class AllureDataAutoConfigurationTest {
         assertThat(result).containsExactly(original);
         assertThat(said).singleElement()
                 .satisfies(record -> assertThat(record.getMessage())
-                        .as("причина названа не та: ветка могла сработать по классу, а не по методу")
+                        .as("по строке должно быть понятно, какой бин ослеп, какой это класс и из-за чего")
+                        .contains("ds")
+                        .contains("HiddenFinalMethodDataSource")
                         .contains("stamp"));
     }
 

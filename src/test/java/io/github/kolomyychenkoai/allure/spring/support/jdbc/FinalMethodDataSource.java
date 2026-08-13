@@ -25,6 +25,15 @@ public class FinalMethodDataSource extends AbstractDataSource {
         return stamp;
     }
 
+    /**
+     * Второй {@code final}-метод, и по алфавиту он ПОЗЖЕ первого. Нужен, чтобы проверить
+     * выбор наименьшего по имени: порядок {@code getDeclaredMethods()} не определён, и без
+     * сортировки предупреждение называло бы разные методы на разных прогонах и JDK.
+     */
+    public final String zzzAnotherFinal() {
+        return stamp;
+    }
+
     @Override
     public Connection getConnection() {
         throw new UnsupportedOperationException("соединение у этой пустышки не спрашивают");

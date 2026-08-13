@@ -131,8 +131,15 @@ public final class AllureDataSourceProxies {
 
     /**
      * Акцессоры чужих обёрток, по которым видно наш прокси внутри цепочки: {@code getTargetDataSource}
-     * у наследников {@code DelegatingDataSource}, цели у {@code AbstractRoutingDataSource}. Ищем
-     * рефлексией, потому что spring-jdbc нет в compile-classpath библиотеки (приём из {@code JpaLaziness}).
+     * у наследников {@code DelegatingDataSource}, цели у {@code AbstractRoutingDataSource}.
+     * <p>
+     * Рефлексия здесь не из-за отсутствия классов — spring-jdbc в classpath библиотеки есть
+     * (`provided`). Причина в том, что у ПОТРЕБИТЕЛЯ его может не быть: ссылка на тип в этом
+     * коде загружалась бы на каждом бине `DataSource` и валила бы обёртку
+     * {@code NoClassDefFoundError} там, где сегодня она просто ничего не находит. Имена
+     * стережёт канарейка {@code canary/InstrumentationApiCanaryTest.dataSourceChainAccessors}:
+     * компилятор строки не проверяет, а переименование в Spring дало бы не падение,
+     * а задвоенный SQL в отчёте.
      */
     private static final List<String> DELEGATE_ACCESSORS =
             List.of("getTargetDataSource", "getResolvedDefaultDataSource", "getResolvedDataSources");

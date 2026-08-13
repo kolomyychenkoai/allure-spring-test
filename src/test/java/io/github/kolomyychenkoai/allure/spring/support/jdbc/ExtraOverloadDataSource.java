@@ -14,17 +14,26 @@ import java.util.Properties;
  */
 public class ExtraOverloadDataSource extends FakeDataSource {
 
+    /** Метки, дошедшие до пула последним вызовом: по ним видно, не выбросили ли аргумент. */
+    private Properties lastLabels;
+
     public ExtraOverloadDataSource(String name) {
         super(name);
     }
 
+    public Properties lastLabels() {
+        return lastLabels;
+    }
+
     /** Метки соединения: сюда наш перехват лезть не должен. */
     public Connection getConnection(Properties labels) {
+        this.lastLabels = labels;
         return rawConnection();
     }
 
     /** Логин, пароль и метки: третий аргумент выбрасывать нельзя. */
     public Connection getConnection(String username, String password, Properties labels) {
-        return rawConnection();
+        this.lastLabels = labels;
+        return getConnection(username, password);
     }
 }

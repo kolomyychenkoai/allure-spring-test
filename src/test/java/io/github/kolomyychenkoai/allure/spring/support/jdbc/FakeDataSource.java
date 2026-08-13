@@ -28,8 +28,22 @@ public class FakeDataSource extends AbstractDataSource {
 
     private final String name;
 
+    /** Чем позвали последний раз. Без записи вызова тест не отличит порядок аргументов. */
+    private String lastUsername;
+    private String lastPassword;
+
     public FakeDataSource(String name) {
         this.name = name;
+    }
+
+    /** Логин, с которым пул позвали последним. */
+    public String lastUsername() {
+        return lastUsername;
+    }
+
+    /** Пароль, с которым пул позвали последним. */
+    public String lastPassword() {
+        return lastPassword;
     }
 
     /** Имя пула. Читает поле — тем и годится в проверку «вызов дошёл до настоящего объекта». */
@@ -49,6 +63,8 @@ public class FakeDataSource extends AbstractDataSource {
 
     @Override
     public Connection getConnection(String username, String password) {
+        this.lastUsername = username;
+        this.lastPassword = password;
         return connection;
     }
 

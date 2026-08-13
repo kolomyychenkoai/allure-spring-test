@@ -197,9 +197,26 @@ class InstrumentationApiCanaryTest {
     }
 
     @Test
+    @DisplayName("spring-jdbc: акцессоры цепочки DataSource — по ним обёртка узнаёт свой прокси")
+    void dataSourceChainAccessors() {
+        // Имена лежат строками в AllureDataSourceProxies.DELEGATE_ACCESSORS: компилятор их
+        // не проверяет, а переименование в Spring дало бы не падение, а ЗАДВОЕННЫЙ SQL
+        // в отчёте — обёртка перестала бы узнавать свой прокси внутри чужой цепочки.
+        String delegating = "org.springframework.jdbc.datasource.DelegatingDataSource";
+        String routing = "org.springframework.jdbc.datasource.lookup.AbstractRoutingDataSource";
+        require(hasMethod(delegating, "getTargetDataSource", 0, null),
+                "DelegatingDataSource.getTargetDataSource уехал → AllureDataSourceProxies.wrapsOurProxy, SQL задвоится");
+        require(hasMethod(routing, "getResolvedDefaultDataSource", 0, null),
+                "AbstractRoutingDataSource.getResolvedDefaultDataSource уехал → AllureDataSourceProxies.wrapsOurProxy");
+        require(hasMethod(routing, "getResolvedDataSources", 0, null),
+                "AbstractRoutingDataSource.getResolvedDataSources уехал → AllureDataSourceProxies.wrapsOurProxy");
+    }
+
+    @Test
     @DisplayName("HikariCP: у пула нет final-методов, иначе обёртка DataSource перестанет его проксировать")
     void hikariStaysProxyable() {
-        // Правило дублирует AllureDataSourceProxies.finalMethod — при его правке чинить оба места.
+        // Правило здесь СВОЁ и намеренно проще, чем в AllureDataSourceProxies.finalMethod
+        // (там ещё выбор наименьшего по имени): канарейке нужен факт «final-методов нет».
         // Вся правка по issue #54 стоит на том, что подкласс HikariDataSource завести можно.
         // Появится final-метод при апгрейде пула — SQL пропадёт у ВСЕХ потребителей разом,
         // и без этой канарейки диагноз был бы «отчёт разошёлся с эталоном» вместо причины.
