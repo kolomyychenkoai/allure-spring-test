@@ -28,4 +28,12 @@ public sealed class SealedDataSource extends AbstractDataSource permits SealedDa
     /** Единственный разрешённый наследник: нужен, чтобы класс вообще был запечатанным. */
     public static final class Allowed extends SealedDataSource {
     }
+
+    /** Своё имя вместо {@code Класс@хэш}: identity-хэш плавает между прогонами и запрещён
+     * правилом гигиены имён (см. {@code docs/acceptance-report-standard.md}). */
+    @Override
+    public String toString() {
+        return "запечатанный пул";
+    }
+
 }

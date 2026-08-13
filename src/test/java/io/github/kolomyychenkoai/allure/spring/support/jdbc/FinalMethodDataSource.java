@@ -43,4 +43,12 @@ public class FinalMethodDataSource extends AbstractDataSource {
     public Connection getConnection(String username, String password) {
         return getConnection();
     }
+
+    /** Своё имя вместо {@code Класс@хэш}: identity-хэш плавает между прогонами и запрещён
+     * правилом гигиены имён (см. {@code docs/acceptance-report-standard.md}). */
+    @Override
+    public String toString() {
+        return "пул с final-методом";
+    }
+
 }

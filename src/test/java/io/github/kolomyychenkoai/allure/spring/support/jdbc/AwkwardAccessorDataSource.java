@@ -52,14 +52,76 @@ public final class AwkwardAccessorDataSource {
         }
     }
 
+    /**
+     * Акцессор, объявленный в публичном ИНТЕРФЕЙСЕ, а класс обёртки — непубличный. Без обхода
+     * интерфейсов объявление не находится нигде, вызов падает {@code IllegalAccessException},
+     * защита от задвоения молча выключается — и запрос попадает в отчёт дважды.
+     */
+    public interface TargetAware {
+        DataSource getTargetDataSource();
+    }
+
+    /**
+     * Непубличный класс: объявление акцессора доступно ТОЛЬКО через интерфейс.
+     * ⚠️ НЕ {@code final}: иначе обёртка отбрасывает его предпроверкой, возвращает как есть,
+     * и тест про интерфейсы становится зелёным по неверной причине — поймано мутацией.
+     */
+    static class HiddenImpl extends FakeDataSource implements TargetAware {
+
+        private final DataSource target;
+
+        HiddenImpl(DataSource target) {
+            super("непубличная обёртка");
+            this.target = target;
+        }
+
+        @Override
+        public DataSource getTargetDataSource() {
+            return target;
+        }
+    }
+
+    /** Непубличная обёртка над переданной целью: сам класс наружу не отдаём. */
+    public static DataSource hiddenWrapperOver(DataSource target) {
+        return new HiddenImpl(target);
+    }
+
+    /** Роутер, отдающий карту целей с {@code null}: у чужой реализации карта произвольна. */
+    public static class NullInTargetsMap extends FakeDataSource {
+
+        private final java.util.Map<Object, DataSource> targets = new java.util.HashMap<>();
+
+        public NullInTargetsMap(String name, DataSource resolved) {
+            super(name);
+            targets.put("нерезолвленный тенант", null);
+            targets.put("резолвленный", resolved);
+        }
+
+        public java.util.Map<Object, DataSource> getResolvedDataSources() {
+            return targets;
+        }
+    }
+
     /** Обёртка, ссылающаяся сама на себя: обход не имеет права зациклиться. */
     public static class SelfReferencing extends FakeDataSource {
+
+        private int accessorCalls;
 
         public SelfReferencing(String name) {
             super(name);
         }
 
+        /**
+         * Сколько раз обход спросил цель. Проверять надо ИМЕННО это: таймер сторожит только
+         * «не бесконечно», и предел мог бы вырасти в тысячи раз, оставаясь в бюджете —
+         * замерено, при пределе в миллион обход укладывался в пять секунд.
+         */
+        public int accessorCalls() {
+            return accessorCalls;
+        }
+
         public DataSource getTargetDataSource() {
+            accessorCalls++;
             return this;
         }
     }

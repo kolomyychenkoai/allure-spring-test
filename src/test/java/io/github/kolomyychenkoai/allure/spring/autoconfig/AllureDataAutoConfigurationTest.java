@@ -5,6 +5,7 @@ import io.qameta.allure.Epic;
 import io.github.kolomyychenkoai.allure.spring.data.AllureDataSourceAutoConfiguration;
 import io.github.kolomyychenkoai.allure.spring.data.AllureDataJpaAutoConfiguration;
 
+import io.github.kolomyychenkoai.allure.spring.data.internal.AllureDataSourceProxies;
 import io.github.kolomyychenkoai.allure.spring.data.internal.AllureDataSourceProxies.AllureProxiedDataSource;
 import io.github.kolomyychenkoai.allure.spring.data.internal.AllureRepositoryAspect;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
@@ -40,7 +41,6 @@ import javax.sql.DataSource;
 import java.lang.reflect.Proxy;
 import java.sql.Connection;
 import java.sql.Statement;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -50,7 +50,6 @@ import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 /**
  * Уровень A: авто-конфиги БД и обёртка бина {@code DataSource}.
@@ -310,9 +309,10 @@ class AllureDataAutoConfigurationTest {
     @Test
     @DisplayName("цепочка из трёх бинов Spring пишет запрос ОДИН раз")
     void chainOfSpringBeansLogsQueryOnce() throws Exception {
-        // Мультиарендная раскладка из документации Spring: lazy → routing → пул. Обёрнуты все
-        // три, дубли гасит счётчик глубины. Классы берём НАСТОЯЩИЕ: самодельная фикстура
-        // подтверждала бы сама себя, а тут проверяется наша совместимость со Spring.
+        // Мультиарендная раскладка из документации Spring: lazy → routing → пул. Обёрнут
+        // только пул, внешние два пропускает структурная проверка — она и стережётся здесь.
+        // Классы берём НАСТОЯЩИЕ: самодельная фикстура подтверждала бы сама себя, а тут
+        // проверяется наша совместимость со Spring.
         // Мутация: убрать структурную проверку wrapsOurProxy → внешние бины тоже обернутся,
         // и шагов станет больше одного → RED. (Гард HANDING_OUT здесь ни при чём: нашим
         // прокси является только пул, вложенного перехвата в цепочке нет — стережёт гард
@@ -378,9 +378,13 @@ class AllureDataAutoConfigurationTest {
         // private static class TenantRouter extends AbstractRoutingDataSource.
         // Мутация: искать акцессор на target.getClass(), а не на публичном предке → RED.
         DataSource inner = (DataSource) wrap(new FakeDataSource("внутренний"));
+        PrivateDelegating outer = new PrivateDelegating(inner);
+        List<Object> result = new ArrayList<>();
 
-        assertThat(wrap(new PrivateDelegating(inner))).isInstanceOf(PrivateDelegating.class)
-                .isNotInstanceOf(AllureProxiedDataSource.class);
+        List<LogRecord> said = logWhile(() -> result.add(wrap(outer)));
+
+        assertThat(result).containsExactly(outer);
+        assertThat(said).as("это короткий путь по нашему маркеру, а не деградация").isEmpty();
     }
 
     /** Обёртка, объявленная приватным классом: акцессор виден только через публичного предка. */
@@ -452,6 +456,138 @@ class AllureDataAutoConfigurationTest {
     }
 
     @Test
+    @DisplayName("цепочка над СЫРЫМ пулом оборачивается — иначе SQL пропадёт целиком")
+    void chainOverRawPoolIsWrapped() {
+        // Обратная сторона структурной проверки, и без неё она бесконтрольна: пул, созданный
+        // не бином (`@Bean DataSource ds() { return new LazyConnectionDataSourceProxy(new
+        // HikariDataSource(...)); }`), через постпроцессор не проходит, и обернуть внешний бин —
+        // единственный шанс на SQL. Мутация: гасить ЛЮБУЮ известную цепочку, а не только свою
+        // (`target instanceof DataSource && target != node`) → RED.
+        DataSource raw = new FakeDataSource("сырой, не через постпроцессор");
+
+        assertThat(wrap(new LazyConnectionDataSourceProxy(raw)))
+                .isInstanceOf(AllureProxiedDataSource.class);
+    }
+
+    @Test
+    @DisplayName("акцессор из публичного интерфейса находится у непубличной обёртки")
+    void interfaceDeclaredAccessorIsFound() {
+        // Непубличный класс потребителя, реализующий публичный интерфейс: объявления нет
+        // ни в одном классе иерархии, и без обхода интерфейсов вызов падает
+        // IllegalAccessException, защита молча выключается, запрос идёт в отчёт дважды.
+        // Мутация: убрать интерфейсы из declarationCandidates → RED.
+        // Якорь: сама обёртка обязана быть проксируемой, иначе «вернули как есть» ничего
+        // не доказывает — непроксируемый класс возвращается как есть по другой причине.
+        assertThat(wrap(AwkwardAccessorDataSource.hiddenWrapperOver(new FakeDataSource("сырой"))))
+                .as("фикстура не проксируется — тест проверял бы не тот механизм")
+                .isInstanceOf(AllureProxiedDataSource.class);
+
+        DataSource inner = (DataSource) wrap(new FakeDataSource("внутренний"));
+        DataSource outer = AwkwardAccessorDataSource.hiddenWrapperOver(inner);
+
+        assertThat(wrap(outer)).isSameAs(outer);
+    }
+
+    @Test
+    @DisplayName("null в карте целей не роняет обход")
+    void nullInTargetsMapIsSkipped() {
+        // Карта чужая: у самописного роутера в ней бывает null («тенант ещё не резолвился»).
+        // Наш же NullPointerException уехал бы потребителю как «сбой инструментирования»,
+        // а пул остался бы без обёртки. Мутация: убрать filter(Objects::nonNull) → RED.
+        DataSource inner = (DataSource) wrap(new FakeDataSource("внутренний"));
+        AwkwardAccessorDataSource.NullInTargetsMap routing =
+                new AwkwardAccessorDataSource.NullInTargetsMap("роутер с дырой", inner);
+        List<Object> result = new ArrayList<>();
+
+        List<LogRecord> said = logWhile(() -> result.add(wrap(routing)));
+
+        assertThat(result).containsExactly(routing);
+        assertThat(said).as("свой NPE предъявлен потребителю как сбой инструментирования").isEmpty();
+    }
+
+    @Test
+    @DisplayName("бросок из пула не оставляет счётчик глубины взведённым")
+    void guardIsClearedAfterFailedIssue() {
+        // Протечка ThreadLocal выключила бы SQL этого потока до конца прогона, и это самый
+        // вероятный путь протечки — исключение, а не успешный вызов.
+        // Мутация: не снимать HANDING_OUT в finally → следующий пул промолчит → RED.
+        HikariDataSource broken = h2Pool("guard-broken");
+        broken.setJdbcUrl("jdbc:h2:mem:guard-broken;INIT=RUNSCRIPT FROM 'нет такого файла'");
+        DataSource wrappedBroken = (DataSource) wrap(broken);
+        HikariDataSource healthy = h2Pool("guard-healthy");
+        DataSource wrappedHealthy = (DataSource) wrap(healthy);
+
+        List<Boolean> threw = new ArrayList<>();
+        InMemoryAllure allure = new InMemoryAllure().install();
+        try {
+            TestResult recorded = allure.run("сбой, затем обычный запрос", () -> {
+                try {
+                    wrappedBroken.getConnection();
+                    threw.add(false);
+                } catch (Exception expected) {
+                    threw.add(true);
+                }
+                select(wrappedHealthy);
+            });
+
+            // ⚠️ Без этой строки тест зелен по слабому основанию: не бросив, первый пул просто
+            // не создаёт шагов, и «ровно один шаг» сошлось бы само по себе.
+            assertThat(threw).as("сломанный пул не бросил — проверять нечего").containsExactly(true);
+            assertThat(sqlSteps(recorded))
+                    .as("после броска счётчик остался взведённым — SQL этого потока пропал")
+                    .hasSize(1);
+        } finally {
+            allure.uninstall();
+            broken.close();
+            healthy.close();
+        }
+    }
+
+    @Test
+    @DisplayName("вложенная выдача соседнего пула глушится — известная цена счётчика")
+    void nestedIssueOfAnotherPoolIsSuppressed() {
+        // ⚠️ Тест прибивает ИЗВЕСТНОЕ ОГРАНИЧЕНИЕ, а не желаемое поведение. Флаг один на поток,
+        // поэтому мультиарендный резолвер, спрашивающий тенанта у отдельного пула внутри своего
+        // getConnection, теряет в отчёте шаг этого запроса. Ключ по самому пулу не помогает:
+        // в цепочке чужих декораторов объекты как раз РАЗНЫЕ. Уедет поведение — узнаем здесь,
+        // а не от потребителя.
+        HikariDataSource metadata = h2Pool("nested-meta");
+        DataSource wrappedMetadata = (DataSource) wrap(metadata);
+        HikariDataSource main = h2Pool("nested-main");
+        DataSource wrappedMain = (DataSource) wrap(new ResolvingDataSource(main, wrappedMetadata));
+
+        InMemoryAllure allure = new InMemoryAllure().install();
+        try {
+            TestResult recorded = allure.run("выдача с резолвом тенанта", () -> select(wrappedMain));
+
+            assertThat(sqlSteps(recorded))
+                    .as("поведение изменилось: вложенный запрос резолва теперь виден или пропал главный")
+                    .hasSize(1);
+        } finally {
+            allure.uninstall();
+            main.close();
+            metadata.close();
+        }
+    }
+
+    /** Резолвер тенанта: внутри своей выдачи спрашивает ОТДЕЛЬНЫЙ метаданный пул. */
+    static class ResolvingDataSource extends org.springframework.jdbc.datasource.DelegatingDataSource {
+
+        private final DataSource metadata;
+
+        ResolvingDataSource(DataSource target, DataSource metadata) {
+            super(target);
+            this.metadata = metadata;
+        }
+
+        @Override
+        public Connection getConnection() throws java.sql.SQLException {
+            select(metadata);
+            return super.getConnection();
+        }
+    }
+
+    @Test
     @DisplayName("цель роутера видна и через карту, а не только через default-цель")
     void routingTargetsMapIsWalked() {
         // У AbstractRoutingDataSource цели лежат в КАРТЕ, и без её обхода мы бы увидели только
@@ -461,8 +597,12 @@ class AllureDataAutoConfigurationTest {
         TenantRouting routing = new TenantRouting();
         routing.setTargetDataSources(Map.of("тенант", inner));
         routing.afterPropertiesSet();
+        List<Object> result = new ArrayList<>();
 
-        assertThat(wrap(routing)).isSameAs(routing);
+        List<LogRecord> said = logWhile(() -> result.add(wrap(routing)));
+
+        assertThat(result).containsExactly(routing);
+        assertThat(said).as("это короткий путь по нашему маркеру, а не деградация").isEmpty();
     }
 
     @Test
@@ -499,13 +639,17 @@ class AllureDataAutoConfigurationTest {
     @Test
     @DisplayName("обёртка, ссылающаяся сама на себя, не зацикливает обход")
     void selfReferencingWrapperTerminates() {
-        // Предел CHAIN_LIMIT держит не только глубину, но и цикл. Мутация: убрать условие
-        // visited < CHAIN_LIMIT → обход не завершится, тест повиснет и упадёт по таймауту.
+        // Предел CHAIN_LIMIT держит и глубину, и цикл. Считаем ВЫЗОВЫ, а не время: таймер
+        // сторожил бы только «не бесконечно», и предел мог бы вырасти в тысячи раз, оставаясь
+        // в бюджете, — а обход идёт на каждом бине DataSource у потребителя.
+        // Мутация: убрать условие visited < CHAIN_LIMIT → обход не завершится → RED.
         AwkwardAccessorDataSource.SelfReferencing pool =
                 new AwkwardAccessorDataSource.SelfReferencing("сам на себя");
 
-        assertTimeoutPreemptively(Duration.ofSeconds(5),
-                () -> assertThat(wrap(pool)).isInstanceOf(AllureProxiedDataSource.class));
+        assertThat(wrap(pool)).isInstanceOf(AllureProxiedDataSource.class);
+        assertThat(pool.accessorCalls())
+                .as("обход спросил цель больше раз, чем разрешает предел")
+                .isLessThanOrEqualTo(AllureDataSourceProxies.CHAIN_LIMIT);
     }
 
     @Test
@@ -621,7 +765,12 @@ class AllureDataAutoConfigurationTest {
 
         assertThat(result).containsExactly(aopProxied);
         assertThat(said).singleElement()
-                .satisfies(record -> assertThat(record.getMessage()).contains("чужой Spring AOP"));
+                .satisfies(record -> assertThat(record.getMessage())
+                        .as("в строке должен стоять класс ПОТРЕБИТЕЛЯ: имя вида Пул$$SpringCGLIB$$0 "
+                                + "читатель принимает за поломку библиотеки")
+                        .contains("чужой Spring AOP")
+                        .contains("FakeDataSource")
+                        .doesNotContain("$$"));
     }
 
     @Test

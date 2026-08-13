@@ -65,6 +65,15 @@ class InstrumentationApiCanaryTest {
         }
     }
 
+    /** Есть ли безаргументный метод с ОЖИДАЕМЫМ типом возврата (имени мало, см. dataSourceChainAccessors). */
+    private static boolean returns(String className, String method, String returnType) {
+        try {
+            return Class.forName(className).getMethod(method).getReturnType().getName().equals(returnType);
+        } catch (ClassNotFoundException | NoSuchMethodException gone) {
+            return false;
+        }
+    }
+
     /** Есть ли класс на classpath (для канареек на сам класс, а не его метод). */
     private static boolean classPresent(String className) {
         try {
@@ -204,12 +213,18 @@ class InstrumentationApiCanaryTest {
         // в отчёте — обёртка перестала бы узнавать свой прокси внутри чужой цепочки.
         String delegating = "org.springframework.jdbc.datasource.DelegatingDataSource";
         String routing = "org.springframework.jdbc.datasource.lookup.AbstractRoutingDataSource";
-        require(hasMethod(delegating, "getTargetDataSource", 0, null),
-                "DelegatingDataSource.getTargetDataSource уехал → AllureDataSourceProxies.wrapsOurProxy, SQL задвоится");
-        require(hasMethod(routing, "getResolvedDefaultDataSource", 0, null),
-                "AbstractRoutingDataSource.getResolvedDefaultDataSource уехал → AllureDataSourceProxies.wrapsOurProxy");
-        require(hasMethod(routing, "getResolvedDataSources", 0, null),
-                "AbstractRoutingDataSource.getResolvedDataSources уехал → AllureDataSourceProxies.wrapsOurProxy");
+        // ⚠️ Сверяем и ТИП ВОЗВРАТА. read() с некоторых пор гейтит акцессор по нему: не
+        // DataSource и не Map — метод не зовётся вовсе. Проверяй канарейка одно имя, смена
+        // возврата (скажем, на Optional<DataSource>) оставила бы её зелёной, а защиту мёртвой.
+        require(returns(delegating, "getTargetDataSource", "javax.sql.DataSource"),
+                "DelegatingDataSource.getTargetDataSource уехал или сменил тип возврата → "
+                        + "AllureDataSourceProxies.wrapsOurProxy ослепнет, SQL задвоится");
+        require(returns(routing, "getResolvedDefaultDataSource", "javax.sql.DataSource"),
+                "AbstractRoutingDataSource.getResolvedDefaultDataSource уехал или сменил тип возврата "
+                        + "→ AllureDataSourceProxies.wrapsOurProxy");
+        require(returns(routing, "getResolvedDataSources", "java.util.Map"),
+                "AbstractRoutingDataSource.getResolvedDataSources уехал или сменил тип возврата "
+                        + "→ AllureDataSourceProxies.wrapsOurProxy");
     }
 
     @Test

@@ -16,10 +16,12 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Proxy;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Deque;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -76,7 +78,10 @@ import java.util.Optional;
  * {@code LazyConnectionDataSourceProxy} спрашивает цель не в {@code getConnection}, а позже,
  * при первом запросе — счётчик к тому времени уже снят, и без первого механизма запрос
  * попадал в отчёт дважды. ⚠️ Остаётся щель: чужой декоратор с НЕизвестным акцессором И
- * ленивой делегацией даст задвоение. Известных таких нет, но обещать полноту нечестно.
+ * ленивой делегацией — или делегацией в ДРУГОМ потоке — даст задвоение. Незнакомым считается
+ * не только чужое ИМЯ акцессора: цель остаётся непрочитанной и когда акцессор бросил, и когда
+ * у него чужой тип возврата (обе формы замерены, под них лежат фикстуры). Известных таких
+ * пулов нет, но обещать полноту нечестно.
  * <p>
  * ⚠️ <b>Идентичность бина меняется</b> (issue #59): {@code ds != исходный}, {@code getClass()}
  * даёт класс прокси, рефлексия по полям видит пустой экземпляр, {@code equals}/{@code hashCode}
@@ -124,8 +129,14 @@ public final class AllureDataSourceProxies {
      * структурной проверки такая цепочка даёт два шага на запрос. Потому механизма два.
      * <p>
      * ⚠️ Снимать ТОЛЬКО в {@code finally}: незакрытый флаг выключил бы SQL этого потока
-     * до конца прогона. Соседние пулы друг друга не глушат — флаг живёт ровно на время одного
-     * вызова, и два разных пула в одном тесте дают два шага (замерено).
+     * до конца прогона — в том числе при броске из чужого пула.
+     * <p>
+     * ⚠️ <b>Цена механизма.</b> Флаг один на поток, а не на пул, поэтому глушится ЛЮБАЯ
+     * вложенная выдача — даже когда пулы друг другу чужие. Мультиарендный резолвер, который
+     * внутри своего {@code getConnection} спрашивает тенанта у отдельного метаданного пула,
+     * потеряет в отчёте шаг этого запроса. Замерено. Ключ по самому пулу тут не помогает:
+     * в цепочке из чужих декораторов объекты как раз РАЗНЫЕ, и по ключу гард бы не сработал
+     * там, где он и нужен. Последовательные вызовы двух пулов дают два шага, как и ожидается.
      */
     private static final ThreadLocal<Boolean> HANDING_OUT = new ThreadLocal<>();
 
@@ -148,8 +159,12 @@ public final class AllureDataSourceProxies {
      * Сколько бинов цепочки осматриваем. Три звена — уже мультиарендная схема из документации
      * Spring, плюс запас на несколько целей у роутера. Предел держит и циклы: чужой бин вправе
      * вернуть из акцессора самого себя, а зациклиться на старте контекста потребителя нельзя.
+     * <p>
+     * Публичная, потому что предел читает страж {@code autoconfig/AllureDataAutoConfigurationTest}:
+     * копия числом сторожила бы своё представление о пределе, а не сам предел. Обход идёт
+     * на КАЖДОМ бине {@code DataSource} у потребителя, поэтому вырасти незаметно он не должен.
      */
-    private static final int CHAIN_LIMIT = 8;
+    public static final int CHAIN_LIMIT = 8;
 
     private AllureDataSourceProxies() {
     }
@@ -286,7 +301,9 @@ public final class AllureDataSourceProxies {
     /** Значение акцессора как список целей: у роутера это карта, у прочих — один бин. */
     private static List<Object> targets(Object value) {
         if (value instanceof Map<?, ?> map) {
-            return List.copyOf(map.values());
+            // Карта чужая: null в значениях уронил бы List.copyOf, и наш собственный
+            // NullPointerException уехал бы потребителю как «сбой инструментирования».
+            return map.values().stream().filter(Objects::nonNull).map(Object.class::cast).toList();
         }
         return value == null ? List.of() : List.of(value);
     }
@@ -305,24 +322,42 @@ public final class AllureDataSourceProxies {
      * угодно, и звать его ради «вдруг подойдёт» мы не вправе.
      */
     private static Object read(Object target, String accessor) {
-        for (Class<?> type = target.getClass(); type != null; type = type.getSuperclass()) {
-            if (!Modifier.isPublic(type.getModifiers())) {
+        for (Class<?> declaring : declarationCandidates(target.getClass())) {
+            if (!Modifier.isPublic(declaring.getModifiers())) {
                 continue;
             }
             try {
-                Method method = type.getMethod(accessor);
+                Method method = declaring.getMethod(accessor);
                 Class<?> returns = method.getReturnType();
                 if (!DataSource.class.isAssignableFrom(returns) && !Map.class.isAssignableFrom(returns)) {
                     return null;
                 }
                 return method.invoke(target);
-            } catch (NoSuchMethodException lookHigher) {
+            } catch (Throwable lookFurther) {
+                // И «метода тут нет», и «вызов не удался» значат одно: доступного объявления
+                // здесь не нашлось — ищем дальше. Обрыв поиска на первом же сбое выключал бы
+                // защиту у бина, чей акцессор объявлен ниже по списку.
                 continue;
-            } catch (Throwable broken) {
-                return null;
             }
         }
         return null;
+    }
+
+    /**
+     * Где искать объявление акцессора: сперва классы иерархии, потом публичные интерфейсы.
+     * <p>
+     * Интерфейсы нужны не для полноты: непубличный класс потребителя, реализующий публичный
+     * интерфейс с этим методом, иначе прячет объявление целиком — вызов падает
+     * {@code IllegalAccessException}, защита молча выключается, и запрос попадает в отчёт
+     * дважды. Замерено. Тот же приём Spring применяет в {@code ClassUtils.getInterfaceMethodIfPossible}.
+     */
+    private static List<Class<?>> declarationCandidates(Class<?> type) {
+        List<Class<?>> candidates = new ArrayList<>();
+        for (Class<?> current = type; current != null && current != Object.class; current = current.getSuperclass()) {
+            candidates.add(current);
+        }
+        candidates.addAll(Arrays.asList(ClassUtils.getAllInterfacesForClass(type)));
+        return candidates;
     }
 
     /**

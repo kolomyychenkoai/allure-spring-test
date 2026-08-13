@@ -36,4 +36,12 @@ public class OpaqueDelegatingDataSource extends AbstractDataSource {
     public Connection getConnection(String username, String password) throws SQLException {
         return delegate.getConnection(username, password);
     }
+
+    /** Своё имя вместо {@code Класс@хэш}: identity-хэш плавает между прогонами и запрещён
+     * правилом гигиены имён (см. {@code docs/acceptance-report-standard.md}). */
+    @Override
+    public String toString() {
+        return "декоратор с чужим акцессором";
+    }
+
 }
