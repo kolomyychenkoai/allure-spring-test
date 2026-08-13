@@ -329,6 +329,12 @@ public final class AllureDataSourceProxies {
                 Method method = declaring.getMethod(accessor);
                 Class<?> returns = method.getReturnType();
                 if (!DataSource.class.isAssignableFrom(returns) && !Map.class.isAssignableFrom(returns)) {
+                    // Тот же исход, что у броска ниже: объявление найдено, цель не прочитана,
+                    // защита от задвоения для этого бина выключена. След ставим на СОСТОЯНИЕ,
+                    // а не на ту ветку, которую заметили первой.
+                    AllureInstrumentationLogger.trace("DbDataSource", () -> "акцессор " + accessor + " у "
+                            + ClassUtils.getUserClass(target.getClass()).getName() + " вернул " + returns.getName()
+                            + ", а не пул — защита от задвоения SQL для этого бина не сработает");
                     return null;
                 }
                 return method.invoke(target);
@@ -343,7 +349,7 @@ public final class AllureDataSourceProxies {
                 // а побочный эффект чужого резолва (соединение, метрика отказа, счётчик
                 // размыкателя) повторился бы по разу на каждое объявление. Замерено: 3 вызова
                 // при трёх кандидатах.
-                AllureInstrumentationLogger.trace("DbDataSource", "акцессор " + accessor + " у "
+                AllureInstrumentationLogger.trace("DbDataSource", () -> "акцессор " + accessor + " у "
                         + ClassUtils.getUserClass(target.getClass()).getName() + " бросил, цель не прочитана"
                         + " — защита от задвоения SQL для этого бина не сработает");
                 return null;

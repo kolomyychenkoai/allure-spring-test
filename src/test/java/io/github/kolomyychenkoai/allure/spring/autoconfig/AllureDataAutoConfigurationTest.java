@@ -45,6 +45,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.logging.Handler;
+import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 
@@ -646,12 +647,25 @@ class AllureDataAutoConfigurationTest {
         AwkwardAccessorDataSource.ForeignReturnType pool =
                 new AwkwardAccessorDataSource.ForeignReturnType("чужой акцессор");
 
-        Object wrapped = wrap(pool);
+        Logger logger = AllureInstrumentationLogger.logger();
+        Level previous = logger.getLevel();
+        List<Object> wrapped = new ArrayList<>();
+        List<LogRecord> said;
+        logger.setLevel(Level.FINE);
+        try {
+            said = logWhile(() -> wrapped.add(wrap(pool)));
+        } finally {
+            logger.setLevel(previous);
+        }
 
         assertThat(pool.wasCalled())
                 .as("позвали чужой метод только потому, что имя совпало")
                 .isFalse();
-        assertThat(wrapped).isInstanceOf(AllureProxiedDataSource.class);
+        assertThat(wrapped.get(0)).isInstanceOf(AllureProxiedDataSource.class);
+        // Обе ветки «цель не прочитана» обязаны оставлять след, а не только та, что с броском.
+        // Мутация: убрать trace у ветки чужого типа возврата → RED.
+        assertThat(said).singleElement()
+                .satisfies(record -> assertThat(record.getMessage()).contains("а не пул"));
     }
 
     @Test
@@ -662,12 +676,48 @@ class AllureDataAutoConfigurationTest {
         // исходный бин через общий catch → RED.
         AwkwardAccessorDataSource.ThrowingAccessor pool =
                 new AwkwardAccessorDataSource.ThrowingAccessor("бросающий акцессор");
+        List<Object> result = new ArrayList<>();
 
-        assertThat(wrap(pool)).isInstanceOf(AllureProxiedDataSource.class);
+        List<LogRecord> said = logWhile(() -> result.add(wrap(pool)));
+
+        assertThat(result.get(0)).isInstanceOf(AllureProxiedDataSource.class);
+        // ⚠️ Проверяем УРОВЕНЬ, а не молчание: печатается запись или нет, зависит от настроек
+        // логирования вокруг, и «пусто» было зелёным в одиночку и красным в полном прогоне.
+        // Инвариант же в другом: этот след не имеет права стать видимым по умолчанию.
+        assertThat(said).allSatisfy(record -> assertThat(record.getLevel())
+                .as("след про непрочитанную цель поднялся выше FINE: он для разбора жалобы, "
+                        + "а не для каждого старта контекста у потребителя")
+                .isEqualTo(Level.FINE));
         assertThat(pool.accessorCalls())
                 .as("бросающий акцессор позван повторно: у чужого ленивого резолва это соединение, "
                         + "метрика отказа или счётчик размыкателя — по разу на каждого кандидата")
                 .isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("под FINE след называет акцессор и класс потребителя")
+    void traceNamesAccessorAndConsumerClass() {
+        // Обратная сторона теста выше: молчание не должно означать «не пишем вовсе».
+        // Мутация: убрать вызов trace(...) → RED; поменять FINE на WARNING → покраснеет соседний.
+        AwkwardAccessorDataSource.ThrowingAccessor pool =
+                new AwkwardAccessorDataSource.ThrowingAccessor("бросающий акцессор");
+        Logger logger = AllureInstrumentationLogger.logger();
+        Level previous = logger.getLevel();
+
+        List<LogRecord> said;
+        logger.setLevel(Level.FINE);
+        try {
+            said = logWhile(() -> wrap(pool));
+        } finally {
+            logger.setLevel(previous);
+        }
+
+        assertThat(said).singleElement()
+                .satisfies(record -> assertThat(record.getMessage())
+                        .as("по следу нельзя понять, какой акцессор у какого пула не прочитался")
+                        .contains("getTargetDataSource")
+                        .contains("ThrowingAccessor")
+                        .doesNotContain("$$"));
     }
 
     @Test

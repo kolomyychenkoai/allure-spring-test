@@ -1,5 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.internal;
 
+import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -35,12 +36,20 @@ public final class AllureInstrumentationLogger {
     }
 
     /**
-     * След для отладки: то, что при обычном прогоне шумом было бы, а при разборе жалобы
-     * нужно. Уровень {@link Level#FINE} — по умолчанию не печатается, включается
-     * {@code logger().setLevel(Level.FINE)}, как и обещает javadoc класса.
+     * След для разбора жалобы: при обычном прогоне он был бы шумом, а когда потребитель
+     * пришёл с расхождением в отчёте — единственная зацепка. Уровень {@link Level#FINE},
+     * по умолчанию молчит; включается {@code logger().setLevel(Level.FINE)}.
+     * <p>
+     * <b>Отличие от {@link #note(String, String)}</b>, с которым его легко спутать (обе берут
+     * две строки): {@code note} говорит о СПРОЕКТИРОВАННОМ исходе, который потребителю нужно
+     * знать сразу — часть отчёта не будет собрана. {@code trace} говорит о случае, который
+     * может ни во что не вылиться, и предъявлять его всем — тот же дефект, из-за которого
+     * {@code note} в своё время отделили от {@code warn}.
+     * <p>
+     * Сообщение — supplier, а не строка: на выключенном FINE склейка не выполняется вовсе.
      */
-    public static void trace(String component, String message) {
-        LOGGER.log(Level.FINE, () -> "[Allure " + component + "] " + message);
+    public static void trace(String component, Supplier<String> message) {
+        LOGGER.log(Level.FINE, () -> "[Allure " + component + "] " + message.get());
     }
 
     /**
