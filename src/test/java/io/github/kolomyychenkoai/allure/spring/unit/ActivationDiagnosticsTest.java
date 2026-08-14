@@ -172,8 +172,8 @@ class ActivationDiagnosticsTest {
     @Test
     @DisplayName("выключатель -Dallure.spring.diagnostics=off глушит и новость noteOnce")
     void switchSilencesNoteOnce() {
-        // README и текст самой новости обещают потребителю этот тумблер. На канале noteOnce
-        // он не был прибит ничем: снятие проверки давало 540 зелёных.
+        // README и текст самой новости обещают потребителю этот тумблер, а на канале noteOnce
+        // его не проверял никто: снятие проверки не краснило ни одного теста.
         // Мутация: убрать проверку SWITCH из noteOnce → RED.
         DiagnosticsReset.forget();
         String before = System.getProperty("allure.spring.diagnostics");

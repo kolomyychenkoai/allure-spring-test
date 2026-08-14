@@ -42,9 +42,10 @@ Surefire берёт классы по маскам `*Test`, `*Tests`, `*IT` — 
 
 Во втором исполнении идут `inventory/ReportInventoryCheck` и `inventory/TestCountCheck`.
 
-Из 35 вспомогательных 30 лежат в `support/`: тестовые приложения для JPA, Kafka
+Из 37 вспомогательных 31 лежит в `support/`: тестовые приложения для JPA, Kafka
 и Liquibase, фикстуры пулов в `support/jdbc/`, `InMemoryAllure` и `CurrentReport` (§6).
-Ещё 5 в `inventory/` —
+Ещё 5 в `inventory/`, и один — мостик `internal/DiagnosticsReset` к пакетно-приватному
+сбросу диагностики —
 там разбор отчёта, гигиена имён и шаблоны, которыми пользуются проверки §5.
 
 Демо помечены `@Epic("allure-spring-test")`, внутренние тесты — `@Epic("Внутренние проверки

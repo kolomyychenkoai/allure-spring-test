@@ -170,7 +170,8 @@ public final class ActivationDiagnostics {
      * помнил ли автор очередного catch про логгер.
      * <p>
      * ⚠️ НЕ подставляй сюда константу по месту: имя модуля в строке лога и есть грепаемая ручка
-     * «что именно потерялось». Гейта нет — схлопывание параметра в константу не краснит.
+     * «что именно потерялось». Держат {@code registryFailureNeverBreaksConsumerContext}
+     * и {@code diagnosticsSwitchDoesNotHideLibraryFailure} — оба требуют «DbRepository» в строке.
      *
      * @param component имя модуля, который пострадал
      */
