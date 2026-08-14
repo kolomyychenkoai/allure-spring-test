@@ -3,6 +3,7 @@ package io.github.kolomyychenkoai.allure.spring.unit;
 import io.github.kolomyychenkoai.allure.spring.internal.ActivationDiagnostics;
 import io.github.kolomyychenkoai.allure.spring.internal.DiagnosticsReset;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
+import io.github.kolomyychenkoai.allure.spring.support.LibraryLog;
 import io.qameta.allure.Epic;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -120,7 +121,7 @@ class ActivationDiagnosticsTest {
         // Мутация: убрать дедупликацию по SAID → две записи → RED.
         String unique = "проверка однократности " + UUID.randomUUID();
 
-        List<LogRecord> said = logWhile(() -> {
+        List<LogRecord> said = LibraryLog.capture(() -> {
             ActivationDiagnostics.noteOnce("DbRepository", unique);
             ActivationDiagnostics.noteOnce("DbRepository", unique);
         });
@@ -178,7 +179,7 @@ class ActivationDiagnosticsTest {
         String before = System.getProperty("allure.spring.diagnostics");
         System.setProperty("allure.spring.diagnostics", "off");
         try {
-            List<LogRecord> said = logWhile(() ->
+            List<LogRecord> said = LibraryLog.capture(() ->
                     ActivationDiagnostics.noteOnce("SwitchAxis", "новость, которую просили заглушить"));
 
             assertThat(said).as("выключатель обещан в README и в тексте самой новости, "
@@ -208,7 +209,7 @@ class ActivationDiagnosticsTest {
         DiagnosticsReset.forget();
         String component = "CapAxis" + UUID.randomUUID();
         try {
-            List<LogRecord> said = logWhile(() -> {
+            List<LogRecord> said = LibraryLog.capture(() -> {
                 for (int i = 0; i < 70; i++) {          // 70 > SAID_LIMIT (64)
                     ActivationDiagnostics.noteOnce(component, "переменный текст " + i);
                 }
@@ -253,31 +254,4 @@ class ActivationDiagnosticsTest {
                 .isEmpty();
     }
 
-    /** Слушаем логгер библиотеки: наружу новость видна ТОЛЬКО этой строкой. */
-    private static List<LogRecord> logWhile(Runnable action) {
-        List<LogRecord> records = new ArrayList<>();
-        Logger logger = AllureInstrumentationLogger.logger();
-        Handler collector = new Handler() {
-            @Override
-            public void publish(LogRecord record) {
-                records.add(record);
-            }
-
-            @Override
-            public void flush() {
-            }
-
-            @Override
-            public void close() {
-            }
-        };
-        collector.setLevel(Level.ALL);
-        logger.addHandler(collector);
-        try {
-            action.run();
-        } finally {
-            logger.removeHandler(collector);
-        }
-        return records;
-    }
 }

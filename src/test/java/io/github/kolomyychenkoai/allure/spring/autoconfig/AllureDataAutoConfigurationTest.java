@@ -8,6 +8,7 @@ import io.github.kolomyychenkoai.allure.spring.data.AllureDataJpaAutoConfigurati
 import io.github.kolomyychenkoai.allure.spring.data.internal.AllureDataSourceProxies.AllureProxiedDataSource;
 import io.github.kolomyychenkoai.allure.spring.data.internal.AllureRepositoryAspect;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
+import io.github.kolomyychenkoai.allure.spring.support.LibraryLog;
 import io.github.kolomyychenkoai.allure.spring.support.InMemoryAllure;
 import io.github.kolomyychenkoai.allure.spring.support.jdbc.AwkwardAccessorDataSource;
 import io.github.kolomyychenkoai.allure.spring.support.jdbc.ExtraOverloadDataSource;
@@ -90,35 +91,6 @@ class AllureDataAutoConfigurationTest {
         return bpp.postProcessAfterInitialization(bean, "ds");
     }
 
-    /**
-     * Что библиотека сказала в лог, пока шло действие. Деградация видна снаружи ТОЛЬКО этой
-     * строкой, поэтому её проверяем наравне с возвращённым объектом.
-     */
-    private static List<LogRecord> logWhile(Runnable action) {
-        List<LogRecord> records = new ArrayList<>();
-        Handler collector = new Handler() {
-            @Override
-            public void publish(LogRecord record) {
-                records.add(record);
-            }
-
-            @Override
-            public void flush() {
-            }
-
-            @Override
-            public void close() {
-            }
-        };
-        Logger logger = AllureInstrumentationLogger.logger();
-        logger.addHandler(collector);
-        try {
-            action.run();
-        } finally {
-            logger.removeHandler(collector);
-        }
-        return records;
-    }
 
     /** Шаги отчёта, которые дал SQL-листенер: по ним и видно задвоение. */
     private static List<String> sqlSteps(TestResult recorded) {
@@ -335,7 +307,7 @@ class AllureDataAutoConfigurationTest {
         Object once = wrap(new FakeDataSource("основной"));
         List<Object> twice = new ArrayList<>();
 
-        List<LogRecord> said = logWhile(() -> twice.add(wrap(once)));
+        List<LogRecord> said = LibraryLog.capture(() -> twice.add(wrap(once)));
 
         assertThat(twice).containsExactly(once);
         assertThat(said)
@@ -419,7 +391,7 @@ class AllureDataAutoConfigurationTest {
         PrivateDelegating outer = new PrivateDelegating(inner);
         List<Object> result = new ArrayList<>();
 
-        List<LogRecord> said = logWhile(() -> result.add(wrap(outer)));
+        List<LogRecord> said = LibraryLog.capture(() -> result.add(wrap(outer)));
 
         assertThat(result).containsExactly(outer);
         assertThat(said).as("это короткий путь по нашему маркеру, а не деградация").isEmpty();
@@ -476,7 +448,7 @@ class AllureDataAutoConfigurationTest {
         SealedDataSource original = new SealedDataSource();
         List<Object> result = new ArrayList<>();
 
-        List<LogRecord> said = logWhile(() -> result.add(wrap(original)));
+        List<LogRecord> said = LibraryLog.capture(() -> result.add(wrap(original)));
 
         assertThat(result).containsExactly(original);
         assertThat(said).singleElement()
@@ -559,7 +531,7 @@ class AllureDataAutoConfigurationTest {
                 new AwkwardAccessorDataSource.NullInTargetsMap("роутер с дырой", inner);
         List<Object> result = new ArrayList<>();
 
-        List<LogRecord> said = logWhile(() -> result.add(wrap(routing)));
+        List<LogRecord> said = LibraryLog.capture(() -> result.add(wrap(routing)));
 
         assertThat(result).containsExactly(routing);
         assertThat(said).as("свой NPE предъявлен потребителю как сбой инструментирования").isEmpty();
@@ -663,7 +635,7 @@ class AllureDataAutoConfigurationTest {
         routing.afterPropertiesSet();
         List<Object> result = new ArrayList<>();
 
-        List<LogRecord> said = logWhile(() -> result.add(wrap(routing)));
+        List<LogRecord> said = LibraryLog.capture(() -> result.add(wrap(routing)));
 
         assertThat(result).containsExactly(routing);
         assertThat(said).as("это короткий путь по нашему маркеру, а не деградация").isEmpty();
@@ -686,7 +658,7 @@ class AllureDataAutoConfigurationTest {
         List<LogRecord> said;
         logger.setLevel(Level.FINE);
         try {
-            said = logWhile(() -> wrapped.add(wrap(pool)));
+            said = LibraryLog.capture(() -> wrapped.add(wrap(pool)));
         } finally {
             logger.setLevel(previous);
         }
@@ -723,7 +695,7 @@ class AllureDataAutoConfigurationTest {
         List<LogRecord> said;
         logger.setLevel(Level.FINE);
         try {
-            said = logWhile(() -> result.add(wrap(pool)));
+            said = LibraryLog.capture(() -> result.add(wrap(pool)));
         } finally {
             logger.setLevel(previous);
         }
@@ -821,7 +793,7 @@ class AllureDataAutoConfigurationTest {
         List<LogRecord> said;
         logger.setLevel(Level.FINE);
         try {
-            said = logWhile(() -> wrap(pool));
+            said = LibraryLog.capture(() -> wrap(pool));
         } finally {
             logger.setLevel(previous);
         }
@@ -864,7 +836,7 @@ class AllureDataAutoConfigurationTest {
         ProxyDataSource already = ProxyDataSourceBuilder.create(new FakeDataSource("основной")).build();
         List<Object> result = new ArrayList<>();
 
-        List<LogRecord> said = logWhile(() -> result.add(wrap(already)));
+        List<LogRecord> said = LibraryLog.capture(() -> result.add(wrap(already)));
 
         assertThat(result).containsExactly(already);
         assertThat(said).as("чужой ProxyDataSource — не деградация, а короткий путь: лог молчит").isEmpty();
@@ -908,7 +880,7 @@ class AllureDataAutoConfigurationTest {
         FinalDataSource original = new FinalDataSource();
         List<Object> result = new ArrayList<>();
 
-        List<LogRecord> said = logWhile(() -> result.add(wrap(original)));
+        List<LogRecord> said = LibraryLog.capture(() -> result.add(wrap(original)));
 
         assertThat(result).containsExactly(original);
         assertThat(said).as("молчаливая деградация: SQL пропал, и никто не знает почему")
@@ -924,7 +896,7 @@ class AllureDataAutoConfigurationTest {
         FinalMethodDataSource original = new FinalMethodDataSource();
         List<Object> result = new ArrayList<>();
 
-        List<LogRecord> said = logWhile(() -> result.add(wrap(original)));
+        List<LogRecord> said = LibraryLog.capture(() -> result.add(wrap(original)));
 
         assertThat(result).containsExactly(original);
         assertThat(said).singleElement()
@@ -945,7 +917,7 @@ class AllureDataAutoConfigurationTest {
         HiddenFinalMethodDataSource original = new HiddenFinalMethodDataSource();
         List<Object> result = new ArrayList<>();
 
-        List<LogRecord> said = logWhile(() -> result.add(wrap(original)));
+        List<LogRecord> said = LibraryLog.capture(() -> result.add(wrap(original)));
 
         assertThat(result).containsExactly(original);
         assertThat(said).singleElement()
@@ -967,7 +939,7 @@ class AllureDataAutoConfigurationTest {
         Object aopProxied = foreign.getProxy();
         List<Object> result = new ArrayList<>();
 
-        List<LogRecord> said = logWhile(() -> result.add(wrap(aopProxied)));
+        List<LogRecord> said = LibraryLog.capture(() -> result.add(wrap(aopProxied)));
 
         assertThat(result).containsExactly(aopProxied);
         assertThat(said).singleElement()
@@ -1037,7 +1009,7 @@ class AllureDataAutoConfigurationTest {
         // ownAspectJAutoProxyKeepsTheDbSection и lateAspectJProxyCreatorStillGetsTheAspect.
         DiagnosticsReset.forget();
 
-        List<LogRecord> said = logWhile(() ->
+        List<LogRecord> said = LibraryLog.capture(() ->
                 new ApplicationContextRunner()
                         .withUserConfiguration(TransactionShapedConfig.class, LedgerShapedConfig.class)
                         .withConfiguration(AutoConfigurations.of(
@@ -1074,7 +1046,7 @@ class AllureDataAutoConfigurationTest {
         // автоконфигурации: lateAspectJProxyCreatorStillGetsTheAspect.
         DiagnosticsReset.forget();
 
-        List<LogRecord> said = logWhile(() ->
+        List<LogRecord> said = LibraryLog.capture(() ->
                 new ApplicationContextRunner()
                         .withUserConfiguration(OwnAspectJProxyConfig.class, LedgerShapedConfig.class)
                         .withConfiguration(AutoConfigurations.of(AllureDataJpaAutoConfiguration.class))
@@ -1098,7 +1070,7 @@ class AllureDataAutoConfigurationTest {
         // регистрации в BeanDefinitionRegistryPostProcessor → RED.
         DiagnosticsReset.forget();
 
-        List<LogRecord> said = logWhile(() ->
+        List<LogRecord> said = LibraryLog.capture(() ->
                 new ApplicationContextRunner()
                         .withConfiguration(AutoConfigurations.of(
                                 AopAutoConfiguration.class,
@@ -1181,7 +1153,7 @@ class AllureDataAutoConfigurationTest {
         // Мутация: вернуть ASPECTJ_PROXY_CREATOR.equals(type) вместо isAssignableFrom → RED.
         DiagnosticsReset.forget();
 
-        List<LogRecord> said = logWhile(() ->
+        List<LogRecord> said = LibraryLog.capture(() ->
                 new ApplicationContextRunner()
                         .withInitializer(ctx -> ((BeanDefinitionRegistry) ctx.getBeanFactory())
                                 .registerBeanDefinition(AopConfigUtils.AUTO_PROXY_CREATOR_BEAN_NAME,
@@ -1211,7 +1183,7 @@ class AllureDataAutoConfigurationTest {
         // раздела отчёта нельзя». До этого теста сеть безопасности не была прибита ничем —
         // снятие try/catch не краснило ни одной проверки поведения.
         // Мутация: убрать try/catch в allureRepositoryAspectRegistrar → контекст не встанет → RED.
-        List<LogRecord> said = logWhile(() ->
+        List<LogRecord> said = LibraryLog.capture(() ->
                 new ApplicationContextRunner(() -> new AnnotationConfigApplicationContext(
                         new HostileBeanFactory()))
                         .withConfiguration(AutoConfigurations.of(
@@ -1312,7 +1284,7 @@ class AllureDataAutoConfigurationTest {
         // Мутация: убрать проверку hasRepositoryBeans у новости → RED.
         DiagnosticsReset.forget();
 
-        List<LogRecord> said = logWhile(() ->
+        List<LogRecord> said = LibraryLog.capture(() ->
                 new ApplicationContextRunner()
                         .withUserConfiguration(TransactionShapedConfig.class)
                         .withConfiguration(AutoConfigurations.of(AllureDataJpaAutoConfiguration.class))
@@ -1335,7 +1307,7 @@ class AllureDataAutoConfigurationTest {
         // Мутация, которую видит этот тест: убрать проверку hasRepositoryBeans у новости → RED.
         DiagnosticsReset.forget();
 
-        List<LogRecord> said = logWhile(() ->
+        List<LogRecord> said = LibraryLog.capture(() ->
                 new ApplicationContextRunner()
                         .withInitializer(ctx -> ctx.addBeanFactoryPostProcessor(
                                 new LazyInitializationBeanFactoryPostProcessor()))

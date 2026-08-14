@@ -4,6 +4,7 @@ import io.github.kolomyychenkoai.allure.spring.data.internal.AllureRepositoryAsp
 import io.github.kolomyychenkoai.allure.spring.internal.ActivationDiagnostics;
 import io.github.kolomyychenkoai.allure.spring.internal.DiagnosticsReset;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
+import io.github.kolomyychenkoai.allure.spring.support.LibraryLog;
 import io.github.kolomyychenkoai.allure.spring.support.CurrentReport;
 import io.github.kolomyychenkoai.allure.spring.support.JpaTestApp;
 import io.qameta.allure.Epic;
@@ -62,7 +63,7 @@ class RepositoryNoticeOnRealSpringDataTest {
     void noticeReachesConsumerOfRealSpringData() {
         DiagnosticsReset.forget();
 
-        List<LogRecord> said = logWhile(() -> {
+        List<LogRecord> said = LibraryLog.capture(() -> {
             try (ConfigurableApplicationContext ctx = new SpringApplicationBuilder(JpaTestApp.class)
                     .web(WebApplicationType.NONE)
                     .bannerMode(org.springframework.boot.Banner.Mode.OFF)
@@ -123,7 +124,7 @@ class RepositoryNoticeOnRealSpringDataTest {
         // Мутация: говорить новость независимо от наличия создателя прокси → RED.
         DiagnosticsReset.forget();
 
-        List<LogRecord> said = logWhile(() -> {
+        List<LogRecord> said = LibraryLog.capture(() -> {
             try (ConfigurableApplicationContext ctx = new SpringApplicationBuilder(JpaTestApp.class)
                     .web(WebApplicationType.NONE)
                     .bannerMode(org.springframework.boot.Banner.Mode.OFF)
@@ -161,7 +162,7 @@ class RepositoryNoticeOnRealSpringDataTest {
         // Мутация: перенести новость в конструктор бина-конфигурации → RED.
         DiagnosticsReset.forget();
 
-        List<LogRecord> said = logWhile(() -> {
+        List<LogRecord> said = LibraryLog.capture(() -> {
             try (ConfigurableApplicationContext ctx = new SpringApplicationBuilder(JpaTestApp.class)
                     .web(WebApplicationType.NONE)
                     .bannerMode(org.springframework.boot.Banner.Mode.OFF)
@@ -192,30 +193,4 @@ class RepositoryNoticeOnRealSpringDataTest {
         return said.stream().filter(r -> r.getMessage().contains(NOTICE_MARK)).count();
     }
 
-    /** Что библиотека сказала в свой логгер, пока поднимался контекст. */
-    private static List<LogRecord> logWhile(Runnable action) {
-        List<LogRecord> records = new ArrayList<>();
-        Handler collector = new Handler() {
-            @Override
-            public void publish(LogRecord record) {
-                records.add(record);
-            }
-
-            @Override
-            public void flush() {
-            }
-
-            @Override
-            public void close() {
-            }
-        };
-        Logger logger = AllureInstrumentationLogger.logger();
-        logger.addHandler(collector);
-        try {
-            action.run();
-        } finally {
-            logger.removeHandler(collector);
-        }
-        return records;
-    }
 }
