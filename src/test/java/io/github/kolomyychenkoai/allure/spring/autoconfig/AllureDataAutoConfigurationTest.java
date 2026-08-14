@@ -34,6 +34,8 @@ import org.springframework.boot.autoconfigure.aop.AopAutoConfiguration;
 import org.springframework.context.annotation.EnableAspectJAutoProxy;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 import org.springframework.transaction.interceptor.TransactionalProxy;
+
+import org.springframework.beans.factory.FactoryBean;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -1238,9 +1240,31 @@ class AllureDataAutoConfigurationTest {
             return (FakeSpringDataRepo) factory.getProxy();
         }
 
+        /**
+         * ⚠️ Именно {@link FactoryBean}, а не готовый бин: так репозиторий заводит Spring Data
+         * ({@code JpaRepositoryFactoryBean}), и только на этой форме видно, что
+         * {@code getBeanNamesForType} в фазе BFPP её не матчит без {@code includeNonSingletons}.
+         * Пока фикстура была обычным {@code @Bean}, блокер прошёл мимо пяти тестов сразу.
+         * <p>
+         * ⚠️ Тип возврата — СЫРОЙ {@code FactoryBean}, без дженерика. С дженериком Spring выводит
+         * тип объекта статически и матчит фабрику даже без {@code includeNonSingletons} — а у
+         * настоящего {@code JpaRepositoryFactoryBean} тип известен только в рантайме, потому что
+         * зависит от интерфейса репозитория. Замерено: с дженериком блокер НЕ воспроизводится.
+         */
         @Bean
-        FakeSpringDataRepo widgetRepository() {
-            return RAW_REPOSITORY;
+        @SuppressWarnings("rawtypes")
+        FactoryBean widgetRepository() {
+            return new FactoryBean<FakeSpringDataRepo>() {
+                @Override
+                public FakeSpringDataRepo getObject() {
+                    return RAW_REPOSITORY;
+                }
+
+                @Override
+                public Class<?> getObjectType() {
+                    return FakeSpringDataRepo.class;
+                }
+            };
         }
 
         @Bean
