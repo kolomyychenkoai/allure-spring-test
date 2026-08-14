@@ -2,44 +2,48 @@ package io.github.kolomyychenkoai.allure.spring.data;
 
 import io.github.kolomyychenkoai.allure.spring.data.internal.AllureRepositoryAspect;
 import io.github.kolomyychenkoai.allure.spring.internal.ActivationDiagnostics;
+import org.springframework.beans.factory.ListableBeanFactory;
+import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.aop.AopAutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.EnableAspectJAutoProxy;
+import org.springframework.util.ClassUtils;
 
 /**
- * Авто-активация логирования вызовов Spring Data репозиториев. Регистрирует
- * {@link AllureRepositoryAspect} и включает AspectJ-автопрокси. Активируется сама,
- * если на classpath есть AspectJ, Spring Data Repository и spring-tx — потребителю код не нужен.
- * Регистрируется через {@code META-INF/spring/...AutoConfiguration.imports}.
+ * Авто-активация логирования вызовов Spring Data репозиториев: регистрирует
+ * {@link AllureRepositoryAspect}. Активируется сама, если на classpath есть AspectJ,
+ * Spring Data Repository и spring-tx. Регистрируется через
+ * {@code META-INF/spring/...AutoConfiguration.imports}.
  * <p>
- * <b>Авто-проксирование — решение потребителя, а не наше.</b> Гейт по {@code spring.aop.auto} —
- * тот же, которым гейтится Boot-овская {@code AopAutoConfiguration}. Первая редакция его не
- * читала, и на {@code spring.aop.auto=false} мы возвращали выключенное потребителем
- * проксирование. Замерено на живом приложении: бин {@code internalAutoProxyCreator} менялся с
+ * <b>Авто-проксирование мы НЕ включаем — только пользуемся тем, что включил потребитель.</b>
+ * Первая редакция вешала {@code @EnableAspectJAutoProxy}, и у потребителя, отказавшегося от
+ * авто-проксирования, бин {@code internalAutoProxyCreator} менялся с
  * {@code InfrastructureAdvisorAutoProxyCreator} (его ставит {@code @EnableTransactionManagement})
- * на {@code AnnotationAwareAspectJAutoProxyCreator} — проксировалось больше бинов, чем потребитель
- * разрешал, оживали его спящие аспекты, а инъекция по конкретному классу переставала собираться
- * ({@code BeanNotOfRequiredTypeException}). Issue #70.
+ * на {@code AnnotationAwareAspectJAutoProxyCreator}: проксировалось больше бинов, чем он
+ * разрешал, оживали его спящие аспекты, а инъекция по конкретному классу переставала
+ * собираться. Issue #70.
  * <p>
- * <b>Цена честного гейта названа вслух.</b> При {@code spring.aop.auto=false} шагов
- * «DB Repo.method» в отчёте НЕ БУДЕТ. Реальный SQL остаётся — его пишет отдельный канал
- * ({@link AllureDataSourceAutoConfiguration}, свой {@code ProxyFactory} без автопроксирования), —
- * но окажется на верхнем уровне теста, а не внутри шага репозитория. Об этом говорится ОДИН раз
- * на прогон: {@link ActivationDiagnostics#noteOnce}.
+ * Гейт стоит на ФАКТЕ, а не на намерении: {@code @ConditionalOnBean} по AspectJ-совместимому
+ * создателю прокси. Свойство {@code spring.aop.auto} читать было бы недостаточно — отказаться
+ * от авто-проксирования можно ещё как минимум двумя способами (исключить
+ * {@link AopAutoConfiguration}, написать значение свойства не словом {@code false}), и каждый
+ * из них дал бы ту же подмену. Спрашивая контекст, мы видим факт вместо догадки.
  * <p>
- * {@code @EnableAspectJAutoProxy} оставлена БЕЗ {@code proxyTargetClass}: {@code AspectJAutoProxyRegistrar}
- * форсирует class-proxying только при {@code proxyTargetClass=true}, а {@code AopConfigUtils} этот
- * флаг лишь взводит и никогда не снимает. Значит режим прокси чужих бинов остаётся тем, который
- * выставил Boot по {@code spring.aop.proxy-target-class}, независимо от порядка автоконфигураций.
+ * Обратная сторона того же выбора: потребитель, включивший проксирование САМ (например
+ * {@code spring.aop.auto=false} плюс собственный {@code @EnableAspectJAutoProxy} — так живёт
+ * приложение `audit` из охоты), раздел БД получает, потому что создатель у него есть. Гейт по
+ * свойству отнял бы у него шаги ни за что.
  * <p>
- * ⚠️ {@code @ConditionalOnProperty}, а не {@code @ConditionalOnBooleanProperty}: вторая появилась
- * только в Boot 3.4, а нижнюю границу поддержки в этом проекте уже двигали. Первая лежит в том же
- * пакете во всех версиях и не помечена deprecated.
+ * <b>Цена названа вслух.</b> Там, где AspectJ-создателя нет, шагов «DB Repo.method» не будет:
+ * их пишет Spring-аспект. Реальный SQL остаётся — его пишет отдельный канал
+ * ({@link AllureDataSourceAutoConfiguration}, свой {@code ProxyFactory} без авто-проксирования), —
+ * но окажется на верхнем уровне теста, а не внутри шага репозитория. Об этом говорит
+ * {@link #allureRepositoryStepsNotice()}.
  */
-@AutoConfiguration
+@AutoConfiguration(after = AopAutoConfiguration.class)
 @ConditionalOnClass(name = {
         "org.aspectj.lang.ProceedingJoinPoint",
         "org.springframework.data.repository.Repository",
@@ -53,26 +57,29 @@ import org.springframework.context.annotation.EnableAspectJAutoProxy;
 public class AllureDataJpaAutoConfiguration {
 
     /**
-     * Что теряет потребитель, выключивший авто-проксирование. Константа, а не литерал в вызове:
-     * этот же текст читает тест, закрепляющий однократность.
+     * Создатель прокси, который умеет в {@code @Aspect}-бины. Именно ТИП, а не имя
+     * {@code internalAutoProxyCreator}: под этим именем может стоять и
+     * {@code InfrastructureAdvisorAutoProxyCreator} (его ставит {@code @EnableTransactionManagement}),
+     * а он аспекты не смотрит — по имени мы завели бы мёртвый бин и потеряли предупреждение.
      */
-    static final String AOP_DISABLED_NOTICE =
-            "spring.aop.auto=false — авто-проксирование выключено вами, и мы его НЕ включаем: "
-                    + "подмена internalAutoProxyCreator меняла бы проксирование ваших бинов (issue #70). "
-                    + "Следствие: шагов «DB Repo.method» в отчёте не будет — их пишет Spring-аспект. "
-                    + "Реальный SQL остаётся, но окажется на верхнем уровне теста, а не внутри шага "
-                    + "репозитория. Нужны шаги репозиториев — уберите spring.aop.auto=false. "
+    private static final String ASPECTJ_PROXY_CREATOR =
+            "org.springframework.aop.aspectj.annotation.AnnotationAwareAspectJAutoProxyCreator";
+
+    private static final String NOTICE =
+            "AspectJ-создателя прокси в контексте нет (авто-проксирование выключено или заменено "
+                    + "инфраструктурным), и мы его НЕ включаем: подмена internalAutoProxyCreator "
+                    + "меняла бы проксирование ваших бинов (issue #70). Следствие: шагов "
+                    + "«DB Repo.method» в отчёте не будет — их пишет Spring-аспект. Реальный SQL "
+                    + "остаётся, но окажется на верхнем уровне теста, а не внутри шага репозитория. "
+                    + "Нужны шаги репозиториев — включите авто-проксирование (spring.aop.auto по "
+                    + "умолчанию включено) либо заведите @EnableAspectJAutoProxy у себя. "
                     + "Заглушить эту строку: -Dallure.spring.diagnostics=off";
 
     /**
-     * Аспект и автопрокси — только там, где потребитель авто-проксирование не выключал.
-     * <p>
-     * Вложенный {@code @Configuration}, а не условие на внешнем классе: так же устроена
-     * {@code AopAutoConfiguration} у Boot, и так рядом помещается вторая ветка с новостью.
+     * Аспект — только там, где создатель прокси для него уже есть. Своего не заводим.
      */
     @Configuration(proxyBeanMethods = false)
-    @EnableAspectJAutoProxy
-    @ConditionalOnProperty(prefix = "spring.aop", name = "auto", havingValue = "true", matchIfMissing = true)
+    @ConditionalOnBean(type = ASPECTJ_PROXY_CREATOR)
     public static class RepositoryAspectConfiguration {
 
         @Bean
@@ -82,18 +89,48 @@ public class AllureDataJpaAutoConfiguration {
     }
 
     /**
-     * Вторая ветка того же свойства: раздел БД не соберётся — сказать об этом вслух.
-     * <p>
-     * Отдельный вложенный класс, а не второй автоконфиг-файл: файл потребовал бы строки в
-     * {@code AutoConfiguration.imports}, места в карте модулей документации и правки числа
-     * автоконфигураций. Здесь — ноль изменений в инвентаре точек входа.
+     * Есть ли у потребителя хоть один репозиторий. Тип резолвим ПО ИМЕНИ: spring-data нет в
+     * compile-classpath библиотеки (по той же причине поинткат аспекта задан строкой), а сюда
+     * мы попадаем только после {@code @ConditionalOnClass}, то есть класс на месте.
+     * При любой неожиданности отвечаем «нет» — молчание дешевле ложного предупреждения.
      */
-    @Configuration(proxyBeanMethods = false)
-    @ConditionalOnProperty(prefix = "spring.aop", name = "auto", havingValue = "false")
-    public static class AopDisabledNotice {
-
-        public AopDisabledNotice() {
-            ActivationDiagnostics.noteOnce("DbRepository", AOP_DISABLED_NOTICE);
+    private static boolean hasRepositoryBeans(ListableBeanFactory beanFactory) {
+        try {
+            Class<?> repository = ClassUtils.forName(
+                    "org.springframework.data.repository.Repository",
+                    AllureDataJpaAutoConfiguration.class.getClassLoader());
+            return beanFactory.getBeanNamesForType(repository, false, false).length > 0;
+        } catch (Throwable notResolvable) {
+            return false;
         }
+    }
+
+    /**
+     * Сказать вслух, что раздела БД не будет.
+     * <p>
+     * {@link BeanFactoryPostProcessor}, а не побочный эффект в конструкторе конфигурации, по трём
+     * причинам, и каждая — замеренный промах предыдущей редакции:
+     * <ul>
+     *   <li>BFPP выполняются всегда, а конфигурация без {@code @Bean}-методов под
+     *       {@code spring.main.lazy-initialization=true} не создаётся вовсе — новость молчала
+     *       ровно там, где потеря и так тихая;</li>
+     *   <li>здесь видно ФАКТ (зарегистрирован ли аспект), а условие на значении свойства
+     *       промахивалось мимо написаний {@code off}/{@code no}/{@code 0};</li>
+     *   <li>спрашиваем и про репозитории: без них терять нечего, а предупреждение в сборке,
+     *       где оно ни на что не влияет, — ровно тот шум, который перестают читать.</li>
+     * </ul>
+     * Определения читаем без создания бинов ({@code false, false}) — диагностика не имеет права
+     * поднимать чужие бины раньше времени.
+     */
+    @Bean
+    static BeanFactoryPostProcessor allureRepositoryStepsNotice() {
+        return beanFactory -> {
+            boolean aspectRegistered = beanFactory.getBeanNamesForType(
+                    AllureRepositoryAspect.class, false, false).length > 0;
+            boolean hasRepositories = hasRepositoryBeans(beanFactory);
+            if (!aspectRegistered && hasRepositories) {
+                ActivationDiagnostics.noteOnce("DbRepository", NOTICE);
+            }
+        };
     }
 }

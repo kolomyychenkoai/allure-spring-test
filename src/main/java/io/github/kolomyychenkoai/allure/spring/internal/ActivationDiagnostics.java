@@ -34,6 +34,10 @@ public final class ActivationDiagnostics {
      */
     private static final Set<String> SAID = ConcurrentHashMap.newKeySet();
 
+    /** Потолок запомненного — см. {@link #remember}. Столько разных новостей у библиотеки
+     *  не будет никогда; число нужно от нарушения контракта, а не от нормальной работы. */
+    private static final int SAID_LIMIT = 64;
+
     private ActivationDiagnostics() {
     }
 
@@ -66,6 +70,18 @@ public final class ActivationDiagnostics {
                     + "из Spring-каналов. Подними byte-buddy до версии, знающей эту JVM "
                     + "(обычно вместе со Spring Boot), либо включи -Dnet.bytebuddy.experimental=true "
                     + "ОСОЗНАННО.");
+        }
+
+        // Spring Data есть, а spring-tx нет: аспект репозиториев не зарегистрируется —
+        // его @ConditionalOnClass называет TransactionalProxy, потому что этот тип стоит
+        // в поинткате. Условие тихое, как и все @ConditionalOnClass, — потому оно здесь.
+        boolean springData = present.test("org.springframework.data.repository.Repository");
+        boolean transactionalProxy = present.test("org.springframework.transaction.interceptor.TransactionalProxy");
+        if (springData && !transactionalProxy) {
+            problems.add("Spring Data есть на classpath, а spring-tx нет — шагов «DB Repo.method» "
+                    + "в отчёте не будет: аспект репозиториев требует "
+                    + "org.springframework.transaction.interceptor.TransactionalProxy (по этому маркеру "
+                    + "он отличает прокси Spring Data от самописного DAO). Добавь spring-tx в test-scope.");
         }
 
         boolean mockMvc = present.test("org.springframework.test.web.servlet.MockMvc");
@@ -103,20 +119,47 @@ public final class ActivationDiagnostics {
      * и новость на каждый превращается в шум, который перестают читать (ровно этим кончилась
      * проверка, снятая из {@link #reportOnce()} — см. предупреждение там).
      *
+     * ⚠️ {@code message} обязан быть КОНСТАНТОЙ. Ключ дедупликации — {@code component|message},
+     * поэтому текст с переменной частью (имя бина, путь, значение свойства) превращает
+     * «один раз» в «раз на каждое значение» и заодно уводит данные потребителя в лог, а оттуда —
+     * во вложение «логи приложения», то есть в артефакт CI.
+     *
      * @param component имя модуля для префикса строки
      * @param message   что именно потребитель теряет и что с этим делать
      */
     public static void noteOnce(String component, String message) {
         try {
-            if ("off".equalsIgnoreCase(System.getProperty(SWITCH)) || !SAID.add(component + '|' + message)) {
+            if ("off".equalsIgnoreCase(System.getProperty(SWITCH)) || !remember(component, message)) {
                 return;
             }
             AllureInstrumentationLogger.note(component, message);
         } catch (Throwable diagnosticIsNotWorthATest) {
-            // Нас зовут из конструктора конфигурации, то есть изнутри refresh контекста
-            // потребителя: уронить его сообщением о том, что часть отчёта беднее, недопустимо.
-            AllureInstrumentationLogger.warn("ActivationDiagnostics", diagnosticIsNotWorthATest);
+            // Нас зовут изнутри refresh контекста потребителя: уронить его сообщением о том,
+            // что часть отчёта беднее, недопустимо. Запасной warn идёт в ТОТ ЖЕ логгер, на
+            // котором мы только что упали, поэтому он сам обёрнут: замерено, что хендлер
+            // потребителя, бросающий на publish, иначе пробрасывает исключение в refresh.
+            try {
+                AllureInstrumentationLogger.warn("ActivationDiagnostics", diagnosticIsNotWorthATest);
+            } catch (Throwable loggerIsBrokenToo) {
+                // сказать больше нечем и незачем
+            }
         }
+    }
+
+    /**
+     * true, если эту новость ещё не говорили. Потолок нужен на случай нарушения контракта
+     * «message — константа»: статическое множество не чистится никогда, и на переменном тексте
+     * росло бы до конца JVM. Дойдя до потолка, перестаём запоминать — то есть в худшем случае
+     * повторяемся, но не течём.
+     */
+    private static boolean remember(String component, String message) {
+        return SAID.size() < SAID_LIMIT && SAID.add(component + '|' + message);
+    }
+
+    /** Забыть сказанное. Только для тестов: без сброса ассерт «сказано один раз» зависел бы
+     *  от того, какой тест-класс поднял контекст первым (у нас {@code runOrder=random}). */
+    public static void forgetForTests() {
+        SAID.clear();
     }
 
     /**
