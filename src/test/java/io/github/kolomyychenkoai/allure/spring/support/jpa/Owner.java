@@ -5,7 +5,7 @@ import jakarta.persistence.Entity;
 /**
  * Владелец {@link Widget} — сторона ЛЕНИВОЙ связи в витрине.
  * <p>
- * ⚠️ Гигиена тел регрессию стража НЕ поймает: без него в теле оказывается {@code <?>},
+ * ⚠️ Гигиена тел регрессию теста НЕ поймает: без него в теле оказывается {@code <?>},
  * а не identity-хэш — ловить ей нечего (проверено мутацией). Держат её ДВА адресных теста
  * в {@code demo/DataJpaReportIT}, по одному на каждый случай из javadoc
  * {@code internal/JpaLaziness}: {@code lazyAssociationIsNotWokenUp} и

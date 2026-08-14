@@ -252,7 +252,7 @@ public class AllureRepositoryAspect {
         }
         // ⚠️ ДО веток Collection/Iterable: ленивая коллекция (PersistentCollection у Hibernate,
         // IndirectContainer у EclipseLink) — это и Collection, и Iterable, поэтому size()
-        // и обход ниже загрузили бы её из БД (N+1 у потребителя). Общий страж в
+        // и обход ниже загрузили бы её из БД (N+1 у потребителя). Общий тест в
         // AllureAdviceSupport сюда не помогает: обход идёт МИМО рендера.
         if (JpaLaziness.notLoaded(result)) {
             return JpaLaziness.NOT_LOADED;
@@ -372,7 +372,7 @@ public class AllureRepositoryAspect {
                 sj.add(field.getName() + "=" + AllureAdviceSupport.safe(field.get(obj)));
             } catch (Throwable e) {
                 // Ленивая связь Hibernate/EclipseLink сюда не приводит — её помечает маркером
-                // страж JpaLaziness. Ловим ОСТАЛЬНОЕ: недоступное под module-системой поле,
+                // тест JpaLaziness. Ловим ОСТАЛЬНОЕ: недоступное под module-системой поле,
                 // ленивое у незнакомого провайдера, сломанный getter — не теряем прочие поля.
                 sj.add(field.getName() + "=?");
             }

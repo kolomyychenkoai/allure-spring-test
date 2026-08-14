@@ -14,7 +14,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
- * Страж немого verify-канала. После перехвата JUnit Jupiter Assertions (см.
+ * Тест немого verify-канала. После перехвата JUnit Jupiter Assertions (см.
  * {@code AllureJUnitJupiterAssertionsInstrumentation}) любой verify-ассерт вида
  * {@code assertTrue(steps.contains(...))} в живом {@code *ReportIT} САМ станет шагом «Проверка: …»
  * и засорит отчёт, который тест проверяет (плюс саморефлексивная рекурсия по {@code stepNames()}).

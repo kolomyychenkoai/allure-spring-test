@@ -19,7 +19,7 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Страж чисел и ссылок в {@code docs/testing.md}.
+ * Тест чисел и ссылок в {@code docs/testing.md}.
  * <p>
  * Документ описывает набор тестов, то есть ровно ту часть репозитория, которая меняется чаще
  * всего. Без пересчёта он устареет с первым же новым тест-классом, причём молча: сборку это

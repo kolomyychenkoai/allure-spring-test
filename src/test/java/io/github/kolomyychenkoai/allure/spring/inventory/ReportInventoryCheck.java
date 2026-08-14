@@ -52,7 +52,7 @@ class ReportInventoryCheck {
      * <p>
      * ⚠️ Это единственный флаг проекта, который делает детектор зеленее. Остальные
      * ({@code update}, {@code remove}) наоборот — всегда роняют сборку. Поэтому за ним следит
-     * внешний страж {@code unit/PomCompatibilityTest}: {@code off} разрешён ТОЛЬКО внутри
+     * внешний тест {@code unit/PomCompatibilityTest}: {@code off} разрешён ТОЛЬКО внутри
      * профилей {@code compat-*}, в проектных свойствах он обязан быть {@code on}.
      */
     private static final String COMPARE_FLAG = "inventory.compare";

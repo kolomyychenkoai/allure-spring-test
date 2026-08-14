@@ -432,40 +432,40 @@ class InstrumentationApiCanaryTest {
     }
 
     @Test
-    @DisplayName("Hibernate: интерфейсы ленивости, на которых держится страж прокси")
+    @DisplayName("Hibernate: интерфейсы ленивости, на которых держится тест прокси")
     void hibernateLazinessInterfaces() {
-        // ⚠️ Страж узнаёт ленивое по ИМЕНИ интерфейса (провайдеров нет в compile-classpath):
+        // ⚠️ Тест узнаёт ленивое по ИМЕНИ интерфейса (провайдеров нет в compile-classpath):
         // переименуют — он перестанет срабатывать молча, отчёт при этом выглядит здоровым.
-        // Имена — из самого стража (почему не строками — javadoc у его констант).
+        // Имена — из самого теста (почему не строками — javadoc у его констант).
         require(classPresent(JpaLaziness.HIBERNATE_PROXY_NAME),
                 "HibernateProxy уехал → обнови имена в internal/JpaLaziness");
         require(hasMethod(JpaLaziness.HIBERNATE_PROXY_NAME, JpaLaziness.PROXY_INITIALIZER_METHOD, 0, null),
                 "HibernateProxy." + JpaLaziness.PROXY_INITIALIZER_METHOD
-                        + " уехал → страж не сможет спросить состояние");
+                        + " уехал → тест не сможет спросить состояние");
         require(hasMethod(JpaLaziness.HIBERNATE_INITIALIZER_NAME, JpaLaziness.HIBERNATE_PROXY_PROBE, 0, null),
                 "LazyInitializer." + JpaLaziness.HIBERNATE_PROXY_PROBE
-                        + " уехал → страж не отличит загруженное от ленивого");
+                        + " уехал → тест не отличит загруженное от ленивого");
         require(classPresent(JpaLaziness.HIBERNATE_COLLECTION_NAME),
                 "PersistentCollection уехал → ленивые КОЛЛЕКЦИИ снова будут обходиться (N+1)");
         require(hasMethod(JpaLaziness.HIBERNATE_COLLECTION_NAME, JpaLaziness.HIBERNATE_COLLECTION_PROBE, 0, null),
                 "PersistentCollection." + JpaLaziness.HIBERNATE_COLLECTION_PROBE
-                        + " уехал → страж коллекций мёртв");
+                        + " уехал → тест коллекций мёртв");
     }
 
     @Test
-    @DisplayName("EclipseLink: интерфейсы ленивости, на которых держится тот же страж")
+    @DisplayName("EclipseLink: интерфейсы ленивости, на которых держится тот же тест")
     void eclipseLinkLazinessInterfaces() {
         // ⚠️ У EclipseLink опасен size(), а не toString() — разбор в javadoc JpaLaziness.
         require(classPresent(JpaLaziness.ECLIPSELINK_HOLDER_NAME),
                 "ValueHolderInterface уехал → обнови имена в internal/JpaLaziness");
         require(hasMethod(JpaLaziness.ECLIPSELINK_HOLDER_NAME, JpaLaziness.ECLIPSELINK_PROBE, 0, null),
                 "ValueHolderInterface." + JpaLaziness.ECLIPSELINK_PROBE
-                        + " уехал → страж не отличит загруженное от ленивого");
+                        + " уехал → тест не отличит загруженное от ленивого");
         require(classPresent(JpaLaziness.ECLIPSELINK_CONTAINER_NAME),
                 "IndirectContainer уехал → ленивые коллекции EclipseLink снова будут грузиться в size()");
         require(hasMethod(JpaLaziness.ECLIPSELINK_CONTAINER_NAME, JpaLaziness.ECLIPSELINK_PROBE, 0, null),
                 "IndirectContainer." + JpaLaziness.ECLIPSELINK_PROBE
-                        + " уехал → страж коллекций EclipseLink мёртв");
+                        + " уехал → тест коллекций EclipseLink мёртв");
     }
 
     @Test

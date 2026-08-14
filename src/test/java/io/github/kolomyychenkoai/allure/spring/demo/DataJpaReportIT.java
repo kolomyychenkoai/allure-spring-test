@@ -70,7 +70,7 @@ class DataJpaReportIT {
         // из кэша первого уровня, и витрина проверяла бы не тот случай.
         widgets.findById(saved.getId());
 
-        // Мутация: снять страж → вместо маркера «<?>» (сессия закрыта, toString прокси бросает).
+        // Мутация: снять тест → вместо маркера «<?>» (сессия закрыта, toString прокси бросает).
         String dbResult = CurrentReport.attachmentOfStep("DB WidgetRepository.findById", "DB Result").orElse("");
         CurrentReport.check(dbResult.contains("owner=<не загружено: ленивая связь>"),
                 () -> "ленивая связь не помечена маркером — значит её разбудили: " + dbResult);

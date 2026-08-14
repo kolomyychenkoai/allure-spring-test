@@ -14,7 +14,7 @@ import java.util.regex.Pattern;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Страж договорённостей, которые живут в {@code pom.xml} и которые нечем проверить изнутри JVM.
+ * Тест договорённостей, которые живут в {@code pom.xml} и которые нечем проверить изнутри JVM.
  * <p>
  * Читается НАСТОЯЩИЙ pom, а не его модель: смысл ровно в том, чтобы правка файла руками
  * не смогла тихо разойтись с тем, что мы обещаем в README и чем закрываем детекторы.
@@ -69,7 +69,7 @@ class PomCompatibilityTest {
     void compareOffOnlyInsideCompatProfiles() throws IOException {
         // Единственный флаг проекта, делающий детектор зеленее. Остальные (update/remove) всегда
         // роняют сборку, и защищать их не нужно — этот же, забытый включённым, превращает
-        // инвентарь (143 вида шагов + 87 вложений) в вечно-зелёный. Внешний страж обязателен,
+        // инвентарь (143 вида шагов + 87 вложений) в вечно-зелёный. Внешний тест обязателен,
         // потому что изнутри самого детектора «меня выключили» не проверить.
         String pom = pom();
         assertThat(outsideProfiles(pom))
@@ -109,10 +109,10 @@ class PomCompatibilityTest {
     }
 
     @Test
-    @DisplayName("maven.compiler.release=25 — объявленный минимум Java под стражем")
+    @DisplayName("maven.compiler.release=25 — объявленный минимум Java под тестом")
     void compilerReleaseMatchesDeclaredMinimum() throws IOException {
         // README объявляет минимумом Java 25, и это единственная граница совместимости,
-        // у которой не было стража: остальные (compat.*) сверяет тест выше, а release мог
+        // у которой не было теста: остальные (compat.*) сверяет тест выше, а release мог
         // уехать незаметно — и молча поднять или опустить пол ВСЕМ потребителям. Компилятор
         // об этом не скажет: сборка станет только зеленее.
         assertThat(outsideProfiles(pom()))
@@ -147,7 +147,7 @@ class PomCompatibilityTest {
         // сделала бы эту тему нерешаемой, поэтому её появление должно быть предметом ревью,
         // а не следствием невнимательного <dependency> без <scope>. См. docs/adr/0002-*.
         // dependencyManagement вырезаем: там ПИНЫ версий, а не зависимости — у них нет <scope>
-        // по определению, и без этой строки страж считал бы транзитивным каждый пин.
+        // по определению, и без этой строки тест считал бы транзитивным каждый пин.
         String pom = pom().replaceAll("(?s)<dependencyManagement>.*?</dependencyManagement>", "");
         String dependencies = pom.substring(pom.indexOf("<dependencies>"), pom.indexOf("<build>"));
         Matcher dependency = Pattern.compile("<dependency>(.*?)</dependency>", Pattern.DOTALL)
