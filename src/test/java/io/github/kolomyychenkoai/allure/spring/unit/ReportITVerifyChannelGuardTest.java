@@ -65,4 +65,37 @@ class ReportITVerifyChannelGuardTest {
                     + String.join("\n  ", offenders));
         }
     }
+
+    @Test
+    @DisplayName("у каждого тест-класса есть @Epic (иначе он молча уезжает в витрину)")
+    void everyTestClassDeclaresItsEpic() throws IOException {
+        // Витрину читают ~20 ручных QA, и отсекается она РОВНО по эпику: класс без метки
+        // попадает к ним. Так уехал внутренний тест уровня B и высыпал туда девять шагов
+        // подготовки схемы Hibernate — гейта на метку не было вовсе, и первый же нарушитель
+        // прошёл молча.
+        // ⚠️ Проверка идёт по ФАЙЛУ, а не по имени класса: предыдущий гейт этого файла уже
+        // однажды промахнулся мимо *SmokeIT, потому что смотрел на суффикс.
+        // Мутация: снять @Epic с любого тест-класса → RED с именем файла.
+        List<String> unmarked = new ArrayList<>();
+        try (Stream<Path> files = Files.walk(Path.of("src/test/java"))) {
+            for (Path f : files.filter(Files::isRegularFile).sorted().toList()) {
+                String name = f.getFileName().toString();
+                if (!name.endsWith("Test.java") && !name.endsWith("Tests.java")
+                        && !name.endsWith("IT.java")) {
+                    continue;
+                }
+                String body = Files.readString(f);
+                // Классы без @Test — это фикстуры и хелперы с «тестовым» именем, витрину
+                // они не создают.
+                if (body.contains("@Test") && !body.contains("@Epic")) {
+                    unmarked.add(f.toString());
+                }
+            }
+        }
+        if (!unmarked.isEmpty()) {
+            throw new AssertionError("тест-класс без @Epic уедет в витрину ручной приёмки. "
+                    + "Внутренним поставь @Epic(\"Внутренние проверки библиотеки\"):\n  "
+                    + String.join("\n  ", unmarked));
+        }
+    }
 }

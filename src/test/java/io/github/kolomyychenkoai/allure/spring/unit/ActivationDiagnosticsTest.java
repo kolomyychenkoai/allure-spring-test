@@ -1,11 +1,17 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
 
 import io.github.kolomyychenkoai.allure.spring.internal.ActivationDiagnostics;
+import io.github.kolomyychenkoai.allure.spring.internal.DiagnosticsReset;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import io.qameta.allure.Epic;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -168,7 +174,7 @@ class ActivationDiagnosticsTest {
         // README и текст самой новости обещают потребителю этот тумблер. На канале noteOnce
         // он не был прибит ничем: снятие проверки давало 540 зелёных.
         // Мутация: убрать проверку SWITCH из noteOnce → RED.
-        ActivationDiagnostics.forgetForTests();
+        DiagnosticsReset.forget();
         String before = System.getProperty("allure.spring.diagnostics");
         System.setProperty("allure.spring.diagnostics", "off");
         try {
@@ -199,7 +205,7 @@ class ActivationDiagnosticsTest {
         // За собой обязан прибрать: на потолке дедупликация выключена, и сосед
         // noteOnceSaysItOnlyOnce, увидев полное множество, получил бы две строки вместо одной.
         // Замерено — без finally он краснеет при runOrder=random.
-        ActivationDiagnostics.forgetForTests();
+        DiagnosticsReset.forget();
         String component = "CapAxis" + UUID.randomUUID();
         try {
             List<LogRecord> said = logWhile(() -> {
@@ -213,8 +219,38 @@ class ActivationDiagnosticsTest {
                             + "один переменный текст затыкает канал до конца JVM")
                     .anyMatch(r -> r.getMessage().contains("законная константная новость"));
         } finally {
-            ActivationDiagnostics.forgetForTests();
+            DiagnosticsReset.forget();
         }
+    }
+
+    @Test
+    @DisplayName("в src/main второй аргумент noteOnce — только константа")
+    void noteOnceIsCalledWithConstantsOnly() throws Exception {
+        // Контракт из javadoc noteOnce, и до сих пор его держала только внимательность
+        // ревьюера. Цена нарушения двойная: переменный текст превращает «один раз» в «раз на
+        // каждое значение» И уводит данные потребителя (имя бина, путь, значение свойства)
+        // в лог, а оттуда во вложение «логи приложения», то есть в артефакт CI.
+        // Мутация: подставить в любой вызов конкатенацию вместо константы → RED.
+        Pattern call = Pattern.compile(
+                "noteOnce\\(\\s*\"[^\"]*\"\\s*,\\s*([^)]*)\\)", Pattern.DOTALL);
+        List<String> offenders = new ArrayList<>();
+        try (Stream<Path> files = Files.walk(Path.of("src/main/java"))) {
+            for (Path f : files.filter(p -> p.toString().endsWith(".java")).sorted().toList()) {
+                Matcher m = call.matcher(Files.readString(f));
+                while (m.find()) {
+                    String argument = m.group(1).trim();
+                    // Константа — это ИДЕНТИФИКАТОР (NOTICE, Foo.BAR). Литерал в аргументе
+                    // тоже не годится: дедупликация ключуется текстом, и держать его надо
+                    // там же, где он объявлен один раз.
+                    if (!argument.matches("[A-Za-z_$][\\w$]*(\\.[A-Za-z_$][\\w$]*)*")) {
+                        offenders.add(f + "  →  " + argument.replaceAll("\\s+", " "));
+                    }
+                }
+            }
+        }
+        assertThat(offenders).as("второй аргумент noteOnce обязан быть константой: переменный "
+                + "текст ломает однократность и уводит данные потребителя в артефакт CI")
+                .isEmpty();
     }
 
     /** Слушаем логгер библиотеки: наружу новость видна ТОЛЬКО этой строкой. */

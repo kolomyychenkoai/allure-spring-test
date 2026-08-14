@@ -5,7 +5,6 @@ import io.github.kolomyychenkoai.allure.spring.internal.ActivationDiagnostics;
 import org.springframework.aop.config.AopConfigUtils;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.config.BeanDefinition;
-import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
 import org.springframework.beans.factory.support.BeanDefinitionRegistryPostProcessor;
 import org.springframework.beans.factory.support.RootBeanDefinition;
@@ -103,61 +102,78 @@ public class AllureDataJpaAutoConfiguration {
      */
     @Bean
     static BeanDefinitionRegistryPostProcessor allureRepositoryAspectRegistrar() {
-        return new BeanDefinitionRegistryPostProcessor() {
-
-            @Override
-            public void postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry) {
-                try {
-                    // Два РАЗНЫХ вопроса, и путать их нельзя. Регистрировать аспект — вопрос
-                    // про создателя прокси: без репозиториев он просто ничего не поймает, вреда
-                    // от него нет. Говорить новость — вопрос про потерю: без репозиториев терять
-                    // нечего, и предупреждение было бы шумом, который перестают читать.
-                    if (hasAspectJProxyCreator(registry)) {
-                        // Имя занято — НЕ трогаем: конфигурация потребителя обязана побеждать нашу.
-                        // Замерено на обеих настройках переопределения. При
-                        // allow-bean-definition-overriding=true без гарда наше определение молча
-                        // заменяет бин потребителя — ради этого гард и стоит. При умолчании Boot
-                        // (false) registerBeanDefinition бросает BeanDefinitionOverrideException,
-                        // но наружу она не выходит: её глотает catch ниже, оставляя WARN со стеком
-                        // в каждой сборке такого потребителя (issue #74). Снаружи исход тот же,
-                        // изнутри — шум на ровном месте.
-                        if (registry.containsBeanDefinition(ASPECT_BEAN_NAME)) {
-                            return;
-                        }
-                        RootBeanDefinition definition = new RootBeanDefinition(AllureRepositoryAspect.class);
-                        // Роль и происхождение: иначе наш бин выглядит прикладным бином потребителя
-                        // (виден в /actuator/beans, кандидат на автовайринг), а в тексте ошибки
-                        // стоит «defined in null» — решение библиотеки нечем аудировать.
-                        definition.setRole(BeanDefinition.ROLE_INFRASTRUCTURE);
-                        definition.setResourceDescription(AllureDataJpaAutoConfiguration.class.getName());
-                        registry.registerBeanDefinition(ASPECT_BEAN_NAME, definition);
-                    } else if (registry instanceof ListableBeanFactory beans && hasRepositoryBeans(beans)) {
-                        ActivationDiagnostics.noteOnce("DbRepository", NOTICE);
+        // Лямбда, а не анонимный класс: postProcessBeanFactory у интерфейса — default-метод
+        // во всех поддерживаемых версиях (проверено по байткоду spring-beans 6.1 / 6.2 / 7.0),
+        // то есть интерфейс функциональный и пустому override взяться неоткуда.
+        return registry -> {
+            try {
+                // Два РАЗНЫХ вопроса, и путать их нельзя. Регистрировать аспект — вопрос
+                // про создателя прокси: без репозиториев он просто ничего не поймает, вреда
+                // от него нет. Говорить новость — вопрос про потерю: без репозиториев терять
+                // нечего, и предупреждение было бы шумом, который перестают читать.
+                if (hasAspectJProxyCreator(registry)) {
+                    // Имя занято — НЕ трогаем: конфигурация потребителя обязана побеждать нашу.
+                    // Замерено на обеих настройках переопределения. При
+                    // allow-bean-definition-overriding=true без гарда наше определение молча
+                    // заменяет бин потребителя — ради этого гард и стоит. При умолчании Boot
+                    // (false) registerBeanDefinition бросает BeanDefinitionOverrideException,
+                    // но наружу она не выходит: её глотает catch ниже, оставляя WARN со стеком
+                    // в каждой сборке такого потребителя (issue #74). Снаружи исход тот же,
+                    // изнутри — шум на ровном месте.
+                    if (registry.containsBeanDefinition(ASPECT_BEAN_NAME)) {
+                        return;
                     }
-                } catch (Throwable diagnosticIsNotWorthATest) {
-                    // Мы внутри refresh чужого контекста: уронить его из-за раздела отчёта нельзя.
-                    // Жалоба идёт через warnQuietly, а не напрямую в логгер: запасной канал пишет
-                    // в ТОТ ЖЕ логгер, на котором мы могли только что упасть, и хендлер
-                    // потребителя, бросающий на publish, вынес бы исключение прямо в refresh.
-                    ActivationDiagnostics.warnQuietly(diagnosticIsNotWorthATest);
+                    RootBeanDefinition definition = new RootBeanDefinition(AllureRepositoryAspect.class);
+                    // Роль и происхождение: иначе наш бин выглядит прикладным бином потребителя
+                    // (виден в /actuator/beans, кандидат на автовайринг), а в тексте ошибки
+                    // стоит «defined in null» — решение библиотеки нечем аудировать.
+                    definition.setRole(BeanDefinition.ROLE_INFRASTRUCTURE);
+                    definition.setResourceDescription(AllureDataJpaAutoConfiguration.class.getName());
+                    registry.registerBeanDefinition(ASPECT_BEAN_NAME, definition);
+                } else if (registry instanceof ListableBeanFactory beans && hasRepositoryBeans(beans)) {
+                    ActivationDiagnostics.noteOnce("DbRepository", NOTICE);
                 }
-            }
-
-            @Override
-            public void postProcessBeanFactory(ConfigurableListableBeanFactory beanFactory) {
-                // всё сделано на этапе реестра
+            } catch (Throwable diagnosticIsNotWorthATest) {
+                // Мы внутри refresh чужого контекста: уронить его из-за раздела отчёта нельзя.
+                // Жалоба идёт через warnQuietly, а не напрямую в логгер: запасной канал пишет
+                // в ТОТ ЖЕ логгер, на котором мы могли только что упасть, и хендлер
+                // потребителя, бросающий на publish, вынес бы исключение прямо в refresh.
+                ActivationDiagnostics.warnQuietly(diagnosticIsNotWorthATest);
             }
         };
     }
 
-    /** Стоит ли под штатным именем создатель прокси, который смотрит {@code @Aspect}-бины. */
+    /**
+     * Стоит ли под штатным именем создатель прокси, который смотрит {@code @Aspect}-бины.
+     * <p>
+     * Сравнение по ПРИСВАИВАЕМОСТИ, а не по равенству строк. Чужой стартер вправе поставить
+     * СВОЙ подкласс {@code AnnotationAwareAspectJAutoProxyCreator} — аспекты он смотрит
+     * ровно так же. Замерено: на точном {@code equals} такой потребитель молча терял раздел БД
+     * И получал новость «AspectJ-создателя прокси в контексте нет», то есть прямую ложь про
+     * собственный контекст. Держит {@code subclassOfAspectJCreatorCountsAsOne}.
+     * <p>
+     * Имя не резолвится (свой загрузчик, класс недоступен) — отвечаем «нет»: молчание дешевле
+     * ложного вывода, а хуже прежнего поведения не станет.
+     */
     private static boolean hasAspectJProxyCreator(BeanDefinitionRegistry registry) {
         if (!registry.containsBeanDefinition(AopConfigUtils.AUTO_PROXY_CREATOR_BEAN_NAME)) {
             return false;
         }
         String type = registry.getBeanDefinition(AopConfigUtils.AUTO_PROXY_CREATOR_BEAN_NAME)
                 .getBeanClassName();
-        return ASPECTJ_PROXY_CREATOR.equals(type);
+        if (type == null) {
+            return false; // определение без класса (instance supplier) — судить не по чему
+        }
+        if (ASPECTJ_PROXY_CREATOR.equals(type)) {
+            return true; // штатный случай, без загрузки классов
+        }
+        try {
+            ClassLoader loader = AllureDataJpaAutoConfiguration.class.getClassLoader();
+            return ClassUtils.forName(ASPECTJ_PROXY_CREATOR, loader)
+                    .isAssignableFrom(ClassUtils.forName(type, loader));
+        } catch (Throwable notResolvable) {
+            return false;
+        }
     }
 
     /**

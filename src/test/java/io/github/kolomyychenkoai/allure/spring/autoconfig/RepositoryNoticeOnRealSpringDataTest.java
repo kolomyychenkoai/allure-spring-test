@@ -2,6 +2,7 @@ package io.github.kolomyychenkoai.allure.spring.autoconfig;
 
 import io.github.kolomyychenkoai.allure.spring.data.internal.AllureRepositoryAspect;
 import io.github.kolomyychenkoai.allure.spring.internal.ActivationDiagnostics;
+import io.github.kolomyychenkoai.allure.spring.internal.DiagnosticsReset;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import io.github.kolomyychenkoai.allure.spring.support.CurrentReport;
 import io.github.kolomyychenkoai.allure.spring.support.JpaTestApp;
@@ -59,7 +60,7 @@ class RepositoryNoticeOnRealSpringDataTest {
     @Test
     @DisplayName("настоящая Spring Data без AspectJ-создателя: про потерянный раздел БД сказано")
     void noticeReachesConsumerOfRealSpringData() {
-        ActivationDiagnostics.forgetForTests();
+        DiagnosticsReset.forget();
 
         List<LogRecord> said = logWhile(() -> {
             try (ConfigurableApplicationContext ctx = new SpringApplicationBuilder(JpaTestApp.class)
@@ -120,7 +121,7 @@ class RepositoryNoticeOnRealSpringDataTest {
         // её держать нечем: там нет настоящей фабрики Spring Data, hasRepositoryBeans ложно
         // при любой правке, и новость не может прозвучать даже под мутацией — замерено.
         // Мутация: говорить новость независимо от наличия создателя прокси → RED.
-        ActivationDiagnostics.forgetForTests();
+        DiagnosticsReset.forget();
 
         List<LogRecord> said = logWhile(() -> {
             try (ConfigurableApplicationContext ctx = new SpringApplicationBuilder(JpaTestApp.class)
@@ -158,7 +159,7 @@ class RepositoryNoticeOnRealSpringDataTest {
         // Уровень B обязателен по той же причине, что и у соседей: новость может прозвучать
         // только там, где есть НАСТОЯЩАЯ фабрика Spring Data.
         // Мутация: перенести новость в конструктор бина-конфигурации → RED.
-        ActivationDiagnostics.forgetForTests();
+        DiagnosticsReset.forget();
 
         List<LogRecord> said = logWhile(() -> {
             try (ConfigurableApplicationContext ctx = new SpringApplicationBuilder(JpaTestApp.class)

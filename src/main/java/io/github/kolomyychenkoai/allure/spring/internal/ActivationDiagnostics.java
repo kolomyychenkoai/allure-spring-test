@@ -184,9 +184,15 @@ public final class ActivationDiagnostics {
         }
     }
 
-    /** Забыть сказанное. Только для тестов: без сброса ассерт «сказано один раз» зависел бы
-     *  от того, какой тест-класс поднял контекст первым (у нас {@code runOrder=random}). */
-    public static void forgetForTests() {
+    /**
+     * Забыть сказанное. Только для тестов: без сброса ассерт «сказано один раз» зависел бы
+     * от того, какой тест-класс поднял контекст первым (у нас {@code runOrder=random}).
+     * <p>
+     * ПАКЕТНО-приватный намеренно: единственный тест-хук библиотеки не должен уезжать
+     * потребителю публичным методом. Тестам из других пакетов его отдаёт мостик
+     * {@code io.github.kolomyychenkoai.allure.spring.internal.DiagnosticsReset} из {@code src/test}.
+     */
+    static void forgetForTests() {
         SAID.clear();
     }
 

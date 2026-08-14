@@ -30,6 +30,7 @@ import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.aop.framework.autoproxy.InfrastructureAdvisorAutoProxyCreator;
 import org.springframework.aop.support.AopUtils;
 import io.github.kolomyychenkoai.allure.spring.internal.ActivationDiagnostics;
+import io.github.kolomyychenkoai.allure.spring.internal.DiagnosticsReset;
 import org.springframework.boot.LazyInitializationBeanFactoryPostProcessor;
 import org.springframework.boot.autoconfigure.aop.AopAutoConfiguration;
 import org.springframework.context.annotation.EnableAspectJAutoProxy;
@@ -39,6 +40,8 @@ import org.springframework.transaction.interceptor.TransactionalProxy;
 import org.springframework.beans.factory.FactoryBean;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.config.BeanDefinition;
+import org.springframework.beans.factory.support.BeanDefinitionRegistry;
+import org.springframework.beans.factory.support.RootBeanDefinition;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -1032,7 +1035,7 @@ class AllureDataAutoConfigurationTest {
         // ⚠️ Мутацию «гейт по свойству spring.aop.auto» сюда НЕ пиши: здесь свойство как раз
         // false, гейт по нему дал бы тот же исход, и тест остаётся зелёным — замерено. Её ловят
         // ownAspectJAutoProxyKeepsTheDbSection и lateAspectJProxyCreatorStillGetsTheAspect.
-        ActivationDiagnostics.forgetForTests();
+        DiagnosticsReset.forget();
 
         List<LogRecord> said = logWhile(() ->
                 new ApplicationContextRunner()
@@ -1069,7 +1072,7 @@ class AllureDataAutoConfigurationTest {
         // аспекта не будет, хотя проксирование он поднял сам → RED (замерено).
         // Соседняя ось — то же самое, но когда проксирование поднимают ПОЗЖЕ нашей
         // автоконфигурации: lateAspectJProxyCreatorStillGetsTheAspect.
-        ActivationDiagnostics.forgetForTests();
+        DiagnosticsReset.forget();
 
         List<LogRecord> said = logWhile(() ->
                 new ApplicationContextRunner()
@@ -1093,7 +1096,7 @@ class AllureDataAutoConfigurationTest {
         // а новость соврёт про «создателя нет», хотя он появится через один конфиг.
         // Мутация: вернуть @ConditionalOnBean(name = AUTO_PROXY_CREATOR_BEAN_NAME) вместо
         // регистрации в BeanDefinitionRegistryPostProcessor → RED.
-        ActivationDiagnostics.forgetForTests();
+        DiagnosticsReset.forget();
 
         List<LogRecord> said = logWhile(() ->
                 new ApplicationContextRunner()
@@ -1165,6 +1168,40 @@ class AllureDataAutoConfigurationTest {
                                     + "«defined in null», и решение библиотеки нечем аудировать")
                             .isEqualTo(AllureDataJpaAutoConfiguration.class.getName());
                 });
+    }
+
+    @Test
+    @DisplayName("создатель прокси потребителя — ПОДКЛАСС нашего: раздел БД остаётся")
+    void subclassOfAspectJCreatorCountsAsOne() {
+        // Чужой стартер вправе поставить под штатным именем свой наследник
+        // AnnotationAwareAspectJAutoProxyCreator — аспекты он смотрит ровно так же.
+        // Замерено на точном equals: аспект НЕ регистрировался, потребитель молча терял раздел
+        // БД и вдобавок получал новость «AspectJ-создателя в контексте нет» — ложь про его
+        // собственный контекст.
+        // Мутация: вернуть ASPECTJ_PROXY_CREATOR.equals(type) вместо isAssignableFrom → RED.
+        DiagnosticsReset.forget();
+
+        List<LogRecord> said = logWhile(() ->
+                new ApplicationContextRunner()
+                        .withInitializer(ctx -> ((BeanDefinitionRegistry) ctx.getBeanFactory())
+                                .registerBeanDefinition(AopConfigUtils.AUTO_PROXY_CREATOR_BEAN_NAME,
+                                        new RootBeanDefinition(ConsumerOwnProxyCreator.class)))
+                        .withConfiguration(AutoConfigurations.of(AllureDataJpaAutoConfiguration.class))
+                        .withUserConfiguration(LedgerShapedConfig.class)
+                        .run(ctx -> {
+                            // ЯКОРЬ: под штатным именем действительно стоит НЕ наш класс.
+                            // Иначе тест был бы зелёным на обычном создателе и ничего не значил.
+                            assertThat(ctx.getBean(AopConfigUtils.AUTO_PROXY_CREATOR_BEAN_NAME))
+                                    .as("фикстура подменила создатель не тем классом")
+                                    .isInstanceOf(ConsumerOwnProxyCreator.class);
+                            assertThat(ctx)
+                                    .as("наследник AspectJ-создателя не засчитан: потребитель "
+                                            + "теряет раздел БД, ничего у себя не выключая")
+                                    .hasSingleBean(AllureRepositoryAspect.class);
+                        }));
+
+        assertThat(said).as("новость «создателя нет» сказана потребителю, у которого он есть — "
+                + "это ложь про его собственный контекст").isEmpty();
     }
 
     @Test
@@ -1273,7 +1310,7 @@ class AllureDataAutoConfigurationTest {
     void silentWhenConsumerHasNoRepositories() {
         // Правило из javadoc ActivationDiagnostics.reportOnce: «фичи нет вовсе — молчим».
         // Мутация: убрать проверку hasRepositoryBeans у новости → RED.
-        ActivationDiagnostics.forgetForTests();
+        DiagnosticsReset.forget();
 
         List<LogRecord> said = logWhile(() ->
                 new ApplicationContextRunner()
@@ -1296,7 +1333,7 @@ class AllureDataAutoConfigurationTest {
         // переехала в пост-процессор реестра) держит
         // RepositoryNoticeOnRealSpringDataTest.noticeSurvivesLazyInitialization.
         // Мутация, которую видит этот тест: убрать проверку hasRepositoryBeans у новости → RED.
-        ActivationDiagnostics.forgetForTests();
+        DiagnosticsReset.forget();
 
         List<LogRecord> said = logWhile(() ->
                 new ApplicationContextRunner()
@@ -1521,6 +1558,10 @@ class AllureDataAutoConfigurationTest {
             }
             super.registerBeanDefinition(beanName, beanDefinition);
         }
+    }
+
+    /** Создатель прокси чужого стартера: наш по сути, свой по классу. */
+    static class ConsumerOwnProxyCreator extends AnnotationAwareAspectJAutoProxyCreator {
     }
 
     /** Потребитель занял наше имя бина — законное право его конфигурации (issue #73). */

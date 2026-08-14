@@ -478,6 +478,28 @@ class InstrumentationApiCanaryTest {
     }
 
     @Test
+    @DisplayName("Spring AOP и Spring Data: имена, по которым решается судьба раздела БД")
+    void repositoryAspectGateTypeNames() {
+        // Оба имени резолвятся СТРОКОЙ в AllureDataJpaAutoConfiguration (spring-data нет
+        // в compile-classpath библиотеки), и оба деградируют НЕМО: `catch (Throwable) → false`.
+        // Переезд любого из них не сломает ни одного теста — он просто отнимет раздел БД
+        // или заставит новость замолчать у всех, то есть вернёт блокеры #70/#71 под новой
+        // причиной. Канарейка нужна, чтобы диагноз при апгрейде был «имя уехало», а не
+        // «аспект куда-то делся».
+        require(classPresent("org.springframework.aop.aspectj.annotation.AnnotationAwareAspectJAutoProxyCreator"),
+                "AnnotationAwareAspectJAutoProxyCreator уехал → hasAspectJProxyCreator всегда ложно, "
+                        + "аспект репозиториев не зарегистрируется НИ У КОГО "
+                        + "(обнови ASPECTJ_PROXY_CREATOR в AllureDataJpaAutoConfiguration)");
+        require(classPresent("org.springframework.data.repository.core.support.RepositoryFactoryBeanSupport"),
+                "RepositoryFactoryBeanSupport уехал → hasRepositoryBeans всегда ложно, и новость "
+                        + "про исчезнувший раздел БД замолчит у всех потребителей — блокер круга 2 "
+                        + "под новой причиной (обнови имя в AllureDataJpaAutoConfiguration)");
+        require(classPresent("org.springframework.transaction.interceptor.TransactionalProxy"),
+                "TransactionalProxy уехал → поинткат аспекта не срезолвится, шагов «DB Repo.method» "
+                        + "не будет (обнови поинткат в AllureRepositoryAspect и @ConditionalOnClass)");
+    }
+
+    @Test
     @DisplayName("Гейты присутствия (ClassPresence): строки-имена из листенеров")
     void classPresenceGates() {
         // Каждая строка — выключатель целого модуля: не найден класс → листенер молча не включается.
