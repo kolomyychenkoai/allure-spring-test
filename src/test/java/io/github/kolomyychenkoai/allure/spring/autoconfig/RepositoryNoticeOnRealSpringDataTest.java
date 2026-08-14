@@ -1,9 +1,7 @@
 package io.github.kolomyychenkoai.allure.spring.autoconfig;
 
 import io.github.kolomyychenkoai.allure.spring.data.internal.AllureRepositoryAspect;
-import io.github.kolomyychenkoai.allure.spring.internal.ActivationDiagnostics;
 import io.github.kolomyychenkoai.allure.spring.internal.DiagnosticsReset;
-import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import io.github.kolomyychenkoai.allure.spring.support.LibraryLog;
 import io.github.kolomyychenkoai.allure.spring.support.CurrentReport;
 import io.github.kolomyychenkoai.allure.spring.support.JpaTestApp;
@@ -14,12 +12,9 @@ import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
-import java.util.logging.Logger;
 
 
 /**

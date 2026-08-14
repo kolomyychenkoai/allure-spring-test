@@ -1055,7 +1055,10 @@ class AllureDataAutoConfigurationTest {
                                 .as("потребитель поднял проксирование сам — раздел БД он терять не должен")
                                 .hasSingleBean(AllureRepositoryAspect.class)));
 
-        assertThat(said).as("новость про потерянный раздел там, где раздел на месте, — ложь и шум")
+        assertThat(said).as("библиотека сказала лишнее: на уровне A новость прозвучать не может "
+                + "(нет настоящей фабрики Spring Data — замерено), поэтому здесь сторожим только "
+                + "полное молчание канала, включая warn из catch. Ось «новость не звучит там, где "
+                + "раздел на месте» держит RepositoryNoticeOnRealSpringDataTest")
                 .isEmpty();
     }
 
@@ -1101,7 +1104,10 @@ class AllureDataAutoConfigurationTest {
                                     .hasSingleBean(AllureRepositoryAspect.class);
                         }));
 
-        assertThat(said).as("новость про потерянный раздел там, где раздел на месте, — ложь и шум")
+        assertThat(said).as("библиотека сказала лишнее: на уровне A новость прозвучать не может "
+                + "(нет настоящей фабрики Spring Data — замерено), поэтому здесь сторожим только "
+                + "полное молчание канала, включая warn из catch. Ось «новость не звучит там, где "
+                + "раздел на месте» держит RepositoryNoticeOnRealSpringDataTest")
                 .isEmpty();
     }
 
@@ -1172,8 +1178,11 @@ class AllureDataAutoConfigurationTest {
                                     .hasSingleBean(AllureRepositoryAspect.class);
                         }));
 
-        assertThat(said).as("новость «создателя нет» сказана потребителю, у которого он есть — "
-                + "это ложь про его собственный контекст").isEmpty();
+        assertThat(said).as("библиотека сказала лишнее: на уровне A новость прозвучать не может "
+                + "(нет настоящей фабрики Spring Data — замерено), поэтому здесь сторожим только "
+                + "полное молчание канала, включая warn из catch. Ось «новость не звучит там, где "
+                + "раздел на месте» держит RepositoryNoticeOnRealSpringDataTest")
+                .isEmpty();
     }
 
     @Test
@@ -1202,8 +1211,42 @@ class AllureDataAutoConfigurationTest {
 
         // Молча глотать нельзя: пропавший раздел БД надо чем-то объяснить тому, кто полезет
         // разбираться. Канал — warn, потому что это НЕ спроектированный исход, а сбой.
-        assertThat(said).as("библиотека проглотила собственный сбой без единой строки в логе")
-                .anyMatch(r -> r.getLevel() == Level.WARNING);
+        // Имя модуля в строке — грепаемая ручка «что именно потерялось». Без него сообщение
+        // неотличимо от любого другого шума библиотеки: замерено, подстановка константы вместо
+        // параметра в warnQuietly не краснила ничего.
+        assertThat(said).as("библиотека проглотила собственный сбой либо сказала о нём, не назвав "
+                        + "потерянный модуль")
+                .anyMatch(r -> r.getLevel() == Level.WARNING && r.getMessage().contains("DbRepository"));
+    }
+
+    @Test
+    @DisplayName("выключатель диагностики НЕ глушит сообщение о собственном сбое")
+    void diagnosticsSwitchDoesNotHideLibraryFailure() {
+        // Вторая половина обещания README: «Выключатель глушит именно диагностику; о СОБСТВЕННОМ
+        // сбое библиотека сообщит и с ним — молчащая поломка хуже лишней строки». Первую половину
+        // держит switchSilencesNoteOnce, вторую не держал никто.
+        // Мутация: заставить warnQuietly уважать -Dallure.spring.diagnostics=off → RED.
+        String before = System.getProperty("allure.spring.diagnostics");
+        System.setProperty("allure.spring.diagnostics", "off");
+        try {
+            List<LogRecord> said = LibraryLog.capture(() ->
+                    new ApplicationContextRunner(() -> new AnnotationConfigApplicationContext(
+                            new HostileBeanFactory()))
+                            .withConfiguration(AutoConfigurations.of(
+                                    AopAutoConfiguration.class, AllureDataJpaAutoConfiguration.class))
+                            .withUserConfiguration(LedgerShapedConfig.class)
+                            .run(ctx -> assertThat(ctx).hasNotFailed()));
+
+            assertThat(said).as("выключатель диагностики спрятал СБОЙ библиотеки: потребитель "
+                            + "остался без раздела БД и без единой строки о том, почему")
+                    .anyMatch(r -> r.getLevel() == Level.WARNING && r.getMessage().contains("DbRepository"));
+        } finally {
+            if (before == null) {
+                System.clearProperty("allure.spring.diagnostics");
+            } else {
+                System.setProperty("allure.spring.diagnostics", before);
+            }
+        }
     }
 
     @Test

@@ -147,7 +147,7 @@ public final class ActivationDiagnostics {
         } catch (Throwable diagnosticIsNotWorthATest) {
             // Нас зовут изнутри refresh контекста потребителя: уронить его сообщением о том,
             // что часть отчёта беднее, недопустимо.
-            warnQuietly(diagnosticIsNotWorthATest);
+            warnQuietly("ActivationDiagnostics", diagnosticIsNotWorthATest);
         }
     }
 
@@ -157,11 +157,11 @@ public final class ActivationDiagnostics {
      * росло бы до конца JVM. Дойдя до потолка, перестаём ЗАПОМИНАТЬ, но продолжаем говорить —
      * в худшем случае повторяемся, но не течём и не глохнем.
      * <p>
-     * ⚠️ Порядок операндов несущий. Первая редакция стояла наоборот
-     * ({@code size() < LIMIT && add(...)}) и на потолке возвращала false, то есть библиотека
-     * ЗАМОЛКАЛА — и не только про нарушителя контракта, а про всё подряд: один переменный текст
-     * затыкал 64 слота и уносил с собой законные константные новости. Ровно та тихая потеря,
-     * против которой заведён весь класс. Замерено, держит {@code capKeepsTalkingNotSilent}.
+     * ⚠️ Порядок операндов несущий. При {@code size() < LIMIT && add(...)} на потолке
+     * возвращается {@code false}: библиотека ЗАМОЛКАЕТ, и не только про нарушителя контракта —
+     * один переменный текст забивает 64 слота и уносит с собой законные константные новости.
+     * Ровно та тихая потеря, против которой заведён весь класс.
+     * Держит {@code capKeepsTalkingNotSilent}.
      */
     private static boolean remember(String component, String message) {
         return SAID.size() >= SAID_LIMIT || SAID.add(component + '|' + message);
@@ -175,10 +175,17 @@ public final class ActivationDiagnostics {
      * <p>
      * Один метод на все три места (обе ветки этого класса и регистратор аспекта): обещание
      * «не роняем» не должно держаться на том, помнил ли автор очередного catch про логгер.
+     * <p>
+     * ⚠️ {@code component} — ПАРАМЕТР, а не константа по месту. Имя модуля в строке лога и есть
+     * грепаемая ручка «что именно потерялось»: без него сообщение о сорвавшемся регистраторе
+     * аспекта неотличимо от любого другого шума. Сведение трёх catch в общий метод один раз уже
+     * схлопнуло этот параметр в константу — сигнал пропал, и не покраснел никто.
+     *
+     * @param component имя модуля, который пострадал, а НЕ имя этого класса
      */
-    public static void warnQuietly(Throwable failure) {
+    public static void warnQuietly(String component, Throwable failure) {
         try {
-            AllureInstrumentationLogger.warn("ActivationDiagnostics", failure);
+            AllureInstrumentationLogger.warn(component, failure);
         } catch (Throwable loggerIsBrokenToo) {
             // сказать больше нечем и незачем
         }
@@ -227,7 +234,7 @@ public final class ActivationDiagnostics {
             // обещание «прогон не роняем никогда» обязано принадлежать этому методу, иначе оно
             // держится на реализации чужого хелпера. Диагност — вспомогательный сигнал, ронять
             // из-за него чужой тест недопустимо.
-            warnQuietly(diagnosticIsNotWorthATest);
+            warnQuietly("ActivationDiagnostics", diagnosticIsNotWorthATest);
         }
     }
 }

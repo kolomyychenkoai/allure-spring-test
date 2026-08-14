@@ -434,9 +434,9 @@ class InstrumentationApiCanaryTest {
     @Test
     @DisplayName("Hibernate: интерфейсы ленивости, на которых держится защита прокси")
     void hibernateLazinessInterfaces() {
-        // ⚠️ Тест узнаёт ленивое по ИМЕНИ интерфейса (провайдеров нет в compile-classpath):
+        // ⚠️ Защита JpaLaziness узнаёт ленивое по ИМЕНИ интерфейса (провайдеров нет в compile-classpath):
         // переименуют — он перестанет срабатывать молча, отчёт при этом выглядит здоровым.
-        // Имена — из самого теста (почему не строками — javadoc у его констант).
+        // Имена — из самой защиты (почему не строками — javadoc у её констант).
         require(classPresent(JpaLaziness.HIBERNATE_PROXY_NAME),
                 "HibernateProxy уехал → обнови имена в internal/JpaLaziness");
         require(hasMethod(JpaLaziness.HIBERNATE_PROXY_NAME, JpaLaziness.PROXY_INITIALIZER_METHOD, 0, null),
@@ -480,7 +480,7 @@ class InstrumentationApiCanaryTest {
     @Test
     @DisplayName("Spring AOP и Spring Data: имена, по которым решается судьба раздела БД")
     void repositoryAspectGateTypeNames() {
-        // Оба имени резолвятся СТРОКОЙ в AllureDataJpaAutoConfiguration (spring-data нет
+        // Все три имени резолвятся СТРОКОЙ (spring-data и spring-tx нет
         // в compile-classpath библиотеки), и оба деградируют НЕМО: `catch (Throwable) → false`.
         // Переезд любого из них не сломает ни одного теста — он просто отнимет раздел БД
         // или заставит новость замолчать у всех, то есть вернёт блокеры #70/#71 под новой

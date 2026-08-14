@@ -144,7 +144,7 @@ class AllureRepositoryAspectTest {
     @DisplayName("сбой РЕНДЕРА ответа не роняет вызов репозитория и не врёт статусом BROKEN")
     void brokenResponseRenderDoesNotBreakTheCall() throws Throwable {
         // Мутация: звать formatResponse напрямую вместо describeResponse → красный.
-        // Коллекция, чей size() бросает, — это провайдер, которого тест не знает
+        // Коллекция, чей size() бросает, — это провайдер, которого защита JpaLaziness не знает
         // (почему такой сбой опасен — javadoc describeResponse).
         List<?> hostile = (List<?>) Proxy.newProxyInstance(getClass().getClassLoader(),
                 new Class<?>[]{List.class}, (proxy, method, args) -> {

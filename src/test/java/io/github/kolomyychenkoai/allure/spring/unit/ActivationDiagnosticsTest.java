@@ -2,7 +2,6 @@ package io.github.kolomyychenkoai.allure.spring.unit;
 
 import io.github.kolomyychenkoai.allure.spring.internal.ActivationDiagnostics;
 import io.github.kolomyychenkoai.allure.spring.internal.DiagnosticsReset;
-import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import io.github.kolomyychenkoai.allure.spring.support.LibraryLog;
 import io.qameta.allure.Epic;
 import org.junit.jupiter.api.DisplayName;
@@ -17,10 +16,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
-import java.util.logging.Logger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -113,6 +110,9 @@ class ActivationDiagnosticsTest {
     @Test
     @DisplayName("noteOnce говорит один раз на прогон, сколько бы контекстов ни поднялось")
     void noteOnceSaysItOnlyOnce() {
+        // Сброс, как у всех соседей: иначе корректность держится на finally соседа,
+        // а при runOrder=random это ~17% красных (замерено круга 5).
+        DiagnosticsReset.forget();
         // У потребителя за прогон поднимается десяток контекстов, и новость на каждый
         // превращается в шум, который перестают читать (этим кончилась проверка, снятая
         // из reportOnce — см. предупреждение в её javadoc).
@@ -213,12 +213,21 @@ class ActivationDiagnosticsTest {
                 for (int i = 0; i < 70; i++) {          // 70 > SAID_LIMIT (64)
                     ActivationDiagnostics.noteOnce(component, "переменный текст " + i);
                 }
+                // Один и тот же текст ДВАЖДЫ. На потолке множество больше не пополняется,
+                // значит дедупликация выключена и вторая строка обязана прозвучать.
+                ActivationDiagnostics.noteOnce(component, "законная константная новость");
                 ActivationDiagnostics.noteOnce(component, "законная константная новость");
             });
 
-            assertThat(said).as("законная новость утонула вместе с нарушителем контракта: "
-                            + "один переменный текст затыкает канал до конца JVM")
-                    .anyMatch(r -> r.getMessage().contains("законная константная новость"));
+            // ЯКОРЬ на сам потолок, и он ДОЛЖЕН считать повтор, а не число разных строк:
+            // при поднятом SAID_LIMIT все 70 текстов уникальны и прозвучали бы всё равно,
+            // а вот повтор — только если дедупликация выключена, то есть потолок пробит.
+            // Замерено: без этого якоря мутация SAID_LIMIT=1024 не краснела.
+            assertThat(said.stream()
+                    .filter(r -> r.getMessage().contains("законная константная новость")).count())
+                    .as("потолок не пробит: дедупликация ещё работает, и проверяемая ветка "
+                            + "(«на потолке говорим, но не запоминаем») не выполнялась")
+                    .isEqualTo(2);
         } finally {
             DiagnosticsReset.forget();
         }
@@ -232,23 +241,36 @@ class ActivationDiagnosticsTest {
         // каждое значение» И уводит данные потребителя (имя бина, путь, значение свойства)
         // в лог, а оттуда во вложение «логи приложения», то есть в артефакт CI.
         // Мутация: подставить в любой вызов конкатенацию вместо константы → RED.
-        Pattern call = Pattern.compile(
-                "noteOnce\\(\\s*\"[^\"]*\"\\s*,\\s*([^)]*)\\)", Pattern.DOTALL);
+        // ⚠️ Ищем ВЫЗОВ, не форму первого аргумента. Первая редакция требовала, чтобы первым
+        // стоял строковый литерал, — и вызов вида noteOnce(COMPONENT, NOTICE + x) не видела
+        // вовсе. Замерено: под такой мутацией гейт оставался зелёным.
+        Pattern call = Pattern.compile("noteOnce\\s*\\(([^;]*?)\\)\\s*;", Pattern.DOTALL);
         List<String> offenders = new ArrayList<>();
+        int calls = 0;
         try (Stream<Path> files = Files.walk(Path.of("src/main/java"))) {
             for (Path f : files.filter(p -> p.toString().endsWith(".java")).sorted().toList()) {
                 Matcher m = call.matcher(Files.readString(f));
                 while (m.find()) {
-                    String argument = m.group(1).trim();
-                    // Константа — это ИДЕНТИФИКАТОР (NOTICE, Foo.BAR). Литерал в аргументе
-                    // тоже не годится: дедупликация ключуется текстом, и держать его надо
-                    // там же, где он объявлен один раз.
-                    if (!argument.matches("[A-Za-z_$][\\w$]*(\\.[A-Za-z_$][\\w$]*)*")) {
-                        offenders.add(f + "  →  " + argument.replaceAll("\\s+", " "));
+                    calls++;
+                    String[] args = m.group(1).split(",", 2);
+                    if (args.length < 2) {
+                        offenders.add(f + "  →  не разобрать аргументы: " + m.group(1));
+                        continue;
+                    }
+                    // Константа — ИДЕНТИФИКАТОР (NOTICE, Foo.BAR). Литерал по месту тоже не
+                    // годится: ключ дедупликации — текст, и держать его надо там, где он
+                    // объявлен один раз.
+                    String message = args[1].trim().replaceAll("\\s+", " ");
+                    if (!message.matches("[A-Za-z_$][\\w$]*(\\.[A-Za-z_$][\\w$]*)*")) {
+                        offenders.add(f + "  →  " + message);
                     }
                 }
             }
         }
+
+        // ЯКОРЬ: «нарушителей нет» неотличимо от «не нашёл ни одного вызова».
+        assertThat(calls).as("гейт не нашёл ни одного вызова noteOnce — он проверяет пустоту")
+                .isGreaterThan(0);
         assertThat(offenders).as("второй аргумент noteOnce обязан быть константой: переменный "
                 + "текст ломает однократность и уводит данные потребителя в артефакт CI")
                 .isEmpty();

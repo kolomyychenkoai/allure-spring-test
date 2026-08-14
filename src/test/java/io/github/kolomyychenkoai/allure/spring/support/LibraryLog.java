@@ -43,9 +43,15 @@ public final class LibraryLog {
         collector.setLevel(Level.ALL);
         Logger logger = AllureInstrumentationLogger.logger();
         logger.addHandler(collector);
+        // ⚠️ Родительские хендлеры на время замера отключаем: тест потолка делает 70 настоящих
+        // noteOnce, и они уходили бы в лог сборки, разбавляя настоящие строки библиотеки в 24
+        // раза. Канал ценен ровно своей читаемостью — на ней стоит весь класс диагностики.
+        boolean parents = logger.getUseParentHandlers();
+        logger.setUseParentHandlers(false);
         try {
             action.run();
         } finally {
+            logger.setUseParentHandlers(parents);
             logger.removeHandler(collector);
         }
         return records;

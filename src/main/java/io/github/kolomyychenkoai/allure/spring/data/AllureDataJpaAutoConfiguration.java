@@ -2,9 +2,11 @@ package io.github.kolomyychenkoai.allure.spring.data;
 
 import io.github.kolomyychenkoai.allure.spring.data.internal.AllureRepositoryAspect;
 import io.github.kolomyychenkoai.allure.spring.internal.ActivationDiagnostics;
+import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import org.springframework.aop.config.AopConfigUtils;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.config.BeanDefinition;
+import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
 import org.springframework.beans.factory.support.BeanDefinitionRegistryPostProcessor;
 import org.springframework.beans.factory.support.RootBeanDefinition;
@@ -21,12 +23,12 @@ import org.springframework.util.ClassUtils;
  * {@code META-INF/spring/...AutoConfiguration.imports}.
  * <p>
  * <b>Авто-проксирование мы НЕ включаем — только пользуемся тем, что включил потребитель.</b>
- * Первая редакция вешала {@code @EnableAspectJAutoProxy}, и у потребителя, отказавшегося от
- * авто-проксирования, бин {@code internalAutoProxyCreator} менялся с
+ * С {@code @EnableAspectJAutoProxy} на нашей стороне бин {@code internalAutoProxyCreator}
+ * у потребителя, отказавшегося от авто-проксирования, сменился бы с
  * {@code InfrastructureAdvisorAutoProxyCreator} (его ставит {@code @EnableTransactionManagement})
- * на {@code AnnotationAwareAspectJAutoProxyCreator}: проксировалось больше бинов, чем он
- * разрешал, оживали его спящие аспекты, а инъекция по конкретному классу переставала
- * собираться. Issue #70.
+ * на {@code AnnotationAwareAspectJAutoProxyCreator}: проксировалось бы больше бинов, чем он
+ * разрешал, оживали бы его спящие аспекты, а инъекция по конкретному классу перестала бы
+ * собираться (issue #70). Держит {@code withoutAspectJProxyCreatorWeTouchNothing}.
  * <p>
  * Гейт стоит на ФАКТЕ, а не на намерении: смотрим, есть ли в реестре AspectJ-совместимый
  * создатель прокси. Свойство {@code spring.aop.auto} читать было бы недостаточно — отказаться
@@ -52,11 +54,11 @@ import org.springframework.util.ClassUtils;
  * ({@link AllureDataSourceAutoConfiguration}, свой {@code ProxyFactory} без авто-проксирования), —
  * но окажется на верхнем уровне теста, а не внутри шага репозитория. Об этом говорит одна строка в логе — см. регистратор ниже.
  */
-// Порядок автоконфигураций тут НАМЕРЕННО не задан: решение принимает пост-процессор
-// реестра, который идёт после разбора всех конфигураций и видит их одинаково — хоть
-// раньше нас, хоть позже. Стоявший здесь after = AopAutoConfiguration.class ничего не
-// менял (замерено: снятие не краснит ни одного теста) и подсказывал следующему читателю,
-// будто порядок здесь что-то решает — ровно то заблуждение, из которого вырос блокер.
+// Порядок автоконфигураций здесь НАМЕРЕННО не задан: решение принимает пост-процессор
+// реестра, он идёт после разбора всех конфигураций и видит их одинаково — и раньше нас,
+// и позже.
+// ⚠️ НЕ добавляй сюда after/before: на исход они не влияют (замерено), а читателю
+// подсказывают, будто порядок здесь что-то решает.
 @AutoConfiguration
 @ConditionalOnClass(name = {
         "org.aspectj.lang.ProceedingJoinPoint",
@@ -96,9 +98,14 @@ public class AllureDataJpaAutoConfiguration {
      * <p>
      * {@link BeanDefinitionRegistryPostProcessor} идёт после {@code ConfigurationClassPostProcessor},
      * поэтому видит ВСЕ определения — и наши, и автоконфигурации Boot, и поздние чужие. Ни
-     * {@code @ConditionalOnBean} (срез на момент разбора), ни побочный эффект в конструкторе
-     * конфигурации (не выполняется под {@code spring.main.lazy-initialization=true}) этого не дают;
-     * обе формы были замерены и обе промахивались.
+     * {@code @ConditionalOnBean} (срез реестра на момент разбора), ни побочный эффект в
+     * конструкторе конфигурации (не выполняется под {@code spring.main.lazy-initialization=true})
+     * этого не дают. Держат {@code lateAspectJProxyCreatorStillGetsTheAspect} и
+     * {@code noticeSurvivesLazyInitialization}.
+     * <p>
+     * ⚠️ Граница у «видит все» есть, и она в одну фазу: определения, которые зарегистрирует
+     * ДРУГОЙ {@code BeanDefinitionRegistryPostProcessor} после нас, мы не увидим. Замерено —
+     * чужой BDRPP, поднимающий создатель прокси второй волной, оставляет нас без аспекта.
      */
     @Bean
     static BeanDefinitionRegistryPostProcessor allureRepositoryAspectRegistrar() {
@@ -111,7 +118,8 @@ public class AllureDataJpaAutoConfiguration {
                 // про создателя прокси: без репозиториев он просто ничего не поймает, вреда
                 // от него нет. Говорить новость — вопрос про потерю: без репозиториев терять
                 // нечего, и предупреждение было бы шумом, который перестают читать.
-                if (hasAspectJProxyCreator(registry)) {
+                Answer creator = hasAspectJProxyCreator(registry);
+                if (creator == Answer.YES) {
                     // Имя занято — НЕ трогаем: конфигурация потребителя обязана побеждать нашу.
                     // Замерено на обеих настройках переопределения. При
                     // allow-bean-definition-overriding=true без гарда наше определение молча
@@ -130,7 +138,8 @@ public class AllureDataJpaAutoConfiguration {
                     definition.setRole(BeanDefinition.ROLE_INFRASTRUCTURE);
                     definition.setResourceDescription(AllureDataJpaAutoConfiguration.class.getName());
                     registry.registerBeanDefinition(ASPECT_BEAN_NAME, definition);
-                } else if (registry instanceof ListableBeanFactory beans && hasRepositoryBeans(beans)) {
+                } else if (creator == Answer.NO
+                        && registry instanceof ListableBeanFactory beans && hasRepositoryBeans(beans)) {
                     ActivationDiagnostics.noteOnce("DbRepository", NOTICE);
                 }
             } catch (Throwable diagnosticIsNotWorthATest) {
@@ -138,7 +147,7 @@ public class AllureDataJpaAutoConfiguration {
                 // Жалоба идёт через warnQuietly, а не напрямую в логгер: запасной канал пишет
                 // в ТОТ ЖЕ логгер, на котором мы могли только что упасть, и хендлер
                 // потребителя, бросающий на publish, вынес бы исключение прямо в refresh.
-                ActivationDiagnostics.warnQuietly(diagnosticIsNotWorthATest);
+                ActivationDiagnostics.warnQuietly("DbRepository", diagnosticIsNotWorthATest);
             }
         };
     }
@@ -155,26 +164,42 @@ public class AllureDataJpaAutoConfiguration {
      * Имя не резолвится (свой загрузчик, класс недоступен) — отвечаем «нет»: молчание дешевле
      * ложного вывода, а хуже прежнего поведения не станет.
      */
-    private static boolean hasAspectJProxyCreator(BeanDefinitionRegistry registry) {
+    private static Answer hasAspectJProxyCreator(BeanDefinitionRegistry registry) {
         if (!registry.containsBeanDefinition(AopConfigUtils.AUTO_PROXY_CREATOR_BEAN_NAME)) {
-            return false;
+            return Answer.NO;
         }
         String type = registry.getBeanDefinition(AopConfigUtils.AUTO_PROXY_CREATOR_BEAN_NAME)
                 .getBeanClassName();
         if (type == null) {
-            return false; // определение без класса (instance supplier) — судить не по чему
+            return Answer.UNKNOWN; // определение без класса (instance supplier) — судить не по чему
         }
         if (ASPECTJ_PROXY_CREATOR.equals(type)) {
-            return true; // штатный случай, без загрузки классов
+            return Answer.YES; // штатный случай, без загрузки классов
         }
         try {
-            ClassLoader loader = AllureDataJpaAutoConfiguration.class.getClassLoader();
+            // Загрузчик берём У ПОТРЕБИТЕЛЯ: Spring резолвит его бины именно им. Свой
+            // загрузчик не видит классов дочернего (devtools, WAR в контейнере, OSGi),
+            // и мы отвечали бы «создателя нет» про контекст, где он есть. Замерено на
+            // настоящей Spring Data: подкласс, видимый только загрузчику потребителя,
+            // отнимал раздел БД и добавлял к этому ложную строку в логе.
+            ClassLoader loader = classLoaderOf(registry);
             return ClassUtils.forName(ASPECTJ_PROXY_CREATOR, loader)
-                    .isAssignableFrom(ClassUtils.forName(type, loader));
+                    .isAssignableFrom(ClassUtils.forName(type, loader))
+                    ? Answer.YES : Answer.NO;
         } catch (Throwable notResolvable) {
-            return false;
+            // ⚠️ НЕ «нет». Мы не смогли посмотреть — это третий исход, и путать его с ответом
+            // «создателя нет» нельзя: на «нет» висит новость, которая УТВЕРЖДАЕТ про чужой
+            // контекст то, чего мы не проверяли. Так уже было с точным equals: аспекта нет
+            // плюс строка «AspectJ-создателя в контексте нет» при живом создателе.
+            AllureInstrumentationLogger.trace("DbRepository", () ->
+                    "тип создателя прокси «" + type + "» не резолвится загрузчиком библиотеки: "
+                            + "судить о нём не можем, шагов «DB Repo.method» не будет");
+            return Answer.UNKNOWN;
         }
     }
+
+    /** Что мы смогли узнать про создатель прокси. «Не смогли посмотреть» — не то же, что «нет». */
+    private enum Answer { YES, NO, UNKNOWN }
 
     /**
      * Есть ли у потребителя хоть один репозиторий. Типы резолвим ПО ИМЕНИ: spring-data нет в
@@ -184,12 +209,11 @@ public class AllureDataJpaAutoConfiguration {
      * {@code JpaRepositoryFactoryBean}) — все четыре комбинации:
      * <pre>
      * Repository,                    includeNonSingletons=true  → 2
-     * Repository,                    includeNonSingletons=false → 0   ← блокер круга 2
+     * Repository,                    includeNonSingletons=false → 0
      * RepositoryFactoryBeanSupport,  includeNonSingletons=true  → 2
      * RepositoryFactoryBeanSupport,  includeNonSingletons=false → 2
      * </pre>
-     * Пустой ответ, из-за которого предупреждение молчало у всех потребителей, давала
-     * КОМБИНАЦИЯ «маркер + {@code false}», а не один флаг сам по себе.
+     * Пустой ответ даёт КОМБИНАЦИЯ «маркер + {@code false}», а не один флаг сам по себе.
      * <p>
      * Спрашиваем ФАБРИКУ, а не маркер, и это несущий выбор: по маркеру нашёлся бы и самописный
      * DAO, а он шагов не даёт никогда — поинткат требует {@code TransactionalProxy}.
@@ -202,16 +226,28 @@ public class AllureDataJpaAutoConfiguration {
      * сегодня нет. Оставлен как более широкий из двух равных запросов: если тип придётся
      * вернуть к маркеру, флаг уже правильный.
      * <p>
-     * {@code allowEagerInit} остаётся {@code false}: диагностика не поднимает чужие бины.
+     * {@code allowEagerInit} остаётся {@code false}: с {@code true} мы звали бы
+     * {@code getObjectType()} на фабриках бинов потребителя ещё до регистрации
+     * {@code BeanPostProcessor}'ов, то есть поднимали бы чужую инфраструктуру ради диагностики.
+     * Замерено, что гейта на этом флаге сегодня нет — как и на соседнем.
      */
     private static boolean hasRepositoryBeans(ListableBeanFactory beanFactory) {
         return hasBeansOfType(beanFactory,
                 "org.springframework.data.repository.core.support.RepositoryFactoryBeanSupport");
     }
 
+    /** Загрузчик, которым Spring резолвит бины ПОТРЕБИТЕЛЯ; наш — только запасной. */
+    private static ClassLoader classLoaderOf(Object registryOrFactory) {
+        if (registryOrFactory instanceof ConfigurableBeanFactory factory
+                && factory.getBeanClassLoader() != null) {
+            return factory.getBeanClassLoader();
+        }
+        return AllureDataJpaAutoConfiguration.class.getClassLoader();
+    }
+
     private static boolean hasBeansOfType(ListableBeanFactory beanFactory, String typeName) {
         try {
-            Class<?> type = ClassUtils.forName(typeName, AllureDataJpaAutoConfiguration.class.getClassLoader());
+            Class<?> type = ClassUtils.forName(typeName, classLoaderOf(beanFactory));
             return beanFactory.getBeanNamesForType(type, true, false).length > 0;
         } catch (Throwable notResolvable) {
             return false; // молчание дешевле ложного предупреждения
