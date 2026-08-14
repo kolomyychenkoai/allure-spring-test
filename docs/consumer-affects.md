@@ -63,11 +63,28 @@ TestRestTemplate; RestAssured + MockMvc), а в `svc-a` одна и та же в
 обесценивает, а сама по себе A/B не перезапускает. Отсюда строка в чек-листе PR — гонять
 `scripts/consumer-matrix.sh` после правок библиотеки.
 
-**Последний прогон — на `ad6e987`** (после защиты от ленивых связей, переноса гейта в рекурсивную
-часть рендера и защиты рендера ответа): plain, forked и concurrent — снимки идентичны
-во всех точках (svc-a 17, svc-b 6, svc-c 8), атрибуция цела (7 маркеров, каждый в своём
-кейсе из 17). Матрица совместимости на той же ревизии: три точки зелёные, `boot-min`
-пропущена по известной причине.
+**A/B по 22 приложениям охоты — на `c04a58d`** (правка #70/#71 после пяти кругов консилиума):
+исходы совпали у 20 приложений из 22. Расходятся `gateway` (4 теста) и `tracking` (2) — те же
+шесть тестов, что и до правки, все про интерсептор `RestTemplate`: это **#69**, отдельная
+незакрытая находка, к #70/#71 отношения не имеющая.
+
+**Снимок бинов по тем же 22 приложениям** (`beans-ab.sh` + `beans-diff.py`, гасящий номера
+лямбд и JDK-прокси): подмен на ЧУЖОЙ класс — **ноль**. Единственное изменение класса — бин
+`DataSource` становится CGLIB-подклассом СВОЕГО класса (у `tenants` таких три), а это принятая
+цена перехвата из #54: `instanceof` и инъекция по конкретному типу сохраняются.
+
+Главное для #70 видно прямо в снимке: у `ledger` `internalAutoProxyCreator` остаётся
+`InfrastructureAdvisorAutoProxyCreator` и с библиотекой, и без неё — подмены больше нет.
+У `audit` он и был, и остался `AnnotationAwareAspectJAutoProxyCreator`: его собственный,
+мы его не трогаем.
+
+⚠️ Вердикт самого `beans-ab.sh` этому противоречит — он печатает «ПОДМЕНА КЛАССА БИНА» у всех
+21 приложения, потому что сравнивает сырой диф, где номера лямбд и `$ProxyNN` различаются
+между прогонами. Считать надо по `beans-diff.py`; сам скрипт стоит починить отдельной задачей.
+
+**Три полигона (`scripts/consumer-matrix.sh`) на `c04a58d`:** снимки идентичны во всех трёх —
+svc-a 18 тестов, svc-b 6, svc-c 8; «подключение библиотеки не изменило ни исходов тестов,
+ни поведения».
 
 Ниже — состояние на ревизии `45c2221`. Между ней и вершиной ветки `487f49e` в `src/main`
 изменились ТОЛЬКО строки javadoc — проверено фильтром по строкам кода, — поэтому числа в силе.
@@ -493,7 +510,7 @@ java -jar ~/projects/allure-spring-test/tools/target/review-tools.jar \
 | #67 | Mockito-модуль по инструкции README ломает `mockStatic`/`mockConstruction` | блокер | `billing`: 13 из 28 тестов в ошибку |
 | #68 | срез `@DataJpaTest` теряет весь раздел БД; `@WebFluxTest` — WebTestClient | major | `catalog` + замер по бинам среза |
 | #69 | интерсептор `RestTemplate` досыпается, переживает `setInterceptors`, переводит запрос с потока на буфер | major | `gateway`: 4 теста краснеют, 3 прогона подряд |
-| #70 | ~~`@EnableAspectJAutoProxy` подменяет создатель прокси потребителя~~ **ИСПРАВЛЕНО** | блокер | `@EnableAspectJAutoProxy` снят; аспект регистрируется только там, где AspectJ-создатель прокси уже есть без нас (гейт по факту в `BeanDefinitionRegistryPostProcessor`, не по свойству). Закрывают `withoutAspectJProxyCreatorWeTouchNothing`, `ownAspectJAutoProxyKeepsTheDbSection`, `lateAspectJProxyCreatorStillGetsTheAspect`, `RepositoryNoticeOnRealSpringDataTest`; `ledger` зелёный, раздел БД исчезает громко |
+| #70 | ~~`@EnableAspectJAutoProxy` подменяет создатель прокси потребителя~~ **ИСПРАВЛЕНО** | блокер | `@EnableAspectJAutoProxy` снят; аспект регистрируется только там, где AspectJ-создатель прокси уже есть без нас (гейт по факту в `BeanDefinitionRegistryPostProcessor`, не по свойству). Закрывают `withoutAspectJProxyCreatorWeTouchNothing`, `ownAspectJAutoProxyKeepsTheDbSection`, `lateAspectJProxyCreatorStillGetsTheAspect`, `subclassOfAspectJCreatorCountsAsOne`, `RepositoryNoticeOnRealSpringDataTest`. Замер на `c04a58d`: `ledger` — исходы тестов идентичны без библиотеки и с ней, раздел БД исчезает (0 шагов «DB …» при 1945 «SQL …» — обещание «реальный SQL остаётся» держится) и новость сказана РОВНО один раз; `audit` — раздел БД сохранён (129 шагов «DB …», 10 видов), новости нет |
 | #71 | ~~аспект на `Repository+` проксирует самописный DAO~~ **ИСПРАВЛЕНО** | блокер | поинткат сужен по `TransactionalProxy`. Закрывают `plainDaoWithRepositoryMarkerIsNotProxied` (не сузили мало) и `springDataShapedProxyStillProducesDbStep` (не сузили много); `ledger` зелёный |
 | #72 | Awaitility: единственный глобальный слот — молча теряется либо слушатель потребителя, либо наш раздел | major | `ingest`: 16 тестов зелёные, ноль шагов ожидания |
 | #73 | поздняя коллизия имени бина роняет старт | minor | `BeanDefinitionOverrideException` |
