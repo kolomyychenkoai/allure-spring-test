@@ -322,7 +322,7 @@ Hibernate-прокси (`describeEntity` → `safe()` → `toString()` прок�
 Закрыты все девять пунктов; три из них я не видела до повторного аудита.
 
 **Что опровергнуто.** Заявленный «бесплатный гейт» через гигиену тел НЕ существует: мутация
-показала, что без теста значение печатается как `<?>` (toString прокси бросает при закрытой
+показала, что без защиты значение печатается как `<?>` (toString прокси бросает при закрытой
 сессии), а не `Owner@хэш` — ловить гигиене нечего. Утверждение снято из доков, вместо него
 заведены ДВА адресных теста, и они про разное: при закрытой сессии страдает отчёт, при
 ОТКРЫТОЙ — приложение (лишний SELECT). Второй случай — тот самый, что нашла A/B у потребителя,
@@ -478,7 +478,7 @@ WireMock (7,8 мс). Накладные расходы переведены на
 
 **Мутация, которой не хватало:** снять защиту из ОБЕИХ точек → оба живых теста витрины краснеют
 каждый со своим сообщением: `owner=<?>` при закрытой сессии и лишний `SQL SELECT owner` при
-открытой. Это и есть проверка таблицы «что страдает без теста» из `docs/consumer-affects.md` —
+открытой. Это и есть проверка таблицы «что страдает без защиты» из `docs/consumer-affects.md` —
 раньше таблица была обещанием, теперь у неё есть прогон.
 
 **Вывод для процедуры.** Чтение файла ЦЕЛИКОМ и чтение дифа ловят разные классы дефектов.
@@ -971,12 +971,12 @@ javadoc аспекта в том же коммите отдельно пишет
 
 | мутация в `src/main` | кто покраснел |
 |---|---|
-| вернуть `@EnableAspectJAutoProxy` на автоконфигурацию | `withoutAspectJProxyCreatorWeTouchNothingAndSayIt`, `noticeReachesConsumerOfRealSpringData` |
+| вернуть `@EnableAspectJAutoProxy` на автоконфигурацию | `withoutAspectJProxyCreatorWeTouchNothing`, `noticeReachesConsumerOfRealSpringData` |
 | спрашивать создатель прокси по ИМЕНИ, а не по типу | те же два |
 | гейт по свойству `spring.aop.auto` вместо взгляда в реестр | `ownAspectJAutoProxyKeepsTheDbSection`, `lateAspectJProxyCreatorStillGetsTheAspect` |
 | говорить новость независимо от наличия создателя прокси | `staysSilentWhenProxyCreatorIsThere` |
-| убрать проверку `hasRepositoryBeans` у новости | `silentWhenConsumerHasNoRepositories`, `noticeSurvivesLazyInitialization`, `withoutAspectJProxyCreatorWeTouchNothingAndSayIt` |
-| искать репозитории по маркеру `Repository` вместо фабрики | `noticeSurvivesLazyInitialization`, `withoutAspectJProxyCreatorWeTouchNothingAndSayIt` |
+| убрать проверку `hasRepositoryBeans` у новости | `silentWhenConsumerHasNoRepositories`, `staysQuietUnderLazyInitialization`, `withoutAspectJProxyCreatorWeTouchNothing` |
+| искать репозитории по маркеру `Repository` вместо фабрики | `staysQuietUnderLazyInitialization`, `withoutAspectJProxyCreatorWeTouchNothing` |
 | убрать `setRole(ROLE_INFRASTRUCTURE)` | `defaultsRegisterTheAspectAsInfrastructure` |
 | убрать `setResourceDescription(...)` | `defaultsRegisterTheAspectAsInfrastructure` |
 | убрать гард на занятое имя бина | `consumerDefinitionOfTheAspectNameWins` |

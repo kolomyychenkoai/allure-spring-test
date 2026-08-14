@@ -146,25 +146,42 @@ public final class ActivationDiagnostics {
             AllureInstrumentationLogger.note(component, message);
         } catch (Throwable diagnosticIsNotWorthATest) {
             // Нас зовут изнутри refresh контекста потребителя: уронить его сообщением о том,
-            // что часть отчёта беднее, недопустимо. Запасной warn идёт в ТОТ ЖЕ логгер, на
-            // котором мы только что упали, поэтому он сам обёрнут: замерено, что хендлер
-            // потребителя, бросающий на publish, иначе пробрасывает исключение в refresh.
-            try {
-                AllureInstrumentationLogger.warn("ActivationDiagnostics", diagnosticIsNotWorthATest);
-            } catch (Throwable loggerIsBrokenToo) {
-                // сказать больше нечем и незачем
-            }
+            // что часть отчёта беднее, недопустимо.
+            warnQuietly(diagnosticIsNotWorthATest);
         }
     }
 
     /**
-     * true, если эту новость ещё не говорили. Потолок нужен на случай нарушения контракта
+     * true, если эту новость надо сказать. Потолок нужен на случай нарушения контракта
      * «message — константа»: статическое множество не чистится никогда, и на переменном тексте
-     * росло бы до конца JVM. Дойдя до потолка, перестаём запоминать — то есть в худшем случае
-     * повторяемся, но не течём.
+     * росло бы до конца JVM. Дойдя до потолка, перестаём ЗАПОМИНАТЬ, но продолжаем говорить —
+     * в худшем случае повторяемся, но не течём и не глохнем.
+     * <p>
+     * ⚠️ Порядок операндов несущий. Первая редакция стояла наоборот
+     * ({@code size() < LIMIT && add(...)}) и на потолке возвращала false, то есть библиотека
+     * ЗАМОЛКАЛА — и не только про нарушителя контракта, а про всё подряд: один переменный текст
+     * затыкал 64 слота и уносил с собой законные константные новости. Ровно та тихая потеря,
+     * против которой заведён весь класс. Замерено, держит {@code capKeepsTalkingNotSilent}.
      */
     private static boolean remember(String component, String message) {
-        return SAID.size() < SAID_LIMIT && SAID.add(component + '|' + message);
+        return SAID.size() >= SAID_LIMIT || SAID.add(component + '|' + message);
+    }
+
+    /**
+     * Пожаловаться в лог, НИЧЕМ не рискуя. Запасной канал после сбоя диагностики идёт в ТОТ ЖЕ
+     * логгер, на котором мы только что упали, — значит и он может бросить. Замерено: хендлер
+     * потребителя, бросающий на {@code publish}, иначе пробрасывает исключение в refresh чужого
+     * контекста, то есть жалоба на потерянный раздел отчёта роняет чужую сборку.
+     * <p>
+     * Один метод на все три места (обе ветки этого класса и регистратор аспекта): обещание
+     * «не роняем» не должно держаться на том, помнил ли автор очередного catch про логгер.
+     */
+    public static void warnQuietly(Throwable failure) {
+        try {
+            AllureInstrumentationLogger.warn("ActivationDiagnostics", failure);
+        } catch (Throwable loggerIsBrokenToo) {
+            // сказать больше нечем и незачем
+        }
     }
 
     /** Забыть сказанное. Только для тестов: без сброса ассерт «сказано один раз» зависел бы
@@ -204,7 +221,7 @@ public final class ActivationDiagnostics {
             // обещание «прогон не роняем никогда» обязано принадлежать этому методу, иначе оно
             // держится на реализации чужого хелпера. Диагност — вспомогательный сигнал, ронять
             // из-за него чужой тест недопустимо.
-            AllureInstrumentationLogger.warn("ActivationDiagnostics", diagnosticIsNotWorthATest);
+            warnQuietly(diagnosticIsNotWorthATest);
         }
     }
 }

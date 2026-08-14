@@ -128,7 +128,7 @@ class AllureRepositoryAspectTest {
     @DisplayName("ВЕРХНЕУРОВНЕВЫЙ ленивый прокси помечен маркером, а не отрендерен через toString")
     void doesNotRenderTopLevelLazyProxy() throws Throwable {
         boolean[] touched = {false};
-        // Класс прокси НЕ несёт @Entity (аннотация не @Inherited), поэтому без теста
+        // Класс прокси НЕ несёт @Entity (аннотация не @Inherited), поэтому без защиты
         // значение уходило бы в safeValue → String.valueOf → toString() → SELECT.
         Object lazyEntity = LazyProxies.uninitializedEntity(touched);
 

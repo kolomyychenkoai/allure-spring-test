@@ -372,7 +372,7 @@ public class AllureRepositoryAspect {
                 sj.add(field.getName() + "=" + AllureAdviceSupport.safe(field.get(obj)));
             } catch (Throwable e) {
                 // Ленивая связь Hibernate/EclipseLink сюда не приводит — её помечает маркером
-                // тест JpaLaziness. Ловим ОСТАЛЬНОЕ: недоступное под module-системой поле,
+                // проверка JpaLaziness. Ловим ОСТАЛЬНОЕ: недоступное под module-системой поле,
                 // ленивое у незнакомого провайдера, сломанный getter — не теряем прочие поля.
                 sj.add(field.getName() + "=?");
             }

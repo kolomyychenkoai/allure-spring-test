@@ -2,7 +2,6 @@ package io.github.kolomyychenkoai.allure.spring.data;
 
 import io.github.kolomyychenkoai.allure.spring.data.internal.AllureRepositoryAspect;
 import io.github.kolomyychenkoai.allure.spring.internal.ActivationDiagnostics;
-import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import org.springframework.aop.config.AopConfigUtils;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.config.BeanDefinition;
@@ -54,7 +53,12 @@ import org.springframework.util.ClassUtils;
  * ({@link AllureDataSourceAutoConfiguration}, свой {@code ProxyFactory} без авто-проксирования), —
  * но окажется на верхнем уровне теста, а не внутри шага репозитория. Об этом говорит одна строка в логе — см. регистратор ниже.
  */
-@AutoConfiguration(after = AopAutoConfiguration.class)
+// Порядок автоконфигураций тут НАМЕРЕННО не задан: решение принимает пост-процессор
+// реестра, который идёт после разбора всех конфигураций и видит их одинаково — хоть
+// раньше нас, хоть позже. Стоявший здесь after = AopAutoConfiguration.class ничего не
+// менял (замерено: снятие не краснит ни одного теста) и подсказывал следующему читателю,
+// будто порядок здесь что-то решает — ровно то заблуждение, из которого вырос блокер.
+@AutoConfiguration
 @ConditionalOnClass(name = {
         "org.aspectj.lang.ProceedingJoinPoint",
         "org.springframework.data.repository.Repository",
@@ -132,7 +136,10 @@ public class AllureDataJpaAutoConfiguration {
                     }
                 } catch (Throwable diagnosticIsNotWorthATest) {
                     // Мы внутри refresh чужого контекста: уронить его из-за раздела отчёта нельзя.
-                    AllureInstrumentationLogger.warn("DbRepository", diagnosticIsNotWorthATest);
+                    // Жалоба идёт через warnQuietly, а не напрямую в логгер: запасной канал пишет
+                    // в ТОТ ЖЕ логгер, на котором мы могли только что упасть, и хендлер
+                    // потребителя, бросающий на publish, вынес бы исключение прямо в refresh.
+                    ActivationDiagnostics.warnQuietly(diagnosticIsNotWorthATest);
                 }
             }
 
@@ -171,12 +178,12 @@ public class AllureDataJpaAutoConfiguration {
      * Спрашиваем ФАБРИКУ, а не маркер, и это несущий выбор: по маркеру нашёлся бы и самописный
      * DAO, а он шагов не даёт никогда — поинткат требует {@code TransactionalProxy}.
      * Предупреждать такого потребителя значило бы советовать ему включить проксирование и не
-     * дать ничего взамен. Держат выбор {@code withoutAspectJProxyCreatorWeTouchNothingAndSayIt}
-     * и {@code noticeSurvivesLazyInitialization}: под мутацией «маркер вместо фабрики» оба краснеют.
+     * дать ничего взамен. Держат выбор {@code withoutAspectJProxyCreatorWeTouchNothing}
+     * и {@code staysQuietUnderLazyInitialization}: под мутацией «маркер вместо фабрики» оба краснеют.
      * <p>
      * {@code includeNonSingletons=true} при фабрике, наоборот, НЕ несущий: по таблице выше ответ
-     * тот же и с {@code false}, мутация флага не краснит ни одного теста — замерено, гейта тут
-     * нет и быть не может. Оставлен как более широкий из двух равных запросов: если тип придётся
+     * тот же и с {@code false}, мутация флага не краснит ни одного теста — замерено, гейта на нём
+     * сегодня нет. Оставлен как более широкий из двух равных запросов: если тип придётся
      * вернуть к маркеру, флаг уже правильный.
      * <p>
      * {@code allowEagerInit} остаётся {@code false}: диагностика не поднимает чужие бины.

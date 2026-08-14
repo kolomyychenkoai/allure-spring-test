@@ -162,14 +162,14 @@ WebTestClient, логи, глобальный RestAssured) не проверял
 
 ⚠️ Защищено ЗНАЧЕНИЕ, а не всё, что внутри него: прокси, лежащий в обычном `List`
 (не `PersistentCollection`), уйдёт в `String.valueOf` списка и будет разбужен. Обходить чужую
-коллекцию ради проверки нельзя — это ровно тот побочный эффект, от которого тест и стоит.
+коллекцию ради проверки нельзя — это ровно тот побочный эффект, от которого защита и стоит.
 
 **Чем закреплено.** Юнит-тесты `unit/JpaLazinessTest` (на НАСТОЯЩИХ интерфейсах Hibernate и
 EclipseLink, а не одноимённых двойниках), `unit/AllureAdviceSupportTest` (прокси внутри
 массива), `unit/AllureMockitoTest` (мок вернул прокси) + ДВА адресных теста витрины
 в `demo/DataJpaReportIT`, и они про РАЗНОЕ:
 
-| тест | сессия | что страдает без теста |
+| тест | сессия | что страдает без защиты |
 |---|---|---|
 | `lazyAssociationIsNotWokenUp` | закрыта | отчёт: `toString()` прокси бросает, во вложении `<?>` |
 | `lazyAssociationCostsNoExtraQueryInsideTransaction` | ОТКРЫТА | приложение: лишний `SQL SELECT owner` |
@@ -182,7 +182,7 @@ EclipseLink, а не одноимённых двойниках), `unit/AllureAdv
 
 ⚠️ **Снято ошибочное утверждение.** Раньше здесь было написано, что регрессию бесплатно
 поймает гигиена тел (`Owner@1a2b` → правило «identity-хэш»). Проверила мутацией — НЕ поймает:
-без теста тело содержит `<?>`, а не хэш. Гейт был выдуманным, теперь на его месте два
+без защиты тело содержит `<?>`, а не хэш. Гейт был выдуманным, теперь на его месте два
 настоящих.
 
 ### Находка №2 — бин `DataSource` терял свой класс · ИСПРАВЛЕНО
@@ -247,7 +247,7 @@ EclipseLink, а не одноимённых двойниках), `unit/AllureAdv
 загружена иначе, базовое время `svc-a` отличается втрое. Сопоставима только дельта, и мерить
 её надо в одном заходе обеими сторонами — что скрипт и делает.
 
-**Стоимость защиты от ленивых связей замерена отдельно** (он добавлен в общую точку рендера, которую
+**Стоимость защиты от ленивых связей замерена отдельно** (она добавлена в общую точку рендера, которую
 зовут все модули), inline-таймером на полном сьюте: ~2350 вызовов, 2,4 мс суммарно, 1,0 мкс
 на вызов — распознавание класса кэшируется в `ClassValue`. Тем же замером `ConcurrentHashMap`
 давал 0,87 мкс: на вызов он дешевле, но разница — 0,3 мс на ВЕСЬ сьют, и платим мы ею за то,
@@ -493,7 +493,7 @@ java -jar ~/projects/allure-spring-test/tools/target/review-tools.jar \
 | #67 | Mockito-модуль по инструкции README ломает `mockStatic`/`mockConstruction` | блокер | `billing`: 13 из 28 тестов в ошибку |
 | #68 | срез `@DataJpaTest` теряет весь раздел БД; `@WebFluxTest` — WebTestClient | major | `catalog` + замер по бинам среза |
 | #69 | интерсептор `RestTemplate` досыпается, переживает `setInterceptors`, переводит запрос с потока на буфер | major | `gateway`: 4 теста краснеют, 3 прогона подряд |
-| #70 | ~~`@EnableAspectJAutoProxy` подменяет создатель прокси потребителя~~ **ИСПРАВЛЕНО** | блокер | `@EnableAspectJAutoProxy` снят; аспект регистрируется только там, где AspectJ-создатель прокси уже есть без нас (гейт по факту в `BeanDefinitionRegistryPostProcessor`, не по свойству). Закрывают `withoutAspectJProxyCreatorWeTouchNothingAndSayIt`, `ownAspectJAutoProxyKeepsTheDbSection`, `lateAspectJProxyCreatorStillGetsTheAspect`, `RepositoryNoticeOnRealSpringDataTest`; `ledger` зелёный, раздел БД исчезает громко |
+| #70 | ~~`@EnableAspectJAutoProxy` подменяет создатель прокси потребителя~~ **ИСПРАВЛЕНО** | блокер | `@EnableAspectJAutoProxy` снят; аспект регистрируется только там, где AspectJ-создатель прокси уже есть без нас (гейт по факту в `BeanDefinitionRegistryPostProcessor`, не по свойству). Закрывают `withoutAspectJProxyCreatorWeTouchNothing`, `ownAspectJAutoProxyKeepsTheDbSection`, `lateAspectJProxyCreatorStillGetsTheAspect`, `RepositoryNoticeOnRealSpringDataTest`; `ledger` зелёный, раздел БД исчезает громко |
 | #71 | ~~аспект на `Repository+` проксирует самописный DAO~~ **ИСПРАВЛЕНО** | блокер | поинткат сужен по `TransactionalProxy`. Закрывают `plainDaoWithRepositoryMarkerIsNotProxied` (не сузили мало) и `springDataShapedProxyStillProducesDbStep` (не сузили много); `ledger` зелёный |
 | #72 | Awaitility: единственный глобальный слот — молча теряется либо слушатель потребителя, либо наш раздел | major | `ingest`: 16 тестов зелёные, ноль шагов ожидания |
 | #73 | поздняя коллизия имени бина роняет старт | minor | `BeanDefinitionOverrideException` |
