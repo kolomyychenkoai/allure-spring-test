@@ -23,6 +23,7 @@ import net.ttddyy.dsproxy.support.ProxyDataSource;
 import net.ttddyy.dsproxy.support.ProxyDataSourceBuilder;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.aop.aspectj.annotation.AnnotationAwareAspectJAutoProxyCreator;
 import org.springframework.aop.config.AopConfigUtils;
 import org.springframework.aop.framework.AopProxyUtils;
 import org.springframework.aop.framework.ProxyFactory;
@@ -37,8 +38,11 @@ import org.springframework.transaction.interceptor.TransactionalProxy;
 
 import org.springframework.beans.factory.FactoryBean;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.config.BeanPostProcessor;
+import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
@@ -1000,13 +1004,26 @@ class AllureDataAutoConfigurationTest {
 
     // ─────────────────────────── AOP потребителя: issues #70 и #71 ───────────────────────────
 
+    /**
+     * Имя бина аспекта ЛИТЕРАЛОМ, а не ссылкой на константу продукта: константа в паре с самой
+     * собой доказывала бы тождество, а не имя. Переименуют её не подумав — тест покраснеет.
+     * Имя публичное по факту: под ним потребитель переопределяет наш бин (issue #73).
+     */
+    private static final String ASPECT_BEAN_NAME = "allureRepositoryAspect";
+
     @Test
     @DisplayName("нет AspectJ-создателя прокси: аспекта нет, чужой создатель не подменён, сказано ОДИН раз")
     void withoutAspectJProxyCreatorWeTouchNothingAndSayIt() {
         // Сердцевина issue #70, форма живого приложения `ledger`: команда выключила
         // авто-проксирование после инцидента, а мы возвращали его обратно.
-        // Мутация: вернуть @EnableAspectJAutoProxy на RepositoryAspectConfiguration →
+        // Мутация: вернуть @EnableAspectJAutoProxy на AllureDataJpaAutoConfiguration →
         // появится аспект И подменится internalAutoProxyCreator → RED (оба ассерта).
+        // Этот же тест видит ещё одну мутацию, и она замерена: спрашивать создатель прокси
+        // по ИМЕНИ вместо типа (`type != null` в hasAspectJProxyCreator) → инфраструктурный
+        // создатель от @EnableTransactionManagement сойдёт за AspectJ-овский → RED.
+        // ⚠️ Мутацию «гейт по свойству spring.aop.auto» сюда НЕ пиши: здесь свойство как раз
+        // false, гейт по нему дал бы тот же исход, и тест остаётся зелёным — замерено. Её ловят
+        // ownAspectJAutoProxyKeepsTheDbSection и lateAspectJProxyCreatorStillGetsTheAspect.
         ActivationDiagnostics.forgetForTests();
 
         List<LogRecord> said = logWhile(() ->
@@ -1040,8 +1057,10 @@ class AllureDataAutoConfigurationTest {
     void ownAspectJAutoProxyKeepsTheDbSection() {
         // Форма живого приложения `audit`: spring.aop.auto=false ПЛЮС свой @EnableAspectJAutoProxy.
         // Подменять нечего — создатель у него уже нужного типа, — и отнимать шаги не за что.
-        // Мутация: вернуть гейт по свойству вместо @ConditionalOnBean → аспекта не будет,
-        // а новость соврёт про «выключено вами» → RED.
+        // Мутация: гейт по свойству spring.aop.auto вместо взгляда в реестр → у `audit`
+        // аспекта не будет, хотя проксирование он поднял сам → RED (замерено).
+        // Соседняя ось — то же самое, но когда проксирование поднимают ПОЗЖЕ нашей
+        // автоконфигурации: lateAspectJProxyCreatorStillGetsTheAspect.
         ActivationDiagnostics.forgetForTests();
 
         List<LogRecord> said = logWhile(() ->
@@ -1058,29 +1077,125 @@ class AllureDataAutoConfigurationTest {
     }
 
     @Test
-    @DisplayName("по умолчанию новость НЕ говорится")
-    void noNoticeWhenEverythingWorks() {
-        // Прямой негатив к двум тестам выше: без него мутация «снять условие с новости»
-        // выживала бы, когда её тест-класс идёт в прогоне не первым (runOrder=random).
-        // Мутация: убрать проверку aspectRegistered в allureRepositoryStepsNotice → RED.
+    @DisplayName("чужой стартер поднимает проксирование ПОЗЖЕ нас: аспект всё равно есть, новости нет")
+    void lateAspectJProxyCreatorStillGetsTheAspect() {
+        // Ось, ради которой решение переехало из @ConditionalOnBean в пост-процессор реестра:
+        // создатель прокси приходит ПОСЛЕ разбора нашей автоконфигурации. Условие видит срез
+        // реестра на своём месте в очереди, и на этом срезе создателя ещё нет — аспекта не будет,
+        // а новость соврёт про «создателя нет», хотя он появится через один конфиг.
+        // Мутация: вернуть @ConditionalOnBean(name = AUTO_PROXY_CREATOR_BEAN_NAME) вместо
+        // регистрации в BeanDefinitionRegistryPostProcessor → RED.
         ActivationDiagnostics.forgetForTests();
 
         List<LogRecord> said = logWhile(() ->
                 new ApplicationContextRunner()
                         .withConfiguration(AutoConfigurations.of(
-                                AopAutoConfiguration.class, AllureDataJpaAutoConfiguration.class))
+                                AopAutoConfiguration.class,
+                                AllureDataJpaAutoConfiguration.class,
+                                ConditionalOnBeanProbe.class,
+                                LateForeignAspectJStarter.class))
                         .withUserConfiguration(LedgerShapedConfig.class)
-                        .run(ctx -> assertThat(ctx).hasSingleBean(AllureRepositoryAspect.class)));
+                        .withPropertyValues("spring.aop.auto=false")
+                        .run(ctx -> {
+                            // ЯКОРЬ ПЕРВЫЙ: ось воспроизведена, а не подделана порядком конфигов.
+                            // Зонд — точная копия отвергнутой конструкции, стоящий на нашем месте
+                            // в очереди. Его бина НЕТ ⇒ на срезе @ConditionalOnBean создателя не
+                            // видно ⇒ «позже нас» — правда. Уедет сортировка автоконфигураций,
+                            // и зонд увидит создателя — тест покраснеет здесь, а не соврёт зелёным.
+                            assertThat(ctx)
+                                    .as("создатель прокси виден уже на срезе @ConditionalOnBean — "
+                                            + "чужой стартер пришёл НЕ позже нас, ось не воспроизведена")
+                                    .doesNotHaveBean("sawProxyCreatorAtOurPosition");
+                            // ЯКОРЬ ВТОРОЙ: создатель в итоге всё-таки есть и он AspectJ-овский.
+                            // Без него «аспект есть» можно было бы получить, вообще сняв гейт.
+                            assertThat(ctx.getBean(AopConfigUtils.AUTO_PROXY_CREATOR_BEAN_NAME)
+                                    .getClass().getName())
+                                    .as("чужой стартер не поднял AspectJ-создателя — фикстура сломана")
+                                    .isEqualTo(AnnotationAwareAspectJAutoProxyCreator.class.getName());
+                            assertThat(ctx)
+                                    .as("создатель прокси в контексте есть, а аспекта нет: раздел БД "
+                                            + "потерян у потребителя, который ничего не выключал")
+                                    .hasSingleBean(AllureRepositoryAspect.class);
+                        }));
 
-        assertThat(said).as("предупреждение в сборке, где всё работает, — тот самый шум, "
-                + "из-за которого перестают читать предупреждения").isEmpty();
+        assertThat(said).as("новость про потерянный раздел там, где раздел на месте, — ложь и шум")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("по умолчанию аспект регистрируется и помечен инфраструктурным")
+    void defaultsRegisterTheAspectAsInfrastructure() {
+        // Мутации, которые видит ИМЕННО этот тест (замерено):
+        //   • убрать definition.setRole(ROLE_INFRASTRUCTURE) → RED;
+        //   • убрать definition.setResourceDescription(...) → RED.
+        // Роль и происхождение — не косметика: без роли наш бин виден в /actuator/beans как
+        // прикладной и лезет в автовайринг по типу, без происхождения в тексте ошибки Spring
+        // стоит «defined in null», и решение библиотеки нечем аудировать.
+        //
+        // ⚠️ Молчание новости этот тест НЕ сторожит, хотя раньше комментарий это обещал.
+        // Замерено: мутация «говорить новость безусловно» его не краснит — в фикстуре уровня A
+        // нет настоящей фабрики Spring Data, поэтому hasRepositoryBeans здесь ложно при любой
+        // правке, и новость не может прозвучать в принципе. Ось молчания держит
+        // RepositoryNoticeOnRealSpringDataTest.staysSilentWhenProxyCreatorIsThere.
+        ActivationDiagnostics.forgetForTests();
+
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(
+                        AopAutoConfiguration.class, AllureDataJpaAutoConfiguration.class))
+                .withUserConfiguration(LedgerShapedConfig.class)
+                .run(ctx -> {
+                    assertThat(ctx).hasSingleBean(AllureRepositoryAspect.class);
+
+                    BeanDefinition definition = ctx.getBeanFactory()
+                            .getBeanDefinition(ASPECT_BEAN_NAME);
+                    assertThat(definition.getRole())
+                            .as("аспект выглядит прикладным бином потребителя: попадёт "
+                                    + "в /actuator/beans и в кандидаты на автовайринг по типу")
+                            .isEqualTo(BeanDefinition.ROLE_INFRASTRUCTURE);
+                    assertThat(definition.getResourceDescription())
+                            .as("у определения нет происхождения — в тексте ошибки Spring встанет "
+                                    + "«defined in null», и решение библиотеки нечем аудировать")
+                            .isEqualTo(AllureDataJpaAutoConfiguration.class.getName());
+                });
+    }
+
+    @Test
+    @DisplayName("имя аспекта занято потребителем: побеждает его бин, контекст встаёт")
+    void consumerDefinitionOfTheAspectNameWins() {
+        // Issue #73: коллизия имени бина. Гард в регистраторе (containsBeanDefinition → выходим)
+        // до сих пор не был прибит ничем.
+        // Мутация: убрать гард → наше определение перезапишет бин потребителя → RED.
+        //
+        // ⚠️ Переопределение бинов здесь РАЗРЕШЕНО намеренно, и это единственная форма, на
+        // которой мутация видна. Замерено на обеих:
+        //   • overriding=false (умолчание Boot и ApplicationContextRunner) — без гарда
+        //     registerBeanDefinition бросает BeanDefinitionOverrideException, её ГЛОТАЕТ
+        //     catch-all самого регистратора, контекст встаёт, бин потребителя цел. Исход
+        //     снаружи тот же, что с гардом, — сторожить тут нечего;
+        //   • overriding=true — без гарда наше определение молча заменяет бин потребителя.
+        //     Вот эту тихую потерю гард и держит.
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(
+                        AopAutoConfiguration.class, AllureDataJpaAutoConfiguration.class))
+                .withUserConfiguration(OwnAspectBeanNameConfig.class, LedgerShapedConfig.class)
+                .withAllowBeanDefinitionOverriding(true)
+                .run(ctx -> {
+                    assertThat(ctx)
+                            .as("библиотека уронила старт из-за собственного имени бина (#73)")
+                            .hasNotFailed();
+                    // ЯКОРЬ: бин потребителя не просто уцелел — он ТОТ САМЫЙ. Без сверки
+                    // значения ассерт прошёл бы и на нашем аспекте, молча съевшем чужой бин.
+                    assertThat(ctx.getBean(ASPECT_BEAN_NAME))
+                            .as("наш аспект перезаписал бин потребителя под тем же именем")
+                            .isSameAs(OwnAspectBeanNameConfig.CONSUMER_BEAN);
+                });
     }
 
     @Test
     @DisplayName("репозиториев нет — молчим, даже если аспекта нет")
     void silentWhenConsumerHasNoRepositories() {
         // Правило из javadoc ActivationDiagnostics.reportOnce: «фичи нет вовсе — молчим».
-        // Мутация: убрать проверку hasRepositories → RED.
+        // Мутация: убрать проверку hasRepositoryBeans у новости → RED.
         ActivationDiagnostics.forgetForTests();
 
         List<LogRecord> said = logWhile(() ->
@@ -1294,5 +1409,43 @@ class AllureDataAutoConfigurationTest {
     @Configuration(proxyBeanMethods = false)
     @EnableAspectJAutoProxy(proxyTargetClass = true)
     static class OwnAspectJProxyConfig {
+    }
+
+    /** Потребитель занял наше имя бина — законное право его конфигурации (issue #73). */
+    @Configuration(proxyBeanMethods = false)
+    static class OwnAspectBeanNameConfig {
+
+        static final Object CONSUMER_BEAN = new Object();
+
+        @Bean(name = ASPECT_BEAN_NAME)
+        Object allureRepositoryAspect() {
+            return CONSUMER_BEAN;
+        }
+    }
+
+    /**
+     * Чужой стартер, который поднимает AspectJ-проксирование ПОСЛЕ нашей автоконфигурации.
+     * {@code after} на НАС — то самое расположение, из-за которого {@code @ConditionalOnBean}
+     * промахивался: к моменту разбора нашего условия этот конфиг ещё не тронут.
+     */
+    @AutoConfiguration(after = AllureDataJpaAutoConfiguration.class)
+    @EnableAspectJAutoProxy
+    static class LateForeignAspectJStarter {
+    }
+
+    /**
+     * Зонд в форме ОТВЕРГНУТОЙ конструкции, стоящий там же, где стоим мы: после
+     * {@code AopAutoConfiguration} и до чужого стартера. Он существует ровно затем, чтобы
+     * тест выше не был зелёным по неверной причине — его бин появится, если чужой стартер
+     * на самом деле придёт раньше нас, и тогда проверяемая ось просто не воспроизведена.
+     */
+    @AutoConfiguration(after = AopAutoConfiguration.class, before = LateForeignAspectJStarter.class)
+    static class ConditionalOnBeanProbe {
+
+        @Bean
+        @ConditionalOnBean(name = AopConfigUtils.AUTO_PROXY_CREATOR_BEAN_NAME)
+        String sawProxyCreatorAtOurPosition() {
+            return "создатель прокси был виден уже на срезе условия";
+        }
     }
 }

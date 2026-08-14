@@ -19,8 +19,8 @@ import java.util.logging.Logger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * ЧЕРНОВИК (не коммитить). Ось блокера круга 2: новость про исчезнувший раздел БД должна
- * дойти до потребителя НАСТОЯЩЕЙ Spring Data, а не только до фикстуры уровня A.
+ * Ось блокера круга 2: новость про исчезнувший раздел БД должна дойти до потребителя
+ * НАСТОЯЩЕЙ Spring Data, а не только до фикстуры уровня A.
  * <p>
  * Почему уровень B обязателен. Гейт новости спрашивает у фабрики бинов, есть ли у потребителя
  * репозитории. В фазе {@code BeanDefinitionRegistryPostProcessor} репозиторий Spring Data —
@@ -30,9 +30,20 @@ import static org.assertj.core.api.Assertions.assertThat;
  * о том, как Spring Data заводит бин, а блокер жил ровно в расхождении представления с фактом.
  * Здесь бины заводит сама Spring Data.
  * <p>
- * Мутация: в {@code AllureDataJpaAutoConfiguration#hasRepositoryBeans} убрать первый запрос
- * (по {@code RepositoryFactoryBeanSupport}), оставив только {@code Repository} → строк
- * предупреждения станет 0 → RED.
+ * Мутации, которые видит этот класс (замерено):
+ * <ul>
+ *   <li>вернуть {@code @EnableAspectJAutoProxy} на автоконфигурацию → аспект появится,
+ *       новости не будет → RED;</li>
+ *   <li>спрашивать создатель прокси по имени, а не по типу → инфраструктурный создатель
+ *       сойдёт за AspectJ-овский → RED;</li>
+ *   <li>гейт по свойству {@code spring.aop.auto} вместо взгляда в реестр → RED;</li>
+ *   <li>говорить новость независимо от наличия создателя прокси → краснеет второй тест
+ *       класса, {@link #staysSilentWhenProxyCreatorIsThere()}.</li>
+ * </ul>
+ * ⚠️ Мутация «спросить маркер {@code Repository} вместо фабрики» этот класс НЕ краснит,
+ * хотя прежний комментарий это обещал: замерено, что в фазе пост-процессора по маркеру
+ * с {@code includeNonSingletons=true} настоящие репозитории ТОЖЕ находятся. Ту мутацию
+ * ловят фикстуры уровня A — там самописный DAO начинает считаться репозиторием.
  */
 class RepositoryNoticeOnRealSpringDataTest {
 
@@ -74,6 +85,41 @@ class RepositoryNoticeOnRealSpringDataTest {
                 .as("потребитель настоящей Spring Data не узнал, что раздел «DB Repo.method» "
                         + "из отчёта исчез — ровно тот блокер, из-за которого новость молчала у всех")
                 .isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("настоящая Spring Data, проксирование на месте: библиотека молчит")
+    void staysSilentWhenProxyCreatorIsThere() {
+        // Негатив к тесту выше, и единственный владелец этой оси во всём наборе. На уровне A
+        // её держать нечем: там нет настоящей фабрики Spring Data, hasRepositoryBeans ложно
+        // при любой правке, и новость не может прозвучать даже под мутацией — замерено.
+        // Мутация: говорить новость независимо от наличия создателя прокси → RED.
+        ActivationDiagnostics.forgetForTests();
+
+        List<LogRecord> said = logWhile(() -> {
+            try (ConfigurableApplicationContext ctx = new SpringApplicationBuilder(JpaTestApp.class)
+                    .web(WebApplicationType.NONE)
+                    .bannerMode(org.springframework.boot.Banner.Mode.OFF)
+                    .properties(
+                            // Отличие от теста выше ровно одно: авто-проксирование не выключено.
+                            "spring.datasource.url=jdbc:h2:mem:silence-axis;DB_CLOSE_DELAY=-1",
+                            "spring.jpa.hibernate.ddl-auto=create-drop")
+                    .run()) {
+
+                // ЯКОРЬ: раздел БД действительно на месте. Без него молчание было бы правильным
+                // и в контексте, где аспекта нет, — то есть тест сторожил бы пустоту.
+                assertThat(ctx.getBeanNamesForType(AllureRepositoryAspect.class))
+                        .as("аспект не зарегистрирован — молчать в такой сборке как раз НЕЛЬЗЯ")
+                        .isNotEmpty();
+            }
+        });
+
+        assertThat(said.stream()
+                .filter(r -> r.getMessage().contains("AspectJ-создателя прокси"))
+                .count())
+                .as("новость про потерянный раздел сказана там, где раздел на месте: "
+                        + "предупреждение в каждой зелёной сборке перестают читать")
+                .isZero();
     }
 
     /** Что библиотека сказала в свой логгер, пока поднимался контекст. */

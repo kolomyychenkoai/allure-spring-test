@@ -110,8 +110,13 @@ public class AllureDataJpaAutoConfiguration {
                     // нечего, и предупреждение было бы шумом, который перестают читать.
                     if (hasAspectJProxyCreator(registry)) {
                         // Имя занято — НЕ трогаем: конфигурация потребителя обязана побеждать нашу.
-                        // Без гарда при allow-bean-definition-overriding=true его бин исчезал молча
-                        // (замерено), а при умолчании Boot падал BeanDefinitionOverrideException.
+                        // Замерено на обеих настройках переопределения. При
+                        // allow-bean-definition-overriding=true без гарда наше определение молча
+                        // заменяет бин потребителя — ради этого гард и стоит. При умолчании Boot
+                        // (false) registerBeanDefinition бросает BeanDefinitionOverrideException,
+                        // но наружу она не выходит: её глотает catch ниже, оставляя WARN со стеком
+                        // в каждой сборке такого потребителя (issue #74). Снаружи исход тот же,
+                        // изнутри — шум на ровном месте.
                         if (registry.containsBeanDefinition(ASPECT_BEAN_NAME)) {
                             return;
                         }
@@ -152,14 +157,27 @@ public class AllureDataJpaAutoConfiguration {
      * Есть ли у потребителя хоть один репозиторий. Типы резолвим ПО ИМЕНИ: spring-data нет в
      * compile-classpath библиотеки (по той же причине поинткат аспекта задан строкой).
      * <p>
-     * ⚠️ Причина замерена и она в ФЛАГЕ, а не в типе запроса. `factoryBeanObjectType` Spring Data
-     * проставляет, поэтому по маркеру `Repository` определения находятся — но только при
-     * {@code includeNonSingletons=true}. Пустой ответ, из-за которого предупреждение молчало
-     * у всех потребителей, давал единственно {@code false} в первом флаге.
+     * ⚠️ Замер в фазе пост-процессора на настоящей Spring Data (два репозитория,
+     * {@code JpaRepositoryFactoryBean}) — все четыре комбинации:
+     * <pre>
+     * Repository,                    includeNonSingletons=true  → 2
+     * Repository,                    includeNonSingletons=false → 0   ← блокер круга 2
+     * RepositoryFactoryBeanSupport,  includeNonSingletons=true  → 2
+     * RepositoryFactoryBeanSupport,  includeNonSingletons=false → 2
+     * </pre>
+     * Пустой ответ, из-за которого предупреждение молчало у всех потребителей, давала
+     * КОМБИНАЦИЯ «маркер + {@code false}», а не один флаг сам по себе.
      * <p>
-     * Спрашиваем при этом ФАБРИКУ, а не маркер: по маркеру нашёлся бы и самописный DAO, а он
-     * шагов не даёт никогда — поинткат требует {@code TransactionalProxy}. Предупреждать такого
-     * потребителя значило бы советовать ему включить проксирование и не дать ничего взамен.
+     * Спрашиваем ФАБРИКУ, а не маркер, и это несущий выбор: по маркеру нашёлся бы и самописный
+     * DAO, а он шагов не даёт никогда — поинткат требует {@code TransactionalProxy}.
+     * Предупреждать такого потребителя значило бы советовать ему включить проксирование и не
+     * дать ничего взамен. Держат выбор {@code withoutAspectJProxyCreatorWeTouchNothingAndSayIt}
+     * и {@code noticeSurvivesLazyInitialization}: под мутацией «маркер вместо фабрики» оба краснеют.
+     * <p>
+     * {@code includeNonSingletons=true} при фабрике, наоборот, НЕ несущий: по таблице выше ответ
+     * тот же и с {@code false}, мутация флага не краснит ни одного теста — замерено, гейта тут
+     * нет и быть не может. Оставлен как более широкий из двух равных запросов: если тип придётся
+     * вернуть к маркеру, флаг уже правильный.
      * <p>
      * {@code allowEagerInit} остаётся {@code false}: диагностика не поднимает чужие бины.
      */
