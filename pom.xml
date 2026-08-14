@@ -129,6 +129,15 @@
             <artifactId>spring-context</artifactId>
             <scope>provided</scope>
         </dependency>
+        <!-- spring-aop: ProxyFactory — им строится прокси DataSource, сохраняющий класс бина
+             (AllureDataSourceProxies). Приходит транзитивно со spring-context, но объявлен явно,
+             раз типы используются напрямую. CGLIB и Objenesis отдельными зависимостями НЕ нужны:
+             обе библиотеки перепакованы внутрь spring-core. -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-aop</artifactId>
+            <scope>provided</scope>
+        </dependency>
         <!-- spring-web: RestTemplate + HTTP-клиентские типы (перехват RestTemplate/TestRestTemplate) -->
         <dependency>
             <groupId>org.springframework</groupId>

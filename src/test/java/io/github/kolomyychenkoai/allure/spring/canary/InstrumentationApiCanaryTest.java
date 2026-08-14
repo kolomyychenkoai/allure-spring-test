@@ -65,6 +65,15 @@ class InstrumentationApiCanaryTest {
         }
     }
 
+    /** Есть ли безаргументный метод с ОЖИДАЕМЫМ типом возврата (имени мало, см. dataSourceChainAccessors). */
+    private static boolean returns(String className, String method, String returnType) {
+        try {
+            return Class.forName(className).getMethod(method).getReturnType().getName().equals(returnType);
+        } catch (ClassNotFoundException | NoSuchMethodException gone) {
+            return false;
+        }
+    }
+
     /** Есть ли класс на classpath (для канареек на сам класс, а не его метод). */
     private static boolean classPresent(String className) {
         try {
@@ -194,6 +203,49 @@ class InstrumentationApiCanaryTest {
         String scenario = "com.github.tomakehurst.wiremock.stubbing.Scenario";
         require(hasMethod(scenario, "getName", -1, null), "Scenario.getName уехал → AllureWireMockSteps.scenarios");
         require(hasMethod(scenario, "getState", -1, null), "Scenario.getState уехал → AllureWireMockSteps.scenarios");
+    }
+
+    @Test
+    @DisplayName("spring-jdbc: акцессоры цепочки DataSource — по ним обёртка узнаёт свой прокси")
+    void dataSourceChainAccessors() {
+        // Имена лежат строками в AllureDataSourceProxies.DELEGATE_ACCESSORS: компилятор их
+        // не проверяет, а переименование в Spring дало бы не падение, а ЗАДВОЕННЫЙ SQL
+        // в отчёте — обёртка перестала бы узнавать свой прокси внутри чужой цепочки.
+        String delegating = "org.springframework.jdbc.datasource.DelegatingDataSource";
+        String routing = "org.springframework.jdbc.datasource.lookup.AbstractRoutingDataSource";
+        // ⚠️ Сверяем и ТИП ВОЗВРАТА. read() с некоторых пор гейтит акцессор по нему: не
+        // DataSource и не Map — метод не зовётся вовсе. Проверяй канарейка одно имя, смена
+        // возврата (скажем, на Optional<DataSource>) оставила бы её зелёной, а защиту мёртвой.
+        require(returns(delegating, "getTargetDataSource", "javax.sql.DataSource"),
+                "DelegatingDataSource.getTargetDataSource уехал или сменил тип возврата → "
+                        + "AllureDataSourceProxies.wrapsOurProxy ослепнет, SQL задвоится");
+        require(returns(routing, "getResolvedDefaultDataSource", "javax.sql.DataSource"),
+                "AbstractRoutingDataSource.getResolvedDefaultDataSource уехал или сменил тип возврата "
+                        + "→ AllureDataSourceProxies.wrapsOurProxy");
+        require(returns(routing, "getResolvedDataSources", "java.util.Map"),
+                "AbstractRoutingDataSource.getResolvedDataSources уехал или сменил тип возврата "
+                        + "→ AllureDataSourceProxies.wrapsOurProxy");
+    }
+
+    @Test
+    @DisplayName("HikariCP: у пула нет final-методов, иначе обёртка DataSource перестанет его проксировать")
+    void hikariStaysProxyable() {
+        // Правило здесь СВОЁ и намеренно проще, чем в AllureDataSourceProxies.finalMethod
+        // (там ещё выбор наименьшего по имени): канарейке нужен факт «final-методов нет».
+        // Вся правка по issue #54 стоит на том, что подкласс HikariDataSource завести можно.
+        // Появится final-метод при апгрейде пула — SQL пропадёт у ВСЕХ потребителей разом,
+        // и без этой канарейки диагноз был бы «отчёт разошёлся с эталоном» вместо причины.
+        for (Class<?> type = com.zaxxer.hikari.HikariDataSource.class;
+             type != null && type != Object.class; type = type.getSuperclass()) {
+            for (java.lang.reflect.Method method : type.getDeclaredMethods()) {
+                int modifiers = method.getModifiers();
+                require(!java.lang.reflect.Modifier.isFinal(modifiers)
+                                || java.lang.reflect.Modifier.isStatic(modifiers)
+                                || java.lang.reflect.Modifier.isPrivate(modifiers),
+                        "у HikariDataSource появился final-метод " + method.getName()
+                                + " → AllureDataSourceProxies перестанет проксировать пул, SQL исчезнет из отчёта");
+            }
+        }
     }
 
     @Test

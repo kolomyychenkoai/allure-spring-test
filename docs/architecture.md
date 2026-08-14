@@ -33,9 +33,9 @@
    значения: в `clean`, `render`, `describeResponse`. В `describeEntity` свой `catch`
    стоит на каждом поле.
 
-В `src/main` лежит **68 классов / 6346 строк** в 20 пакетах, в `src/test` — **105 классов**
-и 495 тестов. У клиентского проекта появляется ровно одна зависимость в `compile`
-(`allure-java-commons`), остальные 22 помечены `provided`/`optional`: модуль включается,
+В `src/main` лежит **69 классов / 6782 строк** в 20 пакетах, в `src/test` — **113 классов**
+и 527 тестов. У клиентского проекта появляется ровно одна зависимость в `compile`
+(`allure-java-commons`), остальные 23 помечены `provided`/`optional`: модуль включается,
 только если технология уже есть в тестах.
 
 ```bash
@@ -156,7 +156,7 @@ running». Выглядит этот гейт в разных модулях п�
 | `rest/AllureMockMvcAutoConfiguration` | кастомайзер MockMvc, который вешает `AllureMockMvcResultHandler` на каждый собираемый `MockMvc` | тип кастомайзера переехал между Boot 3 и 4 — резолвится по имени, бин регистрируется программно |
 | `rest/AllureWebTestClientAutoConfiguration` | кастомайзер WebTestClient | то же; у WebTestClient нет подстраховки байткодом — потеряется кастомайзер, потеряются и все шаги |
 | `data/AllureDataJpaAutoConfiguration` | аспект репозиториев (Spring AOP) и `@EnableAspectJAutoProxy` в контексте клиентского проекта | pointcut задан строкой (spring-data нет в compile-classpath); `proxyTargetClass` намеренно не выставляется — режим проксирования остаётся тот, что был в проекте |
-| `data/AllureDataSourceAutoConfiguration` | `BeanPostProcessor`, оборачивающий `DataSource` в datasource-proxy | реальный SQL вкладывается внутрь шага вызова репозитория |
+| `data/AllureDataSourceAutoConfiguration` | `BeanPostProcessor`, заводящий `getConnection` бина `DataSource` в datasource-proxy | реальный SQL вкладывается внутрь шага вызова репозитория; бин остаётся объектом своего класса (подкласс через Spring AOP), иначе ломается инъекция по конкретному типу — issue #54 |
 
 ```bash
 cat src/main/resources/META-INF/spring.factories src/main/resources/META-INF/spring/*.imports
@@ -292,7 +292,7 @@ grep -rn "ThreadLocal<\|static final \(Map\|Set\|List\|Atomic\|ClassValue\)" src
 
 ## 10. Что уже проверено
 
-- **495 тестов** в двух уровнях. Уровень A — детерминированные проверки содержимого отчёта
+- **527 тестов** в двух уровнях. Уровень A — детерминированные проверки содержимого отчёта
   через in-memory Allure, уровень B — живые `*ReportIT`, которые читают реально записанные
   `allure-results`.
 - **Инвентарь видов шагов и вложений** — эталон `src/test/inventory/report-inventory.txt`,
