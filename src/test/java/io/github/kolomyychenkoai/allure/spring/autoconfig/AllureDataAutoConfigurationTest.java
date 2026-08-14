@@ -1028,10 +1028,11 @@ class AllureDataAutoConfigurationTest {
                                     .isEqualTo(InfrastructureAdvisorAutoProxyCreator.class.getName());
                         }));
 
-        assertThat(said.stream().filter(r -> r.getMessage().contains("AspectJ-создателя прокси")).count())
-                .as("про исчезнувший раздел БД надо сказать, но ОДИН раз на прогон: у потребителя "
-                        + "за прогон поднимается десяток контекстов, и строка на каждый перестаёт читаться")
-                .isEqualTo(1);
+        // Само предупреждение проверяет RepositoryNoticeOnRealSpringDataTest: после сужения
+        // предиката оно требует НАСТОЯЩЕЙ фабрики Spring Data, а здесь её нет и быть не может —
+        // фикстура собрана руками. Здесь проверяем то, что фикстура честно показывает: чужой
+        // создатель прокси не подменён и аспект не навязан.
+        assertThat(said).as("лишних строк библиотека говорить не должна").isEmpty();
     }
 
     @Test
@@ -1110,9 +1111,9 @@ class AllureDataAutoConfigurationTest {
                         .withPropertyValues("spring.aop.auto=false")
                         .run(ctx -> assertThat(ctx).hasNotFailed()));
 
-        assertThat(said.stream().filter(r -> r.getMessage().contains("AspectJ-создателя прокси")).count())
-                .as("диагностика не имеет права зависеть от режима запуска потребителя")
-                .isEqualTo(1);
+        // Ленивая инициализация не должна ломать сам механизм: пост-процессор реестра
+        // выполняется всегда. Что он при этом СКАЗАЛ — дело теста на настоящей Spring Data.
+        assertThat(said).as("под ленивой инициализацией библиотека не должна шуметь").isEmpty();
     }
 
     @Test

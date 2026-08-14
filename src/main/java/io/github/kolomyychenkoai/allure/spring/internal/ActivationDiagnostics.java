@@ -84,6 +84,17 @@ public final class ActivationDiagnostics {
                     + "он отличает прокси Spring Data от самописного DAO). Добавь spring-tx в test-scope.");
         }
 
+        // Spring Data есть, а AspectJ нет — самая частая форма потери раздела БД: стартеры
+        // data-jdbc/mongodb/redis тянут spring-tx, но НЕ тянут aspectjweaver. Автоконфигурация
+        // при этом не выполняется вовсе (@ConditionalOnClass), поэтому сказать может только
+        // этот класс: он живёт в листенере и регистрируется всегда.
+        if (springData && !present.test("org.aspectj.lang.ProceedingJoinPoint")) {
+            problems.add("Spring Data есть на classpath, а AspectJ нет — шагов «DB Repo.method» "
+                    + "в отчёте не будет: их пишет Spring-аспект, а без AspectJ он не "
+                    + "регистрируется. Добавь spring-boot-starter-aop в test-scope "
+                    + "(в starter-data-jdbc/mongodb/redis его нет).");
+        }
+
         boolean mockMvc = present.test("org.springframework.test.web.servlet.MockMvc");
         boolean mockMvcHook = MovedTypeNames.MOCKMVC_CUSTOMIZER.stream().anyMatch(present);
         if (mockMvc && !mockMvcHook) {

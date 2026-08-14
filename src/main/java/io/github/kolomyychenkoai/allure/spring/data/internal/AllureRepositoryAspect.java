@@ -252,7 +252,7 @@ public class AllureRepositoryAspect {
         }
         // ⚠️ ДО веток Collection/Iterable: ленивая коллекция (PersistentCollection у Hibernate,
         // IndirectContainer у EclipseLink) — это и Collection, и Iterable, поэтому size()
-        // и обход ниже загрузили бы её из БД (N+1 у потребителя). Общий тест в
+        // и обход ниже загрузили бы её из БД (N+1 у потребителя). Общая защита в
         // AllureAdviceSupport сюда не помогает: обход идёт МИМО рендера.
         if (JpaLaziness.notLoaded(result)) {
             return JpaLaziness.NOT_LOADED;

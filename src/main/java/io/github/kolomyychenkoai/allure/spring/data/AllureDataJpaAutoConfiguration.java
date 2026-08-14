@@ -5,6 +5,7 @@ import io.github.kolomyychenkoai.allure.spring.internal.ActivationDiagnostics;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import org.springframework.aop.config.AopConfigUtils;
 import org.springframework.beans.factory.ListableBeanFactory;
+import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
 import org.springframework.beans.factory.support.BeanDefinitionRegistryPostProcessor;
@@ -51,8 +52,7 @@ import org.springframework.util.ClassUtils;
  * <b>Цена названа вслух.</b> Там, где AspectJ-создателя нет, шагов «DB Repo.method» не будет:
  * их пишет Spring-аспект. Реальный SQL остаётся — его пишет отдельный канал
  * ({@link AllureDataSourceAutoConfiguration}, свой {@code ProxyFactory} без авто-проксирования), —
- * но окажется на верхнем уровне теста, а не внутри шага репозитория. Об этом говорит
- * {@link #allureRepositoryStepsNotice()}.
+ * но окажется на верхнем уровне теста, а не внутри шага репозитория. Об этом говорит одна строка в логе — см. регистратор ниже.
  */
 @AutoConfiguration(after = AopAutoConfiguration.class)
 @ConditionalOnClass(name = {
@@ -109,8 +109,19 @@ public class AllureDataJpaAutoConfiguration {
                     // от него нет. Говорить новость — вопрос про потерю: без репозиториев терять
                     // нечего, и предупреждение было бы шумом, который перестают читать.
                     if (hasAspectJProxyCreator(registry)) {
-                        registry.registerBeanDefinition(ASPECT_BEAN_NAME,
-                                new RootBeanDefinition(AllureRepositoryAspect.class));
+                        // Имя занято — НЕ трогаем: конфигурация потребителя обязана побеждать нашу.
+                        // Без гарда при allow-bean-definition-overriding=true его бин исчезал молча
+                        // (замерено), а при умолчании Boot падал BeanDefinitionOverrideException.
+                        if (registry.containsBeanDefinition(ASPECT_BEAN_NAME)) {
+                            return;
+                        }
+                        RootBeanDefinition definition = new RootBeanDefinition(AllureRepositoryAspect.class);
+                        // Роль и происхождение: иначе наш бин выглядит прикладным бином потребителя
+                        // (виден в /actuator/beans, кандидат на автовайринг), а в тексте ошибки
+                        // стоит «defined in null» — решение библиотеки нечем аудировать.
+                        definition.setRole(BeanDefinition.ROLE_INFRASTRUCTURE);
+                        definition.setResourceDescription(AllureDataJpaAutoConfiguration.class.getName());
+                        registry.registerBeanDefinition(ASPECT_BEAN_NAME, definition);
                     } else if (registry instanceof ListableBeanFactory beans && hasRepositoryBeans(beans)) {
                         ActivationDiagnostics.noteOnce("DbRepository", NOTICE);
                     }
@@ -138,30 +149,23 @@ public class AllureDataJpaAutoConfiguration {
     }
 
     /**
-     * Есть ли у потребителя хоть один репозиторий. Тип резолвим ПО ИМЕНИ: spring-data нет в
-     * compile-classpath библиотеки (по той же причине поинткат аспекта задан строкой), а сюда
-     * мы попадаем только после {@code @ConditionalOnClass}, то есть класс на месте.
-     * При любой неожиданности отвечаем «нет» — молчание дешевле ложного предупреждения.
-     */
-    /**
      * Есть ли у потребителя хоть один репозиторий. Типы резолвим ПО ИМЕНИ: spring-data нет в
      * compile-classpath библиотеки (по той же причине поинткат аспекта задан строкой).
      * <p>
-     * ⚠️ Спрашиваем ФАБРИКУ ({@code RepositoryFactoryBeanSupport}), а не сам {@code Repository}.
-     * В фазе пост-процессора репозиторий Spring Data — это ещё определение
-     * {@code JpaRepositoryFactoryBean} с пустым {@code factoryBeanObjectType}: тип продукта без
-     * создания фабрики не определяется, и по {@code Repository} ответ пустой. Замерено на
-     * настоящем приложении — из-за этого предупреждение молчало у ВСЕХ потребителей Spring Data,
-     * а тесты были зелёные, потому что фикстура заводила репозиторий обычным бином.
+     * ⚠️ Причина замерена и она в ФЛАГЕ, а не в типе запроса. `factoryBeanObjectType` Spring Data
+     * проставляет, поэтому по маркеру `Repository` определения находятся — но только при
+     * {@code includeNonSingletons=true}. Пустой ответ, из-за которого предупреждение молчало
+     * у всех потребителей, давал единственно {@code false} в первом флаге.
      * <p>
-     * Второй запрос — по {@code Repository} — нужен для самописных DAO с маркером: они обычные
-     * бины, фабрики у них нет, но раздел они бы дали.
+     * Спрашиваем при этом ФАБРИКУ, а не маркер: по маркеру нашёлся бы и самописный DAO, а он
+     * шагов не даёт никогда — поинткат требует {@code TransactionalProxy}. Предупреждать такого
+     * потребителя значило бы советовать ему включить проксирование и не дать ничего взамен.
      * <p>
-     * {@code allowEagerInit} везде {@code false}: диагностика не поднимает чужие бины.
+     * {@code allowEagerInit} остаётся {@code false}: диагностика не поднимает чужие бины.
      */
     private static boolean hasRepositoryBeans(ListableBeanFactory beanFactory) {
-        return hasBeansOfType(beanFactory, "org.springframework.data.repository.core.support.RepositoryFactoryBeanSupport")
-                || hasBeansOfType(beanFactory, "org.springframework.data.repository.Repository");
+        return hasBeansOfType(beanFactory,
+                "org.springframework.data.repository.core.support.RepositoryFactoryBeanSupport");
     }
 
     private static boolean hasBeansOfType(ListableBeanFactory beanFactory, String typeName) {
