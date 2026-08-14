@@ -2,6 +2,8 @@ package io.github.kolomyychenkoai.allure.spring.internal;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 
@@ -25,6 +27,12 @@ public final class ActivationDiagnostics {
 
     private static final String SWITCH = "allure.spring.diagnostics";
     private static final AtomicBoolean REPORTED = new AtomicBoolean();
+
+    /**
+     * Уже сказанное в {@link #noteOnce}. Ключ — {@code component|message}, а не один флаг на
+     * класс: новостей может быть несколько, и одна не должна затыкать остальные.
+     */
+    private static final Set<String> SAID = ConcurrentHashMap.newKeySet();
 
     private ActivationDiagnostics() {
     }
@@ -81,6 +89,34 @@ public final class ActivationDiagnostics {
                     + "spring-boot-webtestclient (Boot 4.x).");
         }
         return problems;
+    }
+
+    /**
+     * Новость про модуль, выключённый НАСТРОЙКОЙ потребителя — в отличие от {@link #problems},
+     * которая про «класса нет на classpath». Такой исход спроектирован, поэтому уходит в
+     * {@link AllureInstrumentationLogger#note} (не {@code warn}: слова «сбой» и стека там нет
+     * за что предъявлять).
+     * <p>
+     * Живёт здесь, а не в самой автоконфигурации, ради двух вещей, которые уже принадлежат
+     * этому классу: общего выключателя {@code -Dallure.spring.diagnostics=off} и однократности
+     * НА JVM. Второе — не косметика: у потребителя за прогон поднимается десяток контекстов,
+     * и новость на каждый превращается в шум, который перестают читать (ровно этим кончилась
+     * проверка, снятая из {@link #reportOnce()} — см. предупреждение там).
+     *
+     * @param component имя модуля для префикса строки
+     * @param message   что именно потребитель теряет и что с этим делать
+     */
+    public static void noteOnce(String component, String message) {
+        try {
+            if ("off".equalsIgnoreCase(System.getProperty(SWITCH)) || !SAID.add(component + '|' + message)) {
+                return;
+            }
+            AllureInstrumentationLogger.note(component, message);
+        } catch (Throwable diagnosticIsNotWorthATest) {
+            // Нас зовут из конструктора конфигурации, то есть изнутри refresh контекста
+            // потребителя: уронить его сообщением о том, что часть отчёта беднее, недопустимо.
+            AllureInstrumentationLogger.warn("ActivationDiagnostics", diagnosticIsNotWorthATest);
+        }
     }
 
     /**

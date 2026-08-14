@@ -1,12 +1,19 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
 
 import io.github.kolomyychenkoai.allure.spring.internal.ActivationDiagnostics;
+import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import io.qameta.allure.Epic;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -96,4 +103,50 @@ class ActivationDiagnosticsTest {
                 }, true)).isEmpty();
     }
 
+    @Test
+    @DisplayName("noteOnce говорит один раз на прогон, сколько бы контекстов ни поднялось")
+    void noteOnceSaysItOnlyOnce() {
+        // У потребителя за прогон поднимается десяток контекстов, и новость на каждый
+        // превращается в шум, который перестают читать (этим кончилась проверка, снятая
+        // из reportOnce — см. предупреждение в её javadoc).
+        // Текст уникален на вызов: тест не зависит ни от порядка классов (runOrder=random),
+        // ни от того, сказал ли кто-то ту же новость раньше в этой JVM.
+        // Мутация: убрать дедупликацию по SAID → две записи → RED.
+        String unique = "проверка однократности " + UUID.randomUUID();
+
+        List<LogRecord> said = logWhile(() -> {
+            ActivationDiagnostics.noteOnce("DbRepository", unique);
+            ActivationDiagnostics.noteOnce("DbRepository", unique);
+        });
+
+        assertThat(said.stream().filter(r -> r.getMessage().contains(unique)).count()).isEqualTo(1);
+    }
+
+    /** Слушаем логгер библиотеки: наружу новость видна ТОЛЬКО этой строкой. */
+    private static List<LogRecord> logWhile(Runnable action) {
+        List<LogRecord> records = new ArrayList<>();
+        Logger logger = AllureInstrumentationLogger.logger();
+        Handler collector = new Handler() {
+            @Override
+            public void publish(LogRecord record) {
+                records.add(record);
+            }
+
+            @Override
+            public void flush() {
+            }
+
+            @Override
+            public void close() {
+            }
+        };
+        collector.setLevel(Level.ALL);
+        logger.addHandler(collector);
+        try {
+            action.run();
+        } finally {
+            logger.removeHandler(collector);
+        }
+        return records;
+    }
 }

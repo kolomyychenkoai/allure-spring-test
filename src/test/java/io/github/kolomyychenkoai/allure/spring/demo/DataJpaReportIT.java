@@ -109,6 +109,13 @@ class DataJpaReportIT {
         assertThat(widgets.findAll()).extracting(Widget::getName).contains("gadget");
         assertThat(widgets.findById(999_999L)).isEmpty();
 
+        // Канарейка допущения #71: Spring Data метит СВОЙ прокси маркером TransactionalProxy —
+        // ровно по нему поинткат отличает настоящий репозиторий от самописного DAO потребителя.
+        // Уедет маркер при апгрейде — раздел БД исчезнет молча, и уровень A этого не увидит:
+        // там прокси собран руками по той же форме, то есть проверяет наше представление о ней.
+        CurrentReport.check(widgets instanceof org.springframework.transaction.interceptor.TransactionalProxy,
+                () -> "Spring Data больше не метит прокси TransactionalProxy: " + widgets.getClass());
+
         List<String> steps = CurrentReport.stepNames();
         CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("DB ") && n.contains("WidgetRepository.save")),
                 () -> "" + steps);

@@ -493,8 +493,8 @@ java -jar ~/projects/allure-spring-test/tools/target/review-tools.jar \
 | #67 | Mockito-модуль по инструкции README ломает `mockStatic`/`mockConstruction` | блокер | `billing`: 13 из 28 тестов в ошибку |
 | #68 | срез `@DataJpaTest` теряет весь раздел БД; `@WebFluxTest` — WebTestClient | major | `catalog` + замер по бинам среза |
 | #69 | интерсептор `RestTemplate` досыпается, переживает `setInterceptors`, переводит запрос с потока на буфер | major | `gateway`: 4 теста краснеют, 3 прогона подряд |
-| #70 | `spring.aop.auto=false` игнорируется: возвращаем выключенный авто-прокси | блокер | `BeanNotOfRequiredTypeException` на инъекции по классу |
-| #71 | аспект на `Repository+` проксирует самописный DAO потребителя | блокер | падение старта при `proxy-target-class=false` |
+| #70 | ~~`spring.aop.auto=false` игнорируется~~ **ИСПРАВЛЕНО** | блокер | гейт по свойству, как у Boot; `ledger` зелёный, раздел БД исчезает громко |
+| #71 | ~~аспект на `Repository+` проксирует самописный DAO~~ **ИСПРАВЛЕНО** | блокер | поинткат сужен по `TransactionalProxy`; `ledger` зелёный |
 | #72 | Awaitility: единственный глобальный слот — молча теряется либо слушатель потребителя, либо наш раздел | major | `ingest`: 16 тестов зелёные, ноль шагов ожидания |
 | #73 | поздняя коллизия имени бина роняет старт | minor | `BeanDefinitionOverrideException` |
 | #74 | WARN со стеком про ожидаемый сбой — в каждой сборке | minor | 9 приложений из 9 |

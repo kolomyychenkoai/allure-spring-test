@@ -23,8 +23,14 @@ import net.ttddyy.dsproxy.support.ProxyDataSource;
 import net.ttddyy.dsproxy.support.ProxyDataSourceBuilder;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.aop.config.AopConfigUtils;
 import org.springframework.aop.framework.AopProxyUtils;
 import org.springframework.aop.framework.ProxyFactory;
+import org.springframework.aop.framework.autoproxy.InfrastructureAdvisorAutoProxyCreator;
+import org.springframework.aop.support.AopUtils;
+import org.springframework.boot.autoconfigure.aop.AopAutoConfiguration;
+import org.springframework.transaction.annotation.EnableTransactionManagement;
+import org.springframework.transaction.interceptor.TransactionalProxy;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -981,5 +987,197 @@ class AllureDataAutoConfigurationTest {
         String lockProvider(@Qualifier("lockedDataSource") HikariDataSource dataSource) {
             return dataSource.getJdbcUrl();
         }
+    }
+
+    // ─────────────────────────── AOP потребителя: issues #70 и #71 ───────────────────────────
+
+    @Test
+    @DisplayName("spring.aop.auto=false: аспекта нет, авто-прокси потребителя не подменён, сказано ОДИН раз")
+    void aopAutoDisabledLeavesConsumerAopAlone() {
+        // Сердцевина issue #70, форма живого приложения `ledger`: команда выключила авто-
+        // проксирование после инцидента, а мы возвращали его обратно.
+        // Мутация: снять @ConditionalOnProperty с RepositoryAspectConfiguration → появится
+        // аспект И подменится internalAutoProxyCreator → RED (оба ассерта).
+        // ⚠️ Это ЕДИНСТВЕННОЕ место в наборе, поднимающее контекст с spring.aop.auto=false.
+        //   Новость говорится один раз на JVM, поэтому второй владелец этого свойства сделал бы
+        //   ассерт «ровно один раз» зависимым от порядка тест-классов (runOrder=random).
+        List<LogRecord> said = logWhile(() -> {
+            new ApplicationContextRunner()
+                    .withUserConfiguration(TransactionShapedConfig.class)
+                    .withConfiguration(AutoConfigurations.of(AllureDataJpaAutoConfiguration.class))
+                    .withPropertyValues("spring.aop.auto=false")
+                    .run(ctx -> {
+                        assertThat(ctx)
+                                .as("аспект вернул проксирование, которое потребитель выключил")
+                                .doesNotHaveBean(AllureRepositoryAspect.class);
+                        assertThat(ctx.getBean(AopConfigUtils.AUTO_PROXY_CREATOR_BEAN_NAME).getClass().getName())
+                                .as("мы подменили авто-прокси-креатор потребителя: проксируется больше "
+                                        + "бинов, чем он разрешал, и оживают его спящие аспекты")
+                                .isEqualTo(InfrastructureAdvisorAutoProxyCreator.class.getName());
+                    });
+
+            new ApplicationContextRunner()
+                    .withConfiguration(AutoConfigurations.of(AllureDataJpaAutoConfiguration.class))
+                    .withPropertyValues("spring.aop.auto=false")
+                    .run(ctx -> assertThat(ctx)
+                            .as("там, где потребитель не заводил авто-прокси-креатора вовсе, "
+                                    + "наш появляться не должен")
+                            .doesNotHaveBean(AopConfigUtils.AUTO_PROXY_CREATOR_BEAN_NAME));
+        });
+
+        assertThat(said.stream().filter(r -> r.getMessage().contains("spring.aop.auto=false")).count())
+                .as("про исчезнувший раздел БД надо сказать, но ОДИН раз на прогон: у потребителя "
+                        + "за прогон поднимается десяток контекстов, и строка на каждый перестаёт читаться")
+                .isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("самописный DAO с маркером Repository не проксируется; контекст встаёт при proxy-target-class=false")
+    void plainDaoWithRepositoryMarkerIsNotProxied() {
+        // Сердцевина issue #71. Repository — ПУСТОЙ маркер, его реализует и самописный DAO.
+        // Мутация: убрать «&& target(TransactionalProxy)» из поинтката → оба DAO станут прокси,
+        // а DAO с содержательным интерфейсом при proxy-target-class=false станет JDK-прокси,
+        // и инъекция по конкретному классу не соберётся → RED (контекст упал).
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(
+                        AopAutoConfiguration.class, AllureDataJpaAutoConfiguration.class))
+                .withUserConfiguration(LedgerShapedConfig.class)
+                .withPropertyValues("spring.aop.proxy-target-class=false")
+                .run(ctx -> {
+                    assertThat(ctx)
+                            .as("контекст потребителя не поднялся — ровно то падение, с которым пришёл ledger")
+                            .hasNotFailed();
+                    // ЯКОРЬ. Без него негатив пустой: выключи аспект целиком, и «DAO не прокси»
+                    // станет правдой по той причине, что не проксируется НИЧЕГО.
+                    // Ссылки сравниваем булевым выражением, а не isNotSameAs: у AssertJ значение
+                    // уезжает в имя шага, и $Proxy оттуда роняет гигиену имён.
+                    assertThat(ctx.getBean(FakeSpringDataRepo.class) != LedgerShapedConfig.RAW_REPOSITORY)
+                            .as("настоящий репозиторий перестал проксироваться — сузили слишком сильно, "
+                                    + "раздел БД исчезнет у всех")
+                            .isTrue();
+                    assertThat(AopUtils.isAopProxy(ctx.getBean(PlainDao.class)))
+                            .as("самописный DAO стал прокси: пустой маркер Repository — не согласие "
+                                    + "потребителя на проксирование")
+                            .isFalse();
+                    assertThat(AopUtils.isAopProxy(ctx.getBean(InterfacedDao.class)))
+                            .as("DAO с содержательным интерфейсом стал прокси — при "
+                                    + "proxy-target-class=false это JDK-прокси, и бин перестаёт быть "
+                                    + "объектом своего класса")
+                            .isFalse();
+                });
+    }
+
+    @Test
+    @DisplayName("прокси в форме Spring Data по-прежнему даёт шаг «DB …»")
+    void springDataShapedProxyStillProducesDbStep() {
+        // Обратная сторона #71: сузить можно и слишком сильно — тогда раздел БД исчезает МОЛЧА,
+        // и предыдущий тест этого не увидит (там «не прокси» — ожидаемый исход).
+        // Мутация: заменить target(TransactionalProxy) на this(TransactionalProxy) либо сузить
+        // до типа, которого у прокси Spring Data нет → шага не будет → RED.
+        // Заодно стережёт repositoryName: имя обязано быть FakeSpringDataRepo, а не $ProxyNN.
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(
+                        AopAutoConfiguration.class, AllureDataJpaAutoConfiguration.class))
+                .withUserConfiguration(LedgerShapedConfig.class)
+                .run(ctx -> {
+                    FakeSpringDataRepo repo = ctx.getBean(FakeSpringDataRepo.class);
+                    InMemoryAllure allure = new InMemoryAllure().install();
+                    try {
+                        TestResult recorded = allure.run("вызов репозитория", () -> repo.findById(1L));
+
+                        assertThat(allure.hasStep(recorded, "DB FakeSpringDataRepo.findById"))
+                                .as("шаг репозитория пропал: отчёт обеднел молча, тесты при этом зелёные")
+                                .isTrue();
+                    } finally {
+                        allure.uninstall();
+                    }
+                });
+    }
+
+    @Test
+    @DisplayName("без spring-tx на classpath: JPA-аспект НЕ регистрируется")
+    void repositoryAspectAbsentWithoutTransactionalProxy() {
+        // Поинткат НАЗЫВАЕТ TransactionalProxy, и AspectJ резолвит это имя при разборе выражения.
+        // Мутация: убрать TransactionalProxy из @ConditionalOnClass → бин появится, а разбор
+        // поинтката упадёт IllegalArgumentException прямо в refresh контекста потребителя → RED.
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(AllureDataJpaAutoConfiguration.class))
+                .withClassLoader(new FilteredClassLoader(TransactionalProxy.class))
+                .run(ctx -> assertThat(ctx).doesNotHaveBean(AllureRepositoryAspect.class));
+    }
+
+    /** Репозиторий потребителя: то, что Spring Data создаёт из интерфейса. */
+    interface FakeSpringDataRepo extends org.springframework.data.repository.Repository<Object, Long> {
+        Object findById(Long id);
+    }
+
+    /** DAO потребителя: маркер есть, {@code TransactionalProxy} — нет. Так выглядит DAO из `ledger`. */
+    static class PlainDao implements org.springframework.data.repository.Repository<Object, Long> {
+        Object findByLogin(String login) {
+            return login;
+        }
+    }
+
+    /** Содержательный интерфейс — тот случай, когда proxy-target-class=false даёт JDK-прокси. */
+    interface AccountLookup {
+        Object lookup(String code);
+    }
+
+    static class InterfacedDao implements AccountLookup,
+            org.springframework.data.repository.Repository<Object, Long> {
+        @Override
+        public Object lookup(String code) {
+            return code;
+        }
+    }
+
+    /** Прод-код потребителя: просит DAO по КОНКРЕТНОМУ классу — на этом и падал контекст. */
+    record DaoClient(InterfacedDao dao) {
+    }
+
+    /** Форма приложения `ledger`: настоящий репозиторий рядом с двумя самописными DAO. */
+    @Configuration(proxyBeanMethods = false)
+    static class LedgerShapedConfig {
+
+        /**
+         * Прокси в форме {@code RepositoryFactorySupport.getRepository}: те же три интерфейса,
+         * которые Spring Data ставит безусловно.
+         */
+        static final FakeSpringDataRepo RAW_REPOSITORY = springDataShapedProxy();
+
+        private static FakeSpringDataRepo springDataShapedProxy() {
+            ProxyFactory factory = new ProxyFactory();
+            factory.setTarget((FakeSpringDataRepo) id -> "widget#" + id);
+            factory.setInterfaces(FakeSpringDataRepo.class,
+                    org.springframework.data.repository.Repository.class,
+                    TransactionalProxy.class);
+            return (FakeSpringDataRepo) factory.getProxy();
+        }
+
+        @Bean
+        FakeSpringDataRepo widgetRepository() {
+            return RAW_REPOSITORY;
+        }
+
+        @Bean
+        PlainDao turnoverDao() {
+            return new PlainDao();
+        }
+
+        @Bean
+        InterfacedDao accountDao() {
+            return new InterfacedDao();
+        }
+
+        @Bean
+        DaoClient daoClient(InterfacedDao dao) {
+            return new DaoClient(dao);
+        }
+    }
+
+    /** Потребитель с транзакциями: их создатель прокси и обязан пережить подключение библиотеки. */
+    @Configuration(proxyBeanMethods = false)
+    @EnableTransactionManagement
+    static class TransactionShapedConfig {
     }
 }

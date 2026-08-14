@@ -38,8 +38,9 @@ import java.util.stream.Collectors;
  * обращения к БД, пока идёт тест (в т.ч. сквозь прод-код), и молчим во время старта
  * контекста. Так модуль не привязан к структуре пакетов потребителя.
  * <p>
- * Pointcut ловит ВСЕ методы любого {@code Repository+} (Crud/Jpa/PagingAndSorting +
- * derived-методы). Ограничение: REACTIVE-репозитории (Spring Data R2DBC,
+ * Pointcut ловит все методы репозитория, СОЗДАННОГО Spring Data (Crud/Jpa/PagingAndSorting +
+ * derived-методы) — см. {@link #SPRING_DATA_REPOSITORY_CALL}, там же почему одного
+ * {@code Repository+} мало. Ограничение: REACTIVE-репозитории (Spring Data R2DBC,
  * {@code ReactiveCrudRepository}) НЕ охвачены — нужен отдельный аспект; модуль рассчитан
  * на синхронный (JPA) стек.
  * <p>
@@ -71,7 +72,36 @@ public class AllureRepositoryAspect {
     private record Call(String stepName, String callText) {
     }
 
-    @Around("execution(* org.springframework.data.repository.Repository+.*(..))")
+    /**
+     * Ловим ТОЛЬКО прокси, построенный самой Spring Data.
+     * <p>
+     * Одного {@code Repository+} мало: {@code Repository} — ПУСТОЙ маркер без единого метода,
+     * и его реализует в том числе самописный DAO потребителя. Такой DAO становился CGLIB-прокси,
+     * которого в его проекте не было, а при {@code spring.aop.proxy-target-class=false} контекст
+     * не поднимался вовсе. Issue #71, воспроизведено на живом приложении.
+     * <p>
+     * Отличительный признак настоящего репозитория — {@code TransactionalProxy}:
+     * {@code RepositoryFactorySupport.getRepository} ставит на прокси ровно три интерфейса
+     * ({@code repositoryInterface}, {@code Repository}, {@code TransactionalProxy}) безусловно и
+     * одинаково в spring-data-commons 3.2 / 3.5 / 4.1 — проверено по байткоду. Самописный DAO
+     * этого маркера не получает никогда.
+     * <p>
+     * {@code target}, а не {@code this}, — сознательно, но БЕЗ обещаний: замером разницы на наших
+     * сценариях не видно (мутация {@code target}→{@code this} не краснит ни один тест, записана
+     * форвардной в {@code docs/review-log.md}). Выбор по смыслу, а не по замеру: {@code target}
+     * спрашивает про бин ПОТРЕБИТЕЛЯ, а {@code this} — про внешний прокси, который строим мы сами,
+     * то есть про артефакт нашей же настройки проксирования. Признак, не зависящий от нас,
+     * устойчивее при смене режима прокси у потребителя.
+     * <p>
+     * Единственный чужой способ получить маркер — legacy {@code TransactionProxyFactoryBean};
+     * чтобы попасть под поинткат, бин должен ОДНОВРЕМЕННО реализовывать {@code Repository} и быть
+     * завёрнут им.
+     */
+    private static final String SPRING_DATA_REPOSITORY_CALL =
+            "execution(* org.springframework.data.repository.Repository+.*(..))"
+                    + " && target(org.springframework.transaction.interceptor.TransactionalProxy)";
+
+    @Around(SPRING_DATA_REPOSITORY_CALL)
     public Object logRepositoryCall(ProceedingJoinPoint pjp) throws Throwable {
         // снимок ДО вызова: аргументы должны отражать то, что ОТПРАВИЛИ в БД,
         // а не мутированное состояние после вызова (напр. сгенерированный id у save)

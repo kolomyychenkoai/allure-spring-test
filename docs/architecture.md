@@ -33,8 +33,8 @@
    значения: в `clean`, `render`, `describeResponse`. В `describeEntity` свой `catch`
    стоит на каждом поле.
 
-В `src/main` лежит **69 классов / 6782 строк** в 20 пакетах, в `src/test` — **113 классов**
-и 527 тестов. У клиентского проекта появляется ровно одна зависимость в `compile`
+В `src/main` лежит **69 классов / 6916 строк** в 20 пакетах, в `src/test` — **113 классов**
+и 532 теста. У клиентского проекта появляется ровно одна зависимость в `compile`
 (`allure-java-commons`), остальные 23 помечены `provided`/`optional`: модуль включается,
 только если технология уже есть в тестах.
 
@@ -64,7 +64,7 @@ mvn clean test        # число тестов
 | 5 | `data/internal/AllureRepositoryAspect` | Spring AOP, рендер сущностей, защита от побочных эффектов | 349 |
 | 6 | `internal/InstrumentationDiagnostics` | как видно, что перехват сломался: счётчики трансформаций и сбоев, выборка имён типов (дамп и гейт — на стороне тестов, см. §10) | 127 |
 
-Итого 1301 строка. Если времени мало, хватит шагов 1, 2 и 3: это 633 строки, и они дают
+Итого 1331 строка. Если времени мало, хватит шагов 1, 2 и 3: это 476 строк, и они дают
 механику целиком, а остальные байткод-модули повторяют шаблон из пункта 3. Карту всех
 точек входа смотри в §5.
 
@@ -155,7 +155,7 @@ running». Выглядит этот гейт в разных модулях п�
 |---|---|---|
 | `rest/AllureMockMvcAutoConfiguration` | кастомайзер MockMvc, который вешает `AllureMockMvcResultHandler` на каждый собираемый `MockMvc` | тип кастомайзера переехал между Boot 3 и 4 — резолвится по имени, бин регистрируется программно |
 | `rest/AllureWebTestClientAutoConfiguration` | кастомайзер WebTestClient | то же; у WebTestClient нет подстраховки байткодом — потеряется кастомайзер, потеряются и все шаги |
-| `data/AllureDataJpaAutoConfiguration` | аспект репозиториев (Spring AOP) и `@EnableAspectJAutoProxy` в контексте клиентского проекта | pointcut задан строкой (spring-data нет в compile-classpath); `proxyTargetClass` намеренно не выставляется — режим проксирования остаётся тот, что был в проекте |
+| `data/AllureDataJpaAutoConfiguration` | аспект репозиториев (Spring AOP) и `@EnableAspectJAutoProxy` — но ТОЛЬКО если авто-проксирование не выключено самим потребителем | гейт по `spring.aop.auto` тот же, что у Boot: с `false` аспекта нет и `internalAutoProxyCreator` не подменяется (#70), а про исчезнувший раздел БД говорится один раз. Pointcut задан строкой (spring-data нет в compile-classpath) и сужен до прокси Spring Data по маркеру `TransactionalProxy`: пустой маркер `Repository` реализует и самописный DAO потребителя (#71). `proxyTargetClass` не выставляется — режим проксирования остаётся тот, что был в проекте |
 | `data/AllureDataSourceAutoConfiguration` | `BeanPostProcessor`, заводящий `getConnection` бина `DataSource` в datasource-proxy | реальный SQL вкладывается внутрь шага вызова репозитория; бин остаётся объектом своего класса (подкласс через Spring AOP), иначе ломается инъекция по конкретному типу — issue #54 |
 
 ```bash
@@ -292,7 +292,7 @@ grep -rn "ThreadLocal<\|static final \(Map\|Set\|List\|Atomic\|ClassValue\)" src
 
 ## 10. Что уже проверено
 
-- **527 тестов** в двух уровнях. Уровень A — детерминированные проверки содержимого отчёта
+- **532 теста** в двух уровнях. Уровень A — детерминированные проверки содержимого отчёта
   через in-memory Allure, уровень B — живые `*ReportIT`, которые читают реально записанные
   `allure-results`.
 - **Инвентарь видов шагов и вложений** — эталон `src/test/inventory/report-inventory.txt`,
