@@ -47,11 +47,12 @@ import org.springframework.util.ClassUtils;
 @ConditionalOnClass(name = {
         "org.aspectj.lang.ProceedingJoinPoint",
         "org.springframework.data.repository.Repository",
-        // Этот тип НАЗЫВАЕТ поинткат аспекта. AspectJ резолвит имя при разборе выражения, и без
-        // класса контекст потребителя падал бы IllegalArgumentException прямо в refresh — вместо
-        // тихой деградации, которую даёт условие. Потребитель без spring-tx теоретически возможен
-        // (в spring-data-commons зависимость optional), но репозиториев у него нет: их фабрика
-        // ставит TransactionalProxy на каждый прокси безусловно.
+        // Этот тип НАЗЫВАЕТ поинткат аспекта. Без него аспект-бин был бы мёртвым: AspectJ не
+        // матчит нерезолвимый тип и молча не даёт ни одного шага (замерено — контекст при этом
+        // НЕ падает, поэтому «иначе упадёт refresh» тут не пишем). Условие превращает мёртвый
+        // бин в честное отсутствие, о котором говорит ActivationDiagnostics.problems.
+        // Потребитель без spring-tx теоретически возможен (в spring-data-commons зависимость
+        // optional), но репозиториев у него нет: их фабрика ставит TransactionalProxy безусловно.
         "org.springframework.transaction.interceptor.TransactionalProxy"
 })
 public class AllureDataJpaAutoConfiguration {

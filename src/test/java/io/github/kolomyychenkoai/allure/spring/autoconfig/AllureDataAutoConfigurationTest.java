@@ -1010,12 +1010,16 @@ class AllureDataAutoConfigurationTest {
         List<LogRecord> said = logWhile(() ->
                 new ApplicationContextRunner()
                         .withUserConfiguration(TransactionShapedConfig.class, LedgerShapedConfig.class)
-                        .withConfiguration(AutoConfigurations.of(AllureDataJpaAutoConfiguration.class))
+                        .withConfiguration(AutoConfigurations.of(
+                                AllureDataSourceAutoConfiguration.class, AllureDataJpaAutoConfiguration.class))
                         .withPropertyValues("spring.aop.auto=false")
                         .run(ctx -> {
                             assertThat(ctx)
                                     .as("аспект вернул проксирование, которое потребитель выключил")
                                     .doesNotHaveBean(AllureRepositoryAspect.class);
+                            assertThat(ctx).as("канал SQL живёт отдельно от AOP — на этом стоит "
+                                            + "обещание из текста новости «реальный SQL остаётся»")
+                                    .hasBean("allureDataSourceProxyPostProcessor");
                             assertThat(ctx.getBean(AopConfigUtils.AUTO_PROXY_CREATOR_BEAN_NAME).getClass().getName())
                                     .as("мы подменили создатель прокси потребителя: проксируется больше "
                                             + "бинов, чем он разрешал, и оживают его спящие аспекты")
@@ -1177,8 +1181,9 @@ class AllureDataAutoConfigurationTest {
     @DisplayName("без spring-tx на classpath: JPA-аспект НЕ регистрируется")
     void repositoryAspectAbsentWithoutTransactionalProxy() {
         // Поинткат НАЗЫВАЕТ TransactionalProxy, и AspectJ резолвит это имя при разборе выражения.
-        // Мутация: убрать TransactionalProxy из @ConditionalOnClass → бин появится, а разбор
-        // поинтката упадёт IllegalArgumentException прямо в refresh контекста потребителя → RED.
+        // Мутация: убрать TransactionalProxy из @ConditionalOnClass → появится бин, который
+        // не даст ни одного шага (AspectJ не матчит нерезолвимый тип) → RED. Контекст при этом
+        // не падает — замерено; «упадёт refresh» сюда не писать.
         new ApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(AllureDataJpaAutoConfiguration.class))
                 .withClassLoader(new FilteredClassLoader(TransactionalProxy.class))

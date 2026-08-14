@@ -42,7 +42,10 @@ import java.util.stream.Collectors;
  * derived-методы) — см. {@link #SPRING_DATA_REPOSITORY_CALL}, там же почему одного
  * {@code Repository+} мало. Ограничение: REACTIVE-репозитории (Spring Data R2DBC,
  * {@code ReactiveCrudRepository}) НЕ охвачены — нужен отдельный аспект; модуль рассчитан
- * на синхронный (JPA) стек.
+ * на синхронный (JPA) стек. Второе ограничение того же поинтката: репозиторий, созданный НЕ
+ * фабрикой Spring Data (заведён руками как {@code @Bean}, подменён рукописным фейком в тестах
+ * или завёрнут чужим прокси, который не переносит его интерфейсы), маркера не имеет — шага не
+ * будет. Замерено на бине {@code @Bean ManualWidgetRepo extends SimpleJpaRepository}.
  * <p>
  * Потокобезопасен: единственное общее состояние — {@code fieldCache}
  * ({@link ConcurrentHashMap}); шаги идут на вызывающем потоке через {@code uuid}-локальный
