@@ -85,7 +85,7 @@ public class AllureRepositoryAspect {
      * <p>
      * Отличительный признак настоящего репозитория — {@code TransactionalProxy}:
      * {@code RepositoryFactorySupport.getRepository} ставит его на прокси вместе с
-     * {@code repositoryInterface} и {@code Repository}; проверено по байткоду
+     * {@code RepositoryFactorySupport#repositoryInterface} и {@code Repository}; проверено по байткоду
      * spring-data-commons 3.5 и 4.1 (нижняя граница проекта — Boot 3.5.8). На живом прокси
      * это же держит канарейка в {@code DataJpaReportIT}. Самописный DAO маркера не получает.
      * <p>
