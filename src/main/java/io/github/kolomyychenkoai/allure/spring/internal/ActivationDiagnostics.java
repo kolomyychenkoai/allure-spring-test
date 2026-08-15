@@ -2,6 +2,8 @@ package io.github.kolomyychenkoai.allure.spring.internal;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 
@@ -25,6 +27,16 @@ public final class ActivationDiagnostics {
 
     private static final String SWITCH = "allure.spring.diagnostics";
     private static final AtomicBoolean REPORTED = new AtomicBoolean();
+
+    /**
+     * Уже сказанное в {@link #noteOnce}. Ключ составной, а не один флаг на класс: новостей
+     * может быть несколько, и одна не должна затыкать остальные.
+     */
+    private static final Set<String> SAID = ConcurrentHashMap.newKeySet();
+
+    /** Потолок запомненного — см. {@link #remember}. Столько разных новостей у библиотеки
+     *  не будет никогда; число нужно от нарушения контракта, а не от нормальной работы. */
+    private static final int SAID_LIMIT = 64;
 
     private ActivationDiagnostics() {
     }
@@ -60,6 +72,25 @@ public final class ActivationDiagnostics {
                     + "ОСОЗНАННО.");
         }
 
+        // Ветка тихая по построению: @ConditionalOnClass не выполняется, сказать может только
+        // листенер.
+        boolean springData = present.test("org.springframework.data.repository.Repository");
+        boolean transactionalProxy = present.test("org.springframework.transaction.interceptor.TransactionalProxy");
+        if (springData && !transactionalProxy) {
+            problems.add("Spring Data есть на classpath, а spring-tx нет — шагов «DB Repo.method» "
+                    + "в отчёте не будет: аспект репозиториев требует "
+                    + "org.springframework.transaction.interceptor.TransactionalProxy (по этому маркеру "
+                    + "он отличает прокси Spring Data от самописного DAO). Добавь spring-tx в test-scope.");
+        }
+
+        // Самая частая форма потери раздела БД: spring-tx есть, aspectjweaver нет.
+        if (springData && !present.test("org.aspectj.lang.ProceedingJoinPoint")) {
+            problems.add("Spring Data есть на classpath, а AspectJ нет — шагов «DB Repo.method» "
+                    + "в отчёте не будет: их пишет Spring-аспект, а без AspectJ он не "
+                    + "регистрируется. Добавь spring-boot-starter-aop в test-scope "
+                    + "(в starter-data-jdbc/mongodb/redis его нет).");
+        }
+
         boolean mockMvc = present.test("org.springframework.test.web.servlet.MockMvc");
         boolean mockMvcHook = MovedTypeNames.MOCKMVC_CUSTOMIZER.stream().anyMatch(present);
         if (mockMvc && !mockMvcHook) {
@@ -81,6 +112,86 @@ public final class ActivationDiagnostics {
                     + "spring-boot-webtestclient (Boot 4.x).");
         }
         return problems;
+    }
+
+    /**
+     * Новость про модуль, выключённый НАСТРОЙКОЙ потребителя — в отличие от {@link #problems},
+     * которая про «класса нет на classpath». Такой исход спроектирован, поэтому уходит в
+     * {@link AllureInstrumentationLogger#note} (не {@code warn}: слова «сбой» и стека там нет
+     * за что предъявлять).
+     * <p>
+     * Живёт здесь, а не в автоконфигурации, ради двух вещей этого класса: общего выключателя
+     * {@code -Dallure.spring.diagnostics=off} и однократности НА JVM. Второе не косметика —
+     * у потребителя за прогон поднимается много контекстов; см. {@link #reportOnce()}.
+     *
+     * ⚠️ НЕ передавай сюда переменный текст: ключ дедупликации составной, и переменная часть
+     * (имя бина, путь, значение свойства) превращает «один раз» в «раз на каждое значение»
+     * и уводит данные потребителя в лог, а оттуда во вложение «логи приложения» — в артефакт CI.
+     * Держит {@code noteOnceIsCalledWithConstantsOnly}.
+     *
+     * @param component имя модуля для префикса строки
+     * @param message   что именно потребитель теряет и что с этим делать
+     */
+    public static void noteOnce(String component, String message) {
+        try {
+            if ("off".equalsIgnoreCase(System.getProperty(SWITCH)) || !remember(component, message)) {
+                return;
+            }
+            AllureInstrumentationLogger.note(component, message);
+        } catch (Throwable diagnosticIsNotWorthATest) {
+            // Нас зовут изнутри refresh контекста потребителя: уронить его сообщением о том,
+            // что часть отчёта беднее, недопустимо.
+            warnQuietly("ActivationDiagnostics", diagnosticIsNotWorthATest);
+        }
+    }
+
+    /**
+     * true, если эту новость надо сказать. Потолок нужен на случай нарушения контракта
+     * «message — константа»: статическое множество не чистится никогда, и на переменном тексте
+     * росло бы до конца JVM. Дойдя до потолка, перестаём ЗАПОМИНАТЬ, но продолжаем говорить —
+     * в худшем случае повторяемся, но не течём и не глохнем.
+     * <p>
+     * ⚠️ НЕ меняй порядок операндов. При {@code size() < LIMIT && add(...)} на потолке
+     * возвращается {@code false}: библиотека замолкает, и не только про нарушителя контракта —
+     * один переменный текст забивает все слоты и уносит законные константные новости.
+     * Держит {@code capKeepsTalkingNotSilent}.
+     */
+    private static boolean remember(String component, String message) {
+        return SAID.size() >= SAID_LIMIT || SAID.add(component + '|' + message);
+    }
+
+    /**
+     * Пожаловаться в лог, НИЧЕМ не рискуя. Запасной канал после сбоя диагностики идёт в ТОТ ЖЕ
+     * логгер, на котором мы только что упали, — значит и он может бросить. Замерено: хендлер
+     * потребителя, бросающий на {@code publish}, иначе пробрасывает исключение в refresh чужого
+     * контекста, то есть жалоба на потерянный раздел отчёта роняет чужую сборку.
+     * <p>
+     * Общий метод на все catch библиотеки: обещание «не роняем» не должно держаться на том,
+     * помнил ли автор очередного catch про логгер.
+     * <p>
+     * ⚠️ НЕ подставляй сюда константу по месту: имя модуля в строке лога и есть грепаемая ручка
+     * «что именно потерялось». Держат {@code registryFailureNeverBreaksConsumerContext}
+     * и {@code diagnosticsSwitchDoesNotHideLibraryFailure} — оба требуют «DbRepository» в строке.
+     *
+     * @param component имя модуля, который пострадал
+     */
+    public static void warnQuietly(String component, Throwable failure) {
+        try {
+            AllureInstrumentationLogger.warn(component, failure);
+        } catch (Throwable loggerIsBrokenToo) {
+            // сказать больше нечем и незачем
+        }
+    }
+
+    /**
+     * Забыть сказанное. Только для тестов: без сброса ассерт «сказано один раз» зависел бы
+     * от того, какой тест-класс поднял контекст первым (у нас {@code runOrder=random}).
+     * <p>
+     * Единственный тест-хук библиотеки не должен уезжать потребителю публичным методом.
+     * Из других пакетов — через мостик {@code DiagnosticsReset} в {@code src/test}.
+     */
+    static void forgetForTests() {
+        SAID.clear();
     }
 
     /**
@@ -114,7 +225,7 @@ public final class ActivationDiagnostics {
             // обещание «прогон не роняем никогда» обязано принадлежать этому методу, иначе оно
             // держится на реализации чужого хелпера. Диагност — вспомогательный сигнал, ронять
             // из-за него чужой тест недопустимо.
-            AllureInstrumentationLogger.warn("ActivationDiagnostics", diagnosticIsNotWorthATest);
+            warnQuietly("ActivationDiagnostics", diagnosticIsNotWorthATest);
         }
     }
 }

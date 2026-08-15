@@ -191,7 +191,7 @@ class AllureDataSourceListenerTest {
         TestResult result = allure.run("sql-setnull", () ->
                 listener.afterQuery(exec(), List.of(query)));
 
-        // мутация: без спец-обработки setNull вывелось бы «name=12» (код VARCHAR) — тут ждём NULL
+        // мутация: без спец-обработки PreparedStatement.setNull вывелось бы «name=12» (код VARCHAR)
         assertThat(allure.attachment(result, "SQL Query").orElseThrow())
                 .contains("name=NULL where id=7")
                 .doesNotContain("name=12");
@@ -268,7 +268,8 @@ class AllureDataSourceListenerTest {
         TestResult result = allure.run("sql-outparam", () ->
                 listener.afterQuery(exec(), List.of(call)));
 
-        // мутация: без пропуска registerOut во втором ? оказался бы код типа INTEGER (4) вместо ?
+        // мутация: без пропуска CallableStatement.registerOutParameter во втором ? оказался бы
+        // код типа INTEGER (4) вместо ?
         assertThat(allure.attachment(result, "SQL Query").orElseThrow())
                 .contains("call compute(5, ?)")
                 .doesNotContain("compute(5, 4)");

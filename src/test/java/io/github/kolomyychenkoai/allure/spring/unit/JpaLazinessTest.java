@@ -18,11 +18,11 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Уровень A: страж ленивости JPA — Hibernate и EclipseLink.
+ * Уровень A: защита ленивости JPA — Hibernate и EclipseLink.
  * <p>
  * Берём НАСТОЯЩИЕ интерфейсы обоих провайдеров (в тест-scope они есть), а не двойники:
- * страж распознаёт их РЕФЛЕКСИВНО по имени, и двойник с другим пакетом проверял бы фикцию.
- * Реализация — динамические прокси: так видно, что страж СПРАШИВАЕТ состояние, а не трогает
+ * защита распознаёт их РЕФЛЕКСИВНО по имени, и двойник с другим пакетом проверял бы фикцию.
+ * Реализация — динамические прокси: так видно, что защита СПРАШИВАЕТ состояние, а не трогает
  * значение.
  */
 @Epic("Внутренние проверки библиотеки")
@@ -57,7 +57,7 @@ class JpaLazinessTest {
 
         assertThat(notLoaded(lazy)).isTrue();
         assertThat(touched[0])
-                .as("страж обязан СПРАШИВАТЬ состояние, а не обращаться к прокси")
+                .as("защита обязана СПРАШИВАТЬ состояние, а не обращаться к прокси")
                 .isFalse();
     }
 
@@ -90,7 +90,7 @@ class JpaLazinessTest {
     }
 
     @Test
-    @DisplayName("обычные значения и null — не ленивые (страж не вмешивается)")
+    @DisplayName("обычные значения и null — не ленивые (защита не вмешивается)")
     void ordinaryValuesAreUntouched() {
         assertThat(notLoaded(null)).isFalse();
         assertThat(notLoaded("строка")).isFalse();
@@ -99,7 +99,7 @@ class JpaLazinessTest {
     }
 
     @Test
-    @DisplayName("сбой при опросе состояния → ведём себя как без стража, а не роняем чужой тест")
+    @DisplayName("сбой при опросе состояния → ведём себя как без защиты, а не роняем чужой тест")
     void brokenProbeDegradesToFalse() {
         Object broken = proxy(HibernateProxy.class, (p, m, a) -> {
             if ("getHibernateLazyInitializer".equals(m.getName())) {
@@ -128,7 +128,7 @@ class JpaLazinessTest {
         });
 
         assertThat(notLoaded(holder)).isTrue();
-        assertThat(loaded[0]).as("страж дёрнул значение вместо предиката состояния").isFalse();
+        assertThat(loaded[0]).as("защита дёрнула значение вместо предиката состояния").isFalse();
     }
 
     @Test
@@ -158,7 +158,7 @@ class JpaLazinessTest {
         });
 
         assertThat(notLoaded(container)).isTrue();
-        assertThat(loaded[0]).as("страж тронул коллекцию — у потребителя это загрузка из БД").isFalse();
+        assertThat(loaded[0]).as("защита тронула коллекцию — у потребителя это загрузка из БД").isFalse();
     }
 
     @Test

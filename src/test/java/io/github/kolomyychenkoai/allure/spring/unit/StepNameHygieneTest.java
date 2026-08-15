@@ -9,8 +9,8 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Тесты стража гигиены имён. Половина — АНТИ-правила на РЕАЛЬНЫХ именах из отчёта:
- * страж, который краснеет на законных именах, отключат в первый же день, и тогда мусор
+ * Тесты защиты гигиены имён. Половина — АНТИ-правила на РЕАЛЬНЫХ именах из отчёта:
+ * защита, которая краснеет на законных именах, будет отключена в первый же день, и тогда мусор
  * в отчёт вернётся насовсем.
  */
 @Epic("Внутренние проверки библиотеки")
@@ -101,7 +101,7 @@ class StepNameHygieneTest {
         }
 
         @Test
-        @DisplayName("пустое имя не ломает страж")
+        @DisplayName("пустое имя не ломает защиту")
         void blankName() {
             assertThat(StepNameHygiene.defect(null)).isEmpty();
             assertThat(StepNameHygiene.defect("")).isEmpty();

@@ -10,7 +10,7 @@ import java.util.List;
  * один прокси на аспект БД, Mockito и общий рендер — копия разошлась бы с оригиналом молча.
  * <p>
  * Берём НАСТОЯЩИЕ интерфейсы Hibernate (в тест-scope они есть) и НАСТОЯЩИЕ имена методов —
- * из {@link JpaLaziness}. Двойник с другим пакетом проверял бы фикцию: страж резолвит
+ * из {@link JpaLaziness}. Двойник с другим пакетом проверял бы фикцию: тест резолвит
  * провайдера рефлексивно по имени.
  */
 public final class LazyProxies {
@@ -71,7 +71,7 @@ public final class LazyProxies {
                 (proxy, method, args) -> answer.answer(method.getName(), args));
     }
 
-    /** Интерфейс провайдера ПО ИМЕНИ — тому же, по которому его ищет страж. */
+    /** Интерфейс провайдера ПО ИМЕНИ — тому же, по которому его ищет тест. */
     private static Class<?> type(String name) {
         try {
             return Class.forName(name);

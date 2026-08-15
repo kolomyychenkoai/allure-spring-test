@@ -38,10 +38,14 @@ import java.util.stream.Collectors;
  * обращения к БД, пока идёт тест (в т.ч. сквозь прод-код), и молчим во время старта
  * контекста. Так модуль не привязан к структуре пакетов потребителя.
  * <p>
- * Pointcut ловит ВСЕ методы любого {@code Repository+} (Crud/Jpa/PagingAndSorting +
- * derived-методы). Ограничение: REACTIVE-репозитории (Spring Data R2DBC,
+ * Pointcut ловит все методы репозитория, СОЗДАННОГО Spring Data (Crud/Jpa/PagingAndSorting +
+ * derived-методы) — см. {@link #SPRING_DATA_REPOSITORY_CALL}, там же почему одного
+ * {@code Repository+} мало. Ограничение: REACTIVE-репозитории (Spring Data R2DBC,
  * {@code ReactiveCrudRepository}) НЕ охвачены — нужен отдельный аспект; модуль рассчитан
- * на синхронный (JPA) стек.
+ * на синхронный (JPA) стек. Второе ограничение того же поинтката: репозиторий, созданный НЕ
+ * фабрикой Spring Data (заведён руками как {@code @Bean}, подменён рукописным фейком в тестах
+ * или завёрнут чужим прокси, который не переносит его интерфейсы), маркера не имеет — шага
+ * не будет.
  * <p>
  * Потокобезопасен: единственное общее состояние — {@code fieldCache}
  * ({@link ConcurrentHashMap}); шаги идут на вызывающем потоке через {@code uuid}-локальный
@@ -71,7 +75,31 @@ public class AllureRepositoryAspect {
     private record Call(String stepName, String callText) {
     }
 
-    @Around("execution(* org.springframework.data.repository.Repository+.*(..))")
+    /**
+     * Ловим ТОЛЬКО прокси, построенный самой Spring Data.
+     * <p>
+     * Одного {@code Repository+} мало: {@code Repository} — ПУСТОЙ маркер без единого метода,
+     * и его реализует в том числе самописный DAO потребителя. Без сужения такой DAO становится
+     * CGLIB-прокси, а при {@code spring.aop.proxy-target-class=false} контекст не поднимается
+     * вовсе (issue #71). Держит {@code plainDaoWithRepositoryMarkerIsNotProxied}.
+     * <p>
+     * Отличительный признак настоящего репозитория — {@code TransactionalProxy}:
+     * {@code RepositoryFactorySupport.getRepository} ставит его на прокси вместе с
+     * {@code RepositoryFactorySupport#repositoryInterface} и {@code Repository}; проверено по байткоду
+     * spring-data-commons 3.5 и 4.1 (нижняя граница проекта — Boot 3.5.8). На живом прокси
+     * это же держит канарейка в {@code DataJpaReportIT}. Самописный DAO маркера не получает.
+     * <p>
+     * {@code target}, а не {@code this}: спрашиваем про бин ПОТРЕБИТЕЛЯ, а не про внешний прокси,
+     * который строим мы сами. Мутация {@code target}→{@code this} сегодня не краснит ничего.
+     * <p>
+     * Чужой способ получить маркер — legacy {@code TransactionProxyFactoryBean}: чтобы попасть
+     * под поинткат, бин должен ОДНОВРЕМЕННО реализовывать {@code Repository} и быть завёрнут им.
+     */
+    private static final String SPRING_DATA_REPOSITORY_CALL =
+            "execution(* org.springframework.data.repository.Repository+.*(..))"
+                    + " && target(org.springframework.transaction.interceptor.TransactionalProxy)";
+
+    @Around(SPRING_DATA_REPOSITORY_CALL)
     public Object logRepositoryCall(ProceedingJoinPoint pjp) throws Throwable {
         // снимок ДО вызова: аргументы должны отражать то, что ОТПРАВИЛИ в БД,
         // а не мутированное состояние после вызова (напр. сгенерированный id у save)
@@ -219,7 +247,7 @@ public class AllureRepositoryAspect {
         }
         // ⚠️ ДО веток Collection/Iterable: ленивая коллекция (PersistentCollection у Hibernate,
         // IndirectContainer у EclipseLink) — это и Collection, и Iterable, поэтому size()
-        // и обход ниже загрузили бы её из БД (N+1 у потребителя). Общий страж в
+        // и обход ниже загрузили бы её из БД (N+1 у потребителя). Общая защита в
         // AllureAdviceSupport сюда не помогает: обход идёт МИМО рендера.
         if (JpaLaziness.notLoaded(result)) {
             return JpaLaziness.NOT_LOADED;
@@ -339,7 +367,7 @@ public class AllureRepositoryAspect {
                 sj.add(field.getName() + "=" + AllureAdviceSupport.safe(field.get(obj)));
             } catch (Throwable e) {
                 // Ленивая связь Hibernate/EclipseLink сюда не приводит — её помечает маркером
-                // страж JpaLaziness. Ловим ОСТАЛЬНОЕ: недоступное под module-системой поле,
+                // проверка JpaLaziness. Ловим ОСТАЛЬНОЕ: недоступное под module-системой поле,
                 // ленивое у незнакомого провайдера, сломанный getter — не теряем прочие поля.
                 sj.add(field.getName() + "=?");
             }

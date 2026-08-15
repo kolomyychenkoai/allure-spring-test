@@ -170,9 +170,9 @@ public final class AllureAdviceSupport {
      * в своём try: у неинициализированного прокси он и бросает, и будит связь. Исправный
      * {@code toString()} из-за сломанного {@code hashCode()} терять нельзя.
      * <p>
-     * Прокси Hibernate и EclipseLink сюда уже не доходят — их отсекает страж
+     * Прокси Hibernate и EclipseLink сюда уже не доходят — их отсекает защита
      * {@link JpaLaziness} выше по {@code clean}. Try остаётся ради прочих провайдеров
-     * (OpenJPA и т.п.), которых страж не знает, и ради чужого сломанного {@code hashCode}.
+     * (OpenJPA и т.п.), которых защита не знает, и ради чужого сломанного {@code hashCode}.
      */
     private static boolean isIdentityToString(String text, Object value, Class<?> type) {
         String name = type.getName();

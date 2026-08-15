@@ -128,7 +128,7 @@ class AllureRepositoryAspectTest {
     @DisplayName("ВЕРХНЕУРОВНЕВЫЙ ленивый прокси помечен маркером, а не отрендерен через toString")
     void doesNotRenderTopLevelLazyProxy() throws Throwable {
         boolean[] touched = {false};
-        // Класс прокси НЕ несёт @Entity (аннотация не @Inherited), поэтому без стража
+        // Класс прокси НЕ несёт @Entity (аннотация не @Inherited), поэтому без защиты
         // значение уходило бы в safeValue → String.valueOf → toString() → SELECT.
         Object lazyEntity = LazyProxies.uninitializedEntity(touched);
 
@@ -144,7 +144,7 @@ class AllureRepositoryAspectTest {
     @DisplayName("сбой РЕНДЕРА ответа не роняет вызов репозитория и не врёт статусом BROKEN")
     void brokenResponseRenderDoesNotBreakTheCall() throws Throwable {
         // Мутация: звать formatResponse напрямую вместо describeResponse → красный.
-        // Коллекция, чей size() бросает, — это провайдер, которого страж не знает
+        // Коллекция, чей size() бросает, — это провайдер, которого защита JpaLaziness не знает
         // (почему такой сбой опасен — javadoc describeResponse).
         List<?> hostile = (List<?>) Proxy.newProxyInstance(getClass().getClassLoader(),
                 new Class<?>[]{List.class}, (proxy, method, args) -> {

@@ -432,40 +432,40 @@ class InstrumentationApiCanaryTest {
     }
 
     @Test
-    @DisplayName("Hibernate: интерфейсы ленивости, на которых держится страж прокси")
+    @DisplayName("Hibernate: интерфейсы ленивости, на которых держится защита прокси")
     void hibernateLazinessInterfaces() {
-        // ⚠️ Страж узнаёт ленивое по ИМЕНИ интерфейса (провайдеров нет в compile-classpath):
+        // ⚠️ Защита JpaLaziness узнаёт ленивое по ИМЕНИ интерфейса (провайдеров нет в compile-classpath):
         // переименуют — он перестанет срабатывать молча, отчёт при этом выглядит здоровым.
-        // Имена — из самого стража (почему не строками — javadoc у его констант).
+        // Имена — из самой защиты (почему не строками — javadoc у её констант).
         require(classPresent(JpaLaziness.HIBERNATE_PROXY_NAME),
                 "HibernateProxy уехал → обнови имена в internal/JpaLaziness");
         require(hasMethod(JpaLaziness.HIBERNATE_PROXY_NAME, JpaLaziness.PROXY_INITIALIZER_METHOD, 0, null),
                 "HibernateProxy." + JpaLaziness.PROXY_INITIALIZER_METHOD
-                        + " уехал → страж не сможет спросить состояние");
+                        + " уехал → защита не сможет спросить состояние");
         require(hasMethod(JpaLaziness.HIBERNATE_INITIALIZER_NAME, JpaLaziness.HIBERNATE_PROXY_PROBE, 0, null),
                 "LazyInitializer." + JpaLaziness.HIBERNATE_PROXY_PROBE
-                        + " уехал → страж не отличит загруженное от ленивого");
+                        + " уехал → защита не отличит загруженное от ленивого");
         require(classPresent(JpaLaziness.HIBERNATE_COLLECTION_NAME),
                 "PersistentCollection уехал → ленивые КОЛЛЕКЦИИ снова будут обходиться (N+1)");
         require(hasMethod(JpaLaziness.HIBERNATE_COLLECTION_NAME, JpaLaziness.HIBERNATE_COLLECTION_PROBE, 0, null),
                 "PersistentCollection." + JpaLaziness.HIBERNATE_COLLECTION_PROBE
-                        + " уехал → страж коллекций мёртв");
+                        + " уехал → защита коллекций мертва");
     }
 
     @Test
-    @DisplayName("EclipseLink: интерфейсы ленивости, на которых держится тот же страж")
+    @DisplayName("EclipseLink: интерфейсы ленивости, на которых держится та же защита")
     void eclipseLinkLazinessInterfaces() {
         // ⚠️ У EclipseLink опасен size(), а не toString() — разбор в javadoc JpaLaziness.
         require(classPresent(JpaLaziness.ECLIPSELINK_HOLDER_NAME),
                 "ValueHolderInterface уехал → обнови имена в internal/JpaLaziness");
         require(hasMethod(JpaLaziness.ECLIPSELINK_HOLDER_NAME, JpaLaziness.ECLIPSELINK_PROBE, 0, null),
                 "ValueHolderInterface." + JpaLaziness.ECLIPSELINK_PROBE
-                        + " уехал → страж не отличит загруженное от ленивого");
+                        + " уехал → защита не отличит загруженное от ленивого");
         require(classPresent(JpaLaziness.ECLIPSELINK_CONTAINER_NAME),
                 "IndirectContainer уехал → ленивые коллекции EclipseLink снова будут грузиться в size()");
         require(hasMethod(JpaLaziness.ECLIPSELINK_CONTAINER_NAME, JpaLaziness.ECLIPSELINK_PROBE, 0, null),
                 "IndirectContainer." + JpaLaziness.ECLIPSELINK_PROBE
-                        + " уехал → страж коллекций EclipseLink мёртв");
+                        + " уехал → защита коллекций EclipseLink мертва");
     }
 
     @Test
@@ -475,6 +475,28 @@ class InstrumentationApiCanaryTest {
         // ТИХО деградирует к generic toString() — вложение остаётся, но становится бесполезным
         require(classPresent("jakarta.persistence.Entity"),
                 "jakarta.persistence.Entity уехал → AllureRepositoryAspect перестанет разбирать поля сущностей");
+    }
+
+    @Test
+    @DisplayName("Spring AOP и Spring Data: имена, по которым решается судьба раздела БД")
+    void repositoryAspectGateTypeNames() {
+        // Все три имени резолвятся СТРОКОЙ (spring-data и spring-tx нет
+        // в compile-classpath библиотеки), и оба деградируют НЕМО: `catch (Throwable) → false`.
+        // Переезд любого из них не сломает ни одного теста — он просто отнимет раздел БД
+        // или заставит новость замолчать у всех, то есть вернёт блокеры #70/#71 под новой
+        // причиной. Канарейка нужна, чтобы диагноз при апгрейде был «имя уехало», а не
+        // «аспект куда-то делся».
+        require(classPresent("org.springframework.aop.aspectj.annotation.AnnotationAwareAspectJAutoProxyCreator"),
+                "AnnotationAwareAspectJAutoProxyCreator уехал → hasAspectJProxyCreator всегда ложно, "
+                        + "аспект репозиториев не зарегистрируется НИ У КОГО "
+                        + "(обнови ASPECTJ_PROXY_CREATOR в AllureDataJpaAutoConfiguration)");
+        require(classPresent("org.springframework.data.repository.core.support.RepositoryFactoryBeanSupport"),
+                "RepositoryFactoryBeanSupport уехал → hasRepositoryBeans всегда ложно, и новость "
+                        + "про исчезнувший раздел БД замолчит у всех потребителей — блокер круга 2 "
+                        + "под новой причиной (обнови имя в AllureDataJpaAutoConfiguration)");
+        require(classPresent("org.springframework.transaction.interceptor.TransactionalProxy"),
+                "TransactionalProxy уехал → поинткат аспекта не срезолвится, шагов «DB Repo.method» "
+                        + "не будет (обнови поинткат в AllureRepositoryAspect и @ConditionalOnClass)");
     }
 
     @Test

@@ -70,7 +70,7 @@ class DataJpaReportIT {
         // из кэша первого уровня, и витрина проверяла бы не тот случай.
         widgets.findById(saved.getId());
 
-        // Мутация: снять страж → вместо маркера «<?>» (сессия закрыта, toString прокси бросает).
+        // Мутация: снять защиту в коде → вместо маркера «<?>» (сессия закрыта, toString прокси бросает).
         String dbResult = CurrentReport.attachmentOfStep("DB WidgetRepository.findById", "DB Result").orElse("");
         CurrentReport.check(dbResult.contains("owner=<не загружено: ленивая связь>"),
                 () -> "ленивая связь не помечена маркером — значит её разбудили: " + dbResult);
@@ -108,6 +108,13 @@ class DataJpaReportIT {
         // не зависит от порядка и от строк, оставленных другими тестами в общей H2
         assertThat(widgets.findAll()).extracting(Widget::getName).contains("gadget");
         assertThat(widgets.findById(999_999L)).isEmpty();
+
+        // Канарейка допущения #71: Spring Data метит СВОЙ прокси маркером TransactionalProxy —
+        // ровно по нему поинткат отличает настоящий репозиторий от самописного DAO потребителя.
+        // Уедет маркер при апгрейде — раздел БД исчезнет молча, и уровень A этого не увидит:
+        // там прокси собран руками по той же форме, то есть проверяет наше представление о ней.
+        CurrentReport.check(widgets instanceof org.springframework.transaction.interceptor.TransactionalProxy,
+                () -> "Spring Data больше не метит прокси TransactionalProxy: " + widgets.getClass());
 
         List<String> steps = CurrentReport.stepNames();
         CurrentReport.check(steps.stream().anyMatch(n -> n.startsWith("DB ") && n.contains("WidgetRepository.save")),

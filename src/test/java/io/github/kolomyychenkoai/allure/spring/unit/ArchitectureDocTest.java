@@ -19,7 +19,7 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Страж карты модулей в {@code docs/architecture.md}: документ обещает ПОЛНЫЙ список точек
+ * Тест карты модулей в {@code docs/architecture.md}: документ обещает ПОЛНЫЙ список точек
  * входа, и обещание проверяется в обе стороны.
  * <p>
  * Архитектурный обзор устаревает молча и тем быстрее, чем он полезнее: добавили модуль —

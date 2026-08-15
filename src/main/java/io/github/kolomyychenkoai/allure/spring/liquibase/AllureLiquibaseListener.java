@@ -33,7 +33,7 @@ import org.springframework.test.context.TestExecutionListener;
  * Live-путь ({@code liquibase.update()} во время теста) работает всегда, независимо от этого.
  * <p>
  * ⚠️ Допущение об ordering JUnit-Platform (Allure-кейс активен уже в {@code beforeTestMethod} —
- * {@code AllureJunitPlatform.executionStarted} стартует его до фазы {@code before} узла) — его страж
+ * {@code AllureJunitPlatform.executionStarted} стартует его до фазы {@code before} узла) — его тест
  * end-to-end {@code LiquibaseReportIT} (уровень B). Перепроверить при апгрейде junit-platform/allure-junit5.
  */
 public class AllureLiquibaseListener implements TestExecutionListener, Ordered {
