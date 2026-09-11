@@ -40,10 +40,16 @@ import java.util.Optional;
  * а поведение вызовов {@code getConnection}: отдаём прокси исходного класса (Spring AOP),
  * остальное попадает в настоящий бин.
  * <p>
- * <b>Что AOP-прокси даёт сверх сохранённого класса.</b> Spring Boot достаёт настоящий пул
- * через {@code AopProxyUtils.getSingletonTarget} ({@code DataSourceUnwrapper}), поэтому метрики
- * Hikari, health-контрибьютор и {@code DataSourcePoolMetadataProvider} работают. Сквозь
- * {@link ProxyDataSource} он этого не умеет.
+ * <b>Что AOP-прокси даёт сверх сохранённого класса.</b> Бин остаётся объектом своего класса,
+ * поэтому его находят и инъекция по конкретному типу, и {@code DataSourceUnwrapper}: он выходит
+ * на первой же ветке {@code dataSourceType.isInstance(ds)} и отдаёт НАШ прокси. Сквозь
+ * {@link ProxyDataSource} не проходит и это.
+ * <p>
+ * ⚠️ Отдавать прокси мало там, где Boot читает не метод, а ПОЛЕ: {@code HikariDataSourcePoolMetadata}
+ * берёт пул через {@code DirectFieldAccessor}, а у подкласса без конструктора поле пусто, и
+ * {@code getActive()}/{@code getIdle()} возвращают {@code null}. Поэтому метрики и health пула
+ * держатся не на самом прокси, а на {@link AllurePoolMetadataUnwrapper}, который показывает
+ * провайдерам Boot настоящий пул (issue #87).
  * <p>
  * <b>Подкласс создаётся без конструктора</b> (Objenesis внутри Spring AOP), то есть поля
  * подкласса пусты, и любой невперехваченный метод выполнится на пустом объекте. Отсюда

@@ -524,6 +524,7 @@ java -jar ~/projects/allure-spring-test/tools/target/review-tools.jar \
 | #81 | запросы при коммите транзакции всплывают шагом верхнего уровня | minor | 22% шагов SQL у `warehouse` |
 | #82 | при нескольких `DataSource` шаг SQL не говорит, в какую базу ушёл запрос | minor | 4 пула у `tenants`, в шаге ни одного имени |
 | #83 | упавшая проверка не становится шагом: в красном тесте все шаги зелёные | major | 0 упавших шагов на 6 упавших тестов |
+| #87 | ~~обёртка `DataSource` теряет метрики пула: `jdbc.connections.active` и `idle` пропадают молча~~ **ИСПРАВЛЕНО** | major | `HikariDataSourcePoolMetadata` читает пул ПОЛЕМ (`DirectFieldAccessor`), а у подкласса без конструктора оно пусто: настоящий пул active=0/idle=1, обёрнутый — null/null при совпадающих `getMax()`/`getMin()`. Чинит `AllurePoolMetadataUnwrapper`; держат `poolMetricsSeeTheRealPoolThroughTheProxy` и `poolGaugesReachTheMeterRegistry`, обе с мутацией |
 
 ## Отрицательные результаты (замерены, дефекта нет)
 

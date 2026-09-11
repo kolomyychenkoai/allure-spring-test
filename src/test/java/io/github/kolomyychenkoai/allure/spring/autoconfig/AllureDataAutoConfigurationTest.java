@@ -1,6 +1,10 @@
 package io.github.kolomyychenkoai.allure.spring.autoconfig;
 
 import com.zaxxer.hikari.HikariDataSource;
+import com.zaxxer.hikari.metrics.micrometer.MicrometerMetricsTrackerFactory;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.binder.MeterBinder;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.qameta.allure.Epic;
 import io.github.kolomyychenkoai.allure.spring.data.AllureDataSourceAutoConfiguration;
 import io.github.kolomyychenkoai.allure.spring.data.AllureDataJpaAutoConfiguration;
@@ -48,7 +52,15 @@ import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration;
+import org.springframework.boot.jdbc.autoconfigure.metrics.DataSourcePoolMetricsAutoConfiguration;
+import org.springframework.boot.jdbc.metadata.CompositeDataSourcePoolMetadataProvider;
+import org.springframework.boot.jdbc.metadata.DataSourcePoolMetadata;
+import org.springframework.boot.jdbc.metadata.DataSourcePoolMetadataProvider;
 import org.springframework.boot.test.context.FilteredClassLoader;
+import org.springframework.context.annotation.Primary;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Bean;
@@ -287,8 +299,10 @@ class AllureDataAutoConfigurationTest {
     @Test
     @DisplayName("настоящий пул достаётся из прокси — Spring Boot ищет его так же")
     void realDataSourceStaysReachable() {
-        // Так работает DataSourceUnwrapper: метрики и health пула Hikari смотрят сквозь
-        // AOP-прокси через getSingletonTarget. Мутация: factory.setOpaque(true) → RED.
+        // Цель обязана доставаться из прокси: на этом держится и AllurePoolMetadataUnwrapper,
+        // который показывает провайдерам Boot настоящий пул. Сам DataSourceUnwrapper сюда НЕ
+        // доходит — он выходит раньше, на isInstance, и отдаёт прокси (issue #87).
+        // Мутация: factory.setOpaque(true) → RED.
         FakeDataSource original = new FakeDataSource("основной");
 
         Object wrapped = wrap(original);
@@ -966,6 +980,156 @@ class AllureDataAutoConfigurationTest {
                     assertThat(ctx).getBean("lockedDataSource", HikariDataSource.class).isNotNull();
                     assertThat(ctx.getBean("lockedDataSource")).isInstanceOf(AllureProxiedDataSource.class);
                 });
+    }
+
+    @Test
+    @DisplayName("метрики пула читаются сквозь обёртку: два пула, @ConfigurationProperties, MetricsTrackerFactory")
+    void poolMetricsSeeTheRealPoolThroughTheProxy() {
+        // Форма из комментария потребителя к #87: @Primary + именованный пул, оба через
+        // @ConfigurationProperties и с MicrometerMetricsTrackerFactory, ShedLock просит свой
+        // по КОНКРЕТНОМУ типу. Мутация: снять обёртку провайдеров в AllurePoolMetadataUnwrapper
+        // (вернуть bean как есть) → getActive() и getIdle() возвращают null → RED.
+        // Замерено: без неё active=null/idle=null при живом пуле с active=0/idle=1.
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(
+                        DataSourceAutoConfiguration.class,
+                        AllureDataSourceAutoConfiguration.class))
+                .withUserConfiguration(TwoPoolsShapedConfig.class)
+                .withPropertyValues(
+                        "app.main.hikari.jdbc-url=jdbc:h2:mem:issue87main",
+                        "app.main.hikari.pool-name=mainPool",
+                        "app.shedlock.hikari.jdbc-url=jdbc:h2:mem:issue87lock",
+                        "app.shedlock.hikari.pool-name=shedlockPool")
+                .run(ctx -> {
+                    assertThat(ctx).hasNotFailed();
+                    // инъекция по конкретному типу с @Qualifier при ДВУХ пулах и @Primary
+                    assertThat(ctx.getBean("lockProvider")).isEqualTo("shedlockPool");
+
+                    List<DataSourcePoolMetadataProvider> providers =
+                            ctx.getBeanProvider(DataSourcePoolMetadataProvider.class).stream().toList();
+                    assertThat(providers)
+                            .as("провайдера метаданных нет — мерить нечем, гейт пуст")
+                            .isNotEmpty();
+                    CompositeDataSourcePoolMetadataProvider composite =
+                            new CompositeDataSourcePoolMetadataProvider(providers);
+
+                    for (String bean : List.of("mainDataSource", "shedlockDataSource")) {
+                        DataSource pool = ctx.getBean(bean, DataSource.class);
+                        assertThat(pool)
+                                .as("пул %s не обёрнут — тест зелён, но меряет не то", bean)
+                                .isInstanceOf(AllureProxiedDataSource.class);
+                        warmUp(pool);
+
+                        DataSourcePoolMetadata metadata = composite.getDataSourcePoolMetadata(pool);
+                        assertThat(metadata).as("метаданных пула %s нет вовсе", bean).isNotNull();
+                        assertThat(metadata.getActive())
+                                .as("активные соединения пула %s потерялись на обёртке", bean)
+                                .isNotNull();
+                        assertThat(metadata.getIdle())
+                                .as("свободные соединения пула %s потерялись на обёртке", bean)
+                                .isNotNull();
+                        assertThat(metadata.getMax()).as("предел пула %s", bean).isNotNull();
+                    }
+                });
+    }
+
+    @Test
+    @DisplayName("метрики пула доезжают до реестра micrometer, а не только до метаданных")
+    void poolGaugesReachTheMeterRegistry() {
+        // Сквозная проверка того же по другой оси: не метаданные напрямую, а метры Boot.
+        // bindTo зовём руками намеренно: делает это MeterRegistryPostProcessor из модуля
+        // spring-boot-micrometer-metrics, которого в сборке нет, — иначе реестр пуст и тест
+        // зелёный на пустых данных. Мутация: та же, снять обёртку провайдеров → метров
+        // jdbc.connections.active/idle не появится вовсе → RED.
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(
+                        DataSourceAutoConfiguration.class,
+                        DataSourcePoolMetricsAutoConfiguration.class,
+                        AllureDataSourceAutoConfiguration.class))
+                .withUserConfiguration(TwoPoolsShapedConfig.class)
+                .withPropertyValues(
+                        "app.main.hikari.jdbc-url=jdbc:h2:mem:issue87gauges",
+                        "app.main.hikari.pool-name=mainPool",
+                        "app.shedlock.hikari.jdbc-url=jdbc:h2:mem:issue87gaugeslock",
+                        "app.shedlock.hikari.pool-name=shedlockPool")
+                .run(ctx -> {
+                    assertThat(ctx).hasNotFailed();
+                    warmUp(ctx.getBean("mainDataSource", DataSource.class));
+                    warmUp(ctx.getBean("shedlockDataSource", DataSource.class));
+
+                    MeterRegistry registry = ctx.getBean(MeterRegistry.class);
+                    List<MeterBinder> binders = ctx.getBeanProvider(MeterBinder.class).stream().toList();
+                    assertThat(binders).as("связывателей метров нет — реестр останется пустым").isNotEmpty();
+                    binders.forEach(binder -> binder.bindTo(registry));
+
+                    assertThat(registry.find("jdbc.connections.active").gauges())
+                            .as("метра активных соединений нет: пул виден Boot, метрики — нет")
+                            .isNotEmpty();
+                    assertThat(registry.find("jdbc.connections.idle").gauges())
+                            .as("метра свободных соединений нет")
+                            .isNotEmpty();
+                });
+    }
+
+    @Test
+    @DisplayName("постпроцессора метаданных нет, когда у Boot нет типа провайдера")
+    void poolMetadataUnwrapperAbsentWithoutBootJdbc() {
+        // Тихая деградация: метрики пула не наша обязанность, модуль SQL обязан работать без них.
+        // Мутация: убрать @ConditionalOnClass с PoolMetadataConfiguration → контекст падает на
+        // NoClassDefFoundError → RED.
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(AllureDataSourceAutoConfiguration.class))
+                .withClassLoader(new FilteredClassLoader(DataSourcePoolMetadataProvider.class))
+                .run(ctx -> {
+                    assertThat(ctx).hasNotFailed();
+                    assertThat(ctx).doesNotHaveBean("allurePoolMetadataUnwrapper");
+                    assertThat(ctx).hasBean("allureDataSourceProxyPostProcessor");
+                });
+    }
+
+    /** Берём соединение: без этого HikariPool не создан и мерить нечего ни с обёрткой, ни без. */
+    private static void warmUp(DataSource pool) {
+        try (Connection connection = pool.getConnection()) {
+            connection.getMetaData();
+        } catch (Exception broken) {
+            throw new IllegalStateException(broken);
+        }
+    }
+
+    /**
+     * Форма потребителя из #87: два пула Hikari, оба через {@code @ConfigurationProperties}
+     * и с {@code MicrometerMetricsTrackerFactory}, инъекция по конкретному типу с квалификатором.
+     */
+    @Configuration(proxyBeanMethods = false)
+    @EnableConfigurationProperties
+    static class TwoPoolsShapedConfig {
+
+        @Bean
+        MeterRegistry meterRegistry() {
+            return new SimpleMeterRegistry();
+        }
+
+        @Bean
+        @Primary
+        @ConfigurationProperties("app.main.hikari")
+        HikariDataSource mainDataSource(MeterRegistry registry) {
+            HikariDataSource pool = new HikariDataSource();
+            pool.setMetricsTrackerFactory(new MicrometerMetricsTrackerFactory(registry));
+            return pool;
+        }
+
+        @Bean
+        @ConfigurationProperties("app.shedlock.hikari")
+        HikariDataSource shedlockDataSource(MeterRegistry registry) {
+            HikariDataSource pool = new HikariDataSource();
+            pool.setMetricsTrackerFactory(new MicrometerMetricsTrackerFactory(registry));
+            return pool;
+        }
+
+        @Bean
+        String lockProvider(@Qualifier("shedlockDataSource") HikariDataSource dataSource) {
+            return dataSource.getPoolName();
+        }
     }
 
     /** Конфигурация в форме потребителя: бин пула объявлен и запрошен по классу, не по интерфейсу. */

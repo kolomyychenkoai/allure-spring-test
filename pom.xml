@@ -213,6 +213,16 @@
             <artifactId>spring-jdbc</artifactId>
             <scope>provided</scope>
         </dependency>
+        <!-- ТОЛЬКО ради типа DataSourcePoolMetadataProvider: через него Boot читает метрики
+             и health пула, и наша обёртка обязана показывать им НАСТОЯЩИЙ пул (issue #87).
+             В Boot 3.x этот тип лежит внутри spring-boot, в 4.x — в отдельном spring-boot-jdbc;
+             имя одно и то же, поэтому @ConditionalOnClass работает на обеих ветках. provided:
+             потребителю ничего не навязываем, нет типа — постпроцессора просто нет. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-jdbc</artifactId>
+            <scope>provided</scope>
+        </dependency>
         <!-- Модуль WireMock: provided — активируется, только если WireMock на classpath
              потребителя; не в Spring Boot BOM — версия явно. -->
         <dependency>
@@ -333,6 +343,15 @@
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- MeterRegistry для замера метрик пула сквозь нашу обёртку (issue #87): без него
+             автоконфигурация метрик Boot не поднимается (@ConditionalOnClass MeterRegistry),
+             и проверить нечего. Сам MicrometerMetricsTrackerFactory живёт в HikariCP, он уже
+             в test-classpath. Версия из BOM Boot. Только test: в jar не едет. -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
             <scope>test</scope>
         </dependency>
         <!-- ТОЛЬКО ради интерфейсов ленивости EclipseLink (ValueHolderInterface,
