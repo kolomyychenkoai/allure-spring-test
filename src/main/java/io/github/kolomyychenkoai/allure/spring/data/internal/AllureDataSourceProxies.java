@@ -46,10 +46,11 @@ import java.util.Optional;
  * {@link ProxyDataSource} не проходит и это.
  * <p>
  * ⚠️ Отдавать прокси мало там, где Boot читает не метод, а ПОЛЕ: {@code HikariDataSourcePoolMetadata}
- * берёт пул через {@code DirectFieldAccessor}, а у подкласса без конструктора поле пусто, и
- * {@code getActive()}/{@code getIdle()} возвращают {@code null}. Поэтому метрики и health пула
- * держатся не на самом прокси, а на {@link AllurePoolMetadataUnwrapper}, который показывает
- * провайдерам Boot настоящий пул (issue #87).
+ * берёт пул через {@code DirectFieldAccessor}, а заполняется это поле внутри {@code getConnection()},
+ * то есть на ЦЕЛИ — {@code getActive()} и {@code getIdle()} у прокси возвращают {@code null}.
+ * Поэтому счётчики соединений держатся не на самом прокси, а на {@link AllurePoolMetadataUnwrapper},
+ * который показывает провайдерам Boot настоящий пул (issue #87). Предел и минимум пула, health
+ * и JMX читаются методами и делегируются сквозь прокси сами.
  * <p>
  * <b>Подкласс создаётся без конструктора</b> (Objenesis внутри Spring AOP), то есть поля
  * подкласса пусты, и любой невперехваченный метод выполнится на пустом объекте. Отсюда

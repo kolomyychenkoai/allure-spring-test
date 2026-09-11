@@ -24,8 +24,8 @@ import javax.sql.DataSource;
  * ({@code HikariDataSource} у ShedLock и подобных) продолжает собираться. Как это устроено и
  * что делать, когда прокси построить нельзя, — {@link AllureDataSourceProxies}.
  * <p>
- * Обёртка ломала бы метрики и health пула: Boot читает их ПОЛЕМ, а не методом, и у прокси
- * без конструктора поле пустое. Чинит это {@link AllurePoolMetadataUnwrapper} (issue #87).
+ * Обёртка ломала бы счётчики соединений пула: Boot читает их ПОЛЕМ, а не методом, и у прокси
+ * это поле пустое — его заполняет цель. Чинит {@link AllurePoolMetadataUnwrapper} (issue #87).
  */
 @AutoConfiguration
 @ConditionalOnClass({DataSource.class, ProxyDataSourceBuilder.class, ProxyFactory.class})
@@ -42,7 +42,7 @@ public class AllureDataSourceAutoConfiguration {
     }
 
     /**
-     * Отдельный гард: метрики и health пула — не наша обязанность, и модуль SQL обязан
+     * Отдельный гард: метаданные пула — не наша обязанность, и модуль SQL обязан
      * работать без них. Тип берётся у Boot и в 3.x, и в 4.x лежит по одному имени
      * {@code org.springframework.boot.jdbc.metadata.DataSourcePoolMetadataProvider} — в 3.x
      * внутри {@code spring-boot}, в 4.x внутри {@code spring-boot-jdbc}. Нет его на classpath —

@@ -33,8 +33,8 @@
    значения: в `clean`, `render`, `describeResponse`. В `describeEntity` свой `catch`
    стоит на каждом поле.
 
-В `src/main` лежит **70 классов / 7189 строк** в 20 пакетах, в `src/test` — **117 классов**
-и 565 тестов. У клиентского проекта появляется ровно одна зависимость в `compile`
+В `src/main` лежит **70 классов / 7224 строк** в 20 пакетах, в `src/test` — **117 классов**
+и 567 тестов. У клиентского проекта появляется ровно одна зависимость в `compile`
 (`allure-java-commons`), остальные 24 помечены `provided`/`optional`: модуль включается,
 только если технология уже есть в тестах.
 
@@ -156,7 +156,7 @@ running». Выглядит этот гейт в разных модулях п�
 | `rest/AllureMockMvcAutoConfiguration` | кастомайзер MockMvc, который вешает `AllureMockMvcResultHandler` на каждый собираемый `MockMvc` | тип кастомайзера переехал между Boot 3 и 4 — резолвится по имени, бин регистрируется программно |
 | `rest/AllureWebTestClientAutoConfiguration` | кастомайзер WebTestClient | то же; у WebTestClient нет подстраховки байткодом — потеряется кастомайзер, потеряются и все шаги |
 | `data/AllureDataJpaAutoConfiguration` | аспект репозиториев (Spring AOP) — но ТОЛЬКО если AspectJ-проксирование в контексте уже подняли без нас | `@EnableAspectJAutoProxy` библиотека НЕ вешает: подмена `internalAutoProxyCreator` меняла проксирование чужих бинов (#70). Гейт стоит на ФАКТЕ, а не на свойстве: смотрим, лежит ли в реестре AspectJ-совместимый создатель прокси. Свойства `spring.aop.auto` мало — отказаться от проксирования можно ещё как минимум двумя способами, а поднять его самому (так живёт `audit`) свойство не покажет. Решение и новость про исчезнувший раздел БД живут в одном `BeanDefinitionRegistryPostProcessor`: `@ConditionalOnBean` видит лишь срез реестра на своём месте в очереди и пропускает создателя из позднего чужого стартера. Pointcut задан строкой (spring-data нет в compile-classpath) и сужен до прокси Spring Data по маркеру `TransactionalProxy`: пустой маркер `Repository` реализует и самописный DAO потребителя (#71). `proxyTargetClass` не выставляется — режим проксирования остаётся тот, что был в проекте |
-| `data/AllureDataSourceAutoConfiguration` | `BeanPostProcessor`, заводящий `getConnection` бина `DataSource` в datasource-proxy | реальный SQL вкладывается внутрь шага вызова репозитория; бин остаётся объектом своего класса (подкласс через Spring AOP), иначе ломается инъекция по конкретному типу — issue #54 |
+| `data/AllureDataSourceAutoConfiguration` | два `BeanPostProcessor`: первый заводит `getConnection` бина `DataSource` в datasource-proxy, второй показывает провайдерам метаданных Boot настоящий пул, иначе счётчики соединений пропадают (#87) | реальный SQL вкладывается внутрь шага вызова репозитория; бин остаётся объектом своего класса (подкласс через Spring AOP), иначе ломается инъекция по конкретному типу — issue #54 |
 
 ```bash
 cat src/main/resources/META-INF/spring.factories src/main/resources/META-INF/spring/*.imports
@@ -292,7 +292,7 @@ grep -rn "ThreadLocal<\|static final \(Map\|Set\|List\|Atomic\|ClassValue\)" src
 
 ## 10. Что уже проверено
 
-- **565 тестов** в двух уровнях. Уровень A — детерминированные проверки содержимого отчёта
+- **567 тестов** в двух уровнях. Уровень A — детерминированные проверки содержимого отчёта
   через in-memory Allure, уровень B — живые `*ReportIT`, которые читают реально записанные
   `allure-results`.
 - **Инвентарь видов шагов и вложений** — эталон `src/test/inventory/report-inventory.txt`,

@@ -10,6 +10,7 @@ import io.github.kolomyychenkoai.allure.spring.data.AllureDataSourceAutoConfigur
 import io.github.kolomyychenkoai.allure.spring.data.AllureDataJpaAutoConfiguration;
 
 import io.github.kolomyychenkoai.allure.spring.data.internal.AllureDataSourceProxies.AllureProxiedDataSource;
+import io.github.kolomyychenkoai.allure.spring.data.internal.AllurePoolMetadataUnwrapper;
 import io.github.kolomyychenkoai.allure.spring.data.internal.AllureRepositoryAspect;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import io.github.kolomyychenkoai.allure.spring.support.LibraryLog;
@@ -34,6 +35,7 @@ import org.springframework.aop.framework.AopProxyUtils;
 import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.aop.framework.autoproxy.InfrastructureAdvisorAutoProxyCreator;
 import org.springframework.aop.support.AopUtils;
+import org.springframework.core.Ordered;
 import io.github.kolomyychenkoai.allure.spring.internal.ActivationDiagnostics;
 import io.github.kolomyychenkoai.allure.spring.internal.DiagnosticsReset;
 import org.springframework.boot.LazyInitializationBeanFactoryPostProcessor;
@@ -60,11 +62,11 @@ import org.springframework.boot.jdbc.metadata.CompositeDataSourcePoolMetadataPro
 import org.springframework.boot.jdbc.metadata.DataSourcePoolMetadata;
 import org.springframework.boot.jdbc.metadata.DataSourcePoolMetadataProvider;
 import org.springframework.boot.test.context.FilteredClassLoader;
-import org.springframework.context.annotation.Primary;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.datasource.DelegatingDataSource;
 import org.springframework.jdbc.datasource.LazyConnectionDataSourceProxy;
 import org.springframework.jdbc.datasource.lookup.AbstractRoutingDataSource;
@@ -1022,13 +1024,16 @@ class AllureDataAutoConfigurationTest {
 
                         DataSourcePoolMetadata metadata = composite.getDataSourcePoolMetadata(pool);
                         assertThat(metadata).as("метаданных пула %s нет вовсе", bean).isNotNull();
+                        // Значения, а не isNotNull: соединение взято и отдано, держим ноль,
+                        // в пуле лежит минимум одно свободное. getMax()/getMin() не проверяем —
+                        // они читаются методами конфигурации и работали всегда, то есть про эту
+                        // починку не говорят ничего.
                         assertThat(metadata.getActive())
                                 .as("активные соединения пула %s потерялись на обёртке", bean)
-                                .isNotNull();
+                                .isZero();
                         assertThat(metadata.getIdle())
                                 .as("свободные соединения пула %s потерялись на обёртке", bean)
-                                .isNotNull();
-                        assertThat(metadata.getMax()).as("предел пула %s", bean).isNotNull();
+                                .isGreaterThanOrEqualTo(1);
                     }
                 });
     }
@@ -1037,9 +1042,9 @@ class AllureDataAutoConfigurationTest {
     @DisplayName("метрики пула доезжают до реестра micrometer, а не только до метаданных")
     void poolGaugesReachTheMeterRegistry() {
         // Сквозная проверка того же по другой оси: не метаданные напрямую, а метры Boot.
-        // bindTo зовём руками намеренно: делает это MeterRegistryPostProcessor из модуля
-        // spring-boot-micrometer-metrics, которого в сборке нет, — иначе реестр пуст и тест
-        // зелёный на пустых данных. Мутация: та же, снять обёртку провайдеров → метров
+        // bindTo зовём руками намеренно: в живом приложении связыватели применяет к реестру
+        // модуль метрик Boot, которого в нашей сборке нет, — иначе реестр остался бы пуст
+        // и тест был бы зелёным на пустых данных. Мутация: та же, снять обёртку провайдеров → метров
         // jdbc.connections.active/idle не появится вовсе → RED.
         new ApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(
@@ -1093,6 +1098,83 @@ class AllureDataAutoConfigurationTest {
             connection.getMetaData();
         } catch (Exception broken) {
             throw new IllegalStateException(broken);
+        }
+    }
+
+    @Test
+    @DisplayName("чужой провайдер метаданных сохраняет свой класс и свой порядок")
+    void foreignProviderKeepsItsClassAndOrder() {
+        // Подменить чужой бин объектом СВОЕГО класса — это issue #54 на соседнем типе бинов:
+        // контекст потребителя падает с BeanNotOfRequiredTypeException. А порядок нужен
+        // health-ветке: она берёт провайдеров orderedStream() и уважает @Order.
+        // Мутация: в AllurePoolMetadataUnwrapper вернуть свой тип вместо прокси бина
+        // (например record-обёртку) → инъекция по конкретному типу не собирается → RED.
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(AllureDataSourceAutoConfiguration.class))
+                .withUserConfiguration(ConsumerProviderConfig.class)
+                .run(ctx -> {
+                    assertThat(ctx).hasNotFailed();
+                    Object provider = ctx.getBean("consumerProvider");
+                    assertThat(provider)
+                            .as("класс чужого бина подменён — так падает контекст потребителя")
+                            .isInstanceOf(ConsumerProvider.class);
+                    assertThat(provider)
+                            .as("Ordered потерян — health-ветка перестанет уважать @Order потребителя")
+                            .isInstanceOf(Ordered.class);
+                    assertThat(((Ordered) provider).getOrder()).isEqualTo(Ordered.HIGHEST_PRECEDENCE);
+                    assertThat(ctx.getBean("providerConsumer")).isEqualTo("consumerProvider");
+                });
+    }
+
+    @Test
+    @DisplayName("чужую обёртку DataSource не разворачиваем: провайдер получает её саму")
+    void foreignDataSourceProxyIsLeftAlone() {
+        // Разворачиваем ТОЛЬКО свой прокси. Чужой декоратор потребитель поставил осознанно,
+        // и показать провайдеру его цель вместо него значило бы соврать про чужой пул.
+        // Мутация: убрать гард instanceof AllureProxiedDataSource → провайдер получает цель → RED.
+        FakeDataSource original = new FakeDataSource("чужой");
+        ProxyFactory foreign = new ProxyFactory(original);
+        foreign.setProxyTargetClass(true);
+        DataSource foreignProxy = (DataSource) foreign.getProxy();
+
+        List<DataSource> asked = new ArrayList<>();
+        DataSourcePoolMetadataProvider recording = dataSource -> {
+            asked.add(dataSource);
+            return null;
+        };
+
+        DataSourcePoolMetadataProvider wrapped = (DataSourcePoolMetadataProvider)
+                new AllurePoolMetadataUnwrapper().postProcessAfterInitialization(recording, "recording");
+        wrapped.getDataSourcePoolMetadata(foreignProxy);
+
+        assertThat(asked).containsExactly(foreignProxy);
+    }
+
+    /** Провайдер потребителя: объявлен своим классом, запрошен по нему и несёт свой порядок. */
+    static class ConsumerProvider implements DataSourcePoolMetadataProvider, Ordered {
+
+        @Override
+        public DataSourcePoolMetadata getDataSourcePoolMetadata(DataSource dataSource) {
+            return null;
+        }
+
+        @Override
+        public int getOrder() {
+            return Ordered.HIGHEST_PRECEDENCE;
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class ConsumerProviderConfig {
+
+        @Bean
+        ConsumerProvider consumerProvider() {
+            return new ConsumerProvider();
+        }
+
+        @Bean
+        String providerConsumer(ConsumerProvider provider) {
+            return "consumerProvider";
         }
     }
 
