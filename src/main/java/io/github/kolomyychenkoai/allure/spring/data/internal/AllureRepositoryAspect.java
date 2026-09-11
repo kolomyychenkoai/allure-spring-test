@@ -83,11 +83,11 @@ public class AllureRepositoryAspect {
      * CGLIB-прокси, а при {@code spring.aop.proxy-target-class=false} контекст не поднимается
      * вовсе (issue #71). Держит {@code plainDaoWithRepositoryMarkerIsNotProxied}.
      * <p>
-     * Отличительный признак настоящего репозитория — {@code TransactionalProxy}:
-     * {@code RepositoryFactorySupport.getRepository} ставит его на прокси вместе с
-     * {@code RepositoryFactorySupport#repositoryInterface} и {@code Repository}; проверено по байткоду
-     * spring-data-commons 3.5 и 4.1 (нижняя граница проекта — Boot 3.5.8). На живом прокси
-     * это же держит канарейка в {@code DataJpaReportIT}. Самописный DAO маркера не получает.
+     * Отличительный признак настоящего репозитория — {@code TransactionalProxy}. Рядом с ним
+     * на прокси стоят интерфейс репозитория потребителя и {@code Repository}; маркер ставит
+     * {@code RepositoryFactorySupport.getRepository} — проверено по байткоду spring-data-commons
+     * 3.5 и 4.1 (нижняя граница проекта — Boot 3.5.8). Держит канарейка в {@code DataJpaReportIT}:
+     * маркер есть на живом прокси. Самописный DAO маркера не получает.
      * <p>
      * {@code target}, а не {@code this}: спрашиваем про бин ПОТРЕБИТЕЛЯ, а не про внешний прокси,
      * который строим мы сами. Мутация {@code target}→{@code this} сегодня не краснит ничего.
