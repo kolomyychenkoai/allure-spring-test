@@ -432,9 +432,12 @@
                     </systemPropertyVariables>
                     <!-- Self-attach byte-buddy-агента (ByteBuddyAgent.install) на JDK 21+ печатает
                          предупреждение, а в будущих JDK может быть запрещён по умолчанию (JEP 451).
-                         Разрешаем явно: иначе весь байткод-слой ТИХО выключится.
-                         ⚠️ Если в проекте появится jacoco — писать «@{argLine} -XX:+…», иначе его
-                         argLine затрётся и покрытие пропадёт молча. -->
+                         Разрешаем явно. Без флага молчания НЕ будет: install() бросает
+                         «Could not self-attach», мы печатаем WARNING со стеком, тесты остаются
+                         зелёными, а байткод-слой отчёта не поднимается — замерено пробой.
+                         ⚠️ Свой argLine затирает чужой, surefire берёт последнее значение:
+                         с jacoco писать «@{argLine} -XX:+…», иначе покрытие пропадёт молча;
+                         с любым своим -javaagent — держать оба ключа в одной строке. -->
                     <argLine>-XX:+EnableDynamicAgentLoading</argLine>
                 </configuration>
                 <executions>

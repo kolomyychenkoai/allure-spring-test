@@ -135,7 +135,14 @@ test-classpath, который сам себя «вшивает». Точки в
 
 > **На Java 21+** библиотека привязывает байткод-агент к своей же JVM (self-attach). JDK при этом
 > печатает предупреждение, а в будущих версиях такая привязка может быть запрещена по умолчанию
-> ([JEP 451](https://openjdk.org/jeps/451)) — тогда перехват тихо выключится и отчёт обеднеет.
+> ([JEP 451](https://openjdk.org/jeps/451)).
+>
+> Если её запретят, молчания не будет: `install()` бросит
+> `IllegalStateException: Could not self-attach`, библиотека напечатает
+> `WARNING [Allure Instrumentation/<install>]` со стеком, а байткодный слой отчёта — ассерты,
+> JDBC, Kafka, WireMock, Liquibase, Mockito — не поднимется. Тесты при этом останутся зелёными,
+> поэтому ищите в логе строку `Could not self-attach`.
+>
 > Разрешить явно (у нас в `pom.xml` так и сделано, Mockito требует того же):
 >
 > ```xml
@@ -148,9 +155,12 @@ test-classpath, который сам себя «вшивает». Точки в
 > </plugin>
 > ```
 >
-> ⚠️ **Если у вас подключён jacoco** — пишите `<argLine>@{argLine} -XX:+EnableDynamicAgentLoading</argLine>`:
-> собственный `argLine` затирает тот, что jacoco подставляет для сбора покрытия, и покрытие
-> пропадёт молча.
+> ⚠️ **Если свой `argLine` у вас уже есть** — не заменяйте его, а дописывайте флаг в ту же
+> строку: surefire берёт только последнее значение, и всё, чего вы не написали, пропадёт молча.
+> С jacoco нужен ещё и `@{argLine}`, иначе покрытие собираться не будет:
+> `<argLine>@{argLine} -XX:+EnableDynamicAgentLoading</argLine>`. С любым своим `-javaagent`
+> (aspectjweaver и подобные) держите оба ключа рядом:
+> `<argLine>-javaagent:… -XX:+EnableDynamicAgentLoading</argLine>`.
 
 > **Четыре строки про `sun.misc.Unsafe` в вашей сборке.** На JDK 25 их печатает byte-buddy,
 > которую библиотека приводит с собой. Ничего не сломано: это предупреждение об устаревшем
