@@ -55,8 +55,25 @@ Boot 3.5.8), сохранён как след замера:
 Шум в stderr, который считаем нормой (не наш код):
 
 - `sun.misc.Unsafe::objectFieldOffset has been called by net.bytebuddy…ClassInjector$UsingUnsafe`
-  — терминально устаревший метод, byte-buddy 1.17.8 всё ещё им пользуется. Когда JDK запретит
-  его окончательно, лечится подъёмом byte-buddy, а не правкой у нас;
+  — **четыре** строки (три из них содержат само имя `sun.misc.Unsafe`, поэтому счёт грепом
+  по нему даёт три). Печатает не self-attach и не выбор стратегии внедрения, а статический
+  инициализатор: `new AgentBuilder.Default()` строит `InitializationStrategy.SelfInjection.Split`
+  → `NexusAccessor` → `ClassInjector.UsingReflection` → `ClassInjector.UsingUnsafe`, и его
+  `<clinit>` зовёт устаревший метод. Оттого ВСЕ значения `AgentBuilder.InjectionStrategy`
+  дают одинаковый результат: до них дело не доходит.
+
+  ⚠️ **Не гасить свойством `net.bytebuddy.safe=true`.** Оно убирает строки, но выключает
+  `ClassInjector.UsingReflection` во всей JVM: `ClassLoadingStrategy.Default.INJECTION`
+  начинает бросать `UnsupportedOperationException`, а диспетчер защёлкивается в `static final`
+  при первой инициализации — вернуть свойство обратно по ходу прогона уже нельзя. Замерено
+  пробой: без свойства внедрение проходит, со свойством падает, с ключом JVM
+  `--sun-misc-unsafe-memory-access=allow` строк нет И внедрение живо. Потребителю предлагаем
+  ключ, не свойство (README).
+
+  На JDK 26 умолчание уже безопасное: в byte-buddy 1.17.8 оно зависело только от GraalVM,
+  в 1.18.10 — ещё и от `ClassFileVersion.ofThisVm().isAtLeast(JAVA_V26)`. Само свойство
+  библиотека при этом не задаёт, меняется только значение по умолчанию. Подъём byte-buddy
+  на JDK 25 не помогает: 1.18.10 шумит так же, как 1.17.8;
 - `Sharing is only supported for boot loader classes…` — CDS отключается, потому что агент
   дописывает bootstrap classpath. Ожидаемо для любого java-агента.
 
