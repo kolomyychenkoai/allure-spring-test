@@ -33,8 +33,8 @@
    значения: в `clean`, `render`, `describeResponse`. В `describeEntity` свой `catch`
    стоит на каждом поле.
 
-В `src/main` лежит **70 классов / 7412 строк** в 20 пакетах, в `src/test` — **118 классов**
-и 580 тестов. У клиентского проекта появляется ровно одна зависимость в `compile`
+В `src/main` лежит **70 классов / 7482 строк** в 20 пакетах, в `src/test` — **119 классов**
+и 587 тестов. У клиентского проекта появляется ровно одна зависимость в `compile`
 (`allure-java-commons`), остальные 24 помечены `provided`/`optional`: модуль включается,
 только если технология уже есть в тестах.
 
@@ -137,7 +137,7 @@ running». Выглядит этот гейт в разных модулях п�
 |---|---|---|---|
 | `logs/AllureApplicationLogsListener` | логи приложения за тест | аппендер Logback за гейтом `ClassPresence` + `instanceof` | молчит (Log4j2/JUL — не падает) |
 | `config/AllureConfigurationListener` | снимок `Environment` перед тестом | Spring API | всегда применим |
-| `rest/AllureRestAssuredListener` | HTTP через глобальный `given()` и проверки `.then()` | фильтр в `RestAssured.filters` (ставится в `beforeTestExecution`) + байткод на проверках `ValidatableResponseOptionsImpl` | молчит |
+| `rest/AllureRestAssuredListener` | HTTP через глобальный `given()` и проверки `.then()` | фильтр в `RestAssured.filters` (ставится в `beforeTestExecution`) + байткод на проверках `ValidatableResponseOptionsImpl` | **говорит**, если матчер не совпал ни с одним объявленным методом носителя: HTTP-шаги остаются, шаги проверок исчезают, и отчёт выглядит полным (#55) |
 | `rest/AllureMockMvcListener` | `MockMvc.perform` | байткод | молчит |
 | `rest/AllureRestTemplateListener` | вызовы `RestTemplate` | байткод (интерсептор, см. §9) | молчит |
 | `rest/AllureRestClientListener` | вызовы `RestClient` | байткод (внутренний класс Spring, см. §9) | молчит |
@@ -292,7 +292,7 @@ grep -rn "ThreadLocal<\|static final \(Map\|Set\|List\|Atomic\|ClassValue\)" src
 
 ## 10. Что уже проверено
 
-- **580 тестов** в двух уровнях. Уровень A — детерминированные проверки содержимого отчёта
+- **587 тестов** в двух уровнях. Уровень A — детерминированные проверки содержимого отчёта
   через in-memory Allure, уровень B — живые `*ReportIT`, которые читают реально записанные
   `allure-results`.
 - **Инвентарь видов шагов и вложений** — эталон `src/test/inventory/report-inventory.txt`,

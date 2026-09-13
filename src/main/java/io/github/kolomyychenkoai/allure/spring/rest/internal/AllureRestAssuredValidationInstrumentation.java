@@ -1,11 +1,14 @@
 package io.github.kolomyychenkoai.allure.spring.rest.internal;
 
+import io.github.kolomyychenkoai.allure.spring.internal.ActivationDiagnostics;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import net.bytebuddy.asm.Advice;
 import net.bytebuddy.description.method.MethodDescription;
+import net.bytebuddy.description.type.TypeDescription;
 import net.bytebuddy.matcher.ElementMatcher;
+import net.bytebuddy.pool.TypePool;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -67,6 +70,20 @@ import static net.bytebuddy.matcher.ElementMatchers.whereAny;
  */
 public final class AllureRestAssuredValidationInstrumentation {
 
+    /** Внутренний носитель всех перегрузок проверок {@code .then()} — то, во что вплетаемся. */
+    private static final String CARRIER = "io.restassured.internal.ValidatableResponseOptionsImpl";
+
+    /**
+     * Что сказать, когда матчер не совпал ни с одним объявленным методом носителя.
+     * <p>
+     * Константой: переменный текст ломает однократность {@code noteOnce} (ключ дедупликации —
+     * сам текст) и уводит данные потребителя в артефакт CI.
+     */
+    private static final String NO_VALIDATION_METHODS =
+            "внутренности RestAssured разошлись с нашим перехватом — шагов «Проверка ответа: …» "
+                    + "в отчёте не будет, HTTP-шаги при этом останутся. "
+                    + "Заглушить эту строку: -Dallure.spring.diagnostics=off";
+
     private static final AtomicBoolean INSTALLED = new AtomicBoolean(false);
 
     /** Глубина вложенности инструментированных вызовов в потоке: внешний (пользовательский) — 1. */
@@ -97,9 +114,62 @@ public final class AllureRestAssuredValidationInstrumentation {
             return;
         }
         AllureInstrumentation.retransform(
-                named("io.restassured.internal.ValidatableResponseOptionsImpl"),
+                named(CARRIER),
                 (builder, type, cl, module, pd) ->
                         builder.visit(Advice.to(ValidationAdvice.class).on(validationMethods())));
+        reportIfMatcherFindsNothing();
+    }
+
+    /**
+     * Сказать потребителю, если наш матчер не совпал ни с чем: раздел проверок в отчёте тогда
+     * пуст, а HTTP-шаги на месте — отчёт выглядит полным. Отключение раздела обязано объявлять
+     * о себе (диагноз-корень 3 в {@code docs/consumer-affects.md}).
+     * <p>
+     * <b>Проверяем матчером, а не списком имён.</b> Вплетение идёт ТОЛЬКО в объявителя и только
+     * в перегрузки, прошедшие {@link #validationMethods()}. Рефлексивный список имён ответил бы
+     * на другой вопрос: {@code getMethods()} отдаёт и унаследованные, и те перегрузки, которые
+     * матчер как раз исключает, — и оба случая прошли бы проверку при мёртвом перехвате.
+     * <p>
+     * <b>Перехват ставится ВСЕГДА, это только доклад.</b> От пропуска установки не выигрывается
+     * ничего, а от ошибочного пропуска теряется раздел отчёта.
+     * <p>
+     * {@link TypePool} читает class-файл и НЕ загружает класс: рефлексия здесь потянула бы
+     * Groovy и конфиг-граф RestAssured у потребителя, который {@code .then()} не зовёт ни разу.
+     */
+    private static void reportIfMatcherFindsNothing() {
+        boolean willWeave;
+        try {
+            TypePool pool = TypePool.Default.of(
+                    AllureRestAssuredValidationInstrumentation.class.getClassLoader());
+            willWeave = matchesValidationMethods(pool.describe(CARRIER).resolve());
+        } catch (Throwable unresolved) {
+            // Носитель не резолвится — исход тот же, вплетать нечего.
+            willWeave = false;
+        }
+        announceIfSilent(willWeave);
+    }
+
+    /**
+     * Сказать, если вплетать нечего. Отдельной функцией от резолва — чтобы обе ветки
+     * проверялись без настоящего RestAssured и без статики {@link #INSTALLED}.
+     * <p>
+     * Выключатель уважаем: предупреждать о потере того, что потребитель выключил сам, — это
+     * ровно тот шум в чужой сборке, от которого лечит #74.
+     */
+    static void announceIfSilent(boolean willWeave) {
+        if (willWeave || AllureInstrumentation.disabled()) {
+            return;
+        }
+        ActivationDiagnostics.noteOnce("RestAssuredValidation", NO_VALIDATION_METHODS);
+    }
+
+    /**
+     * Совпадает ли матчер хоть с одним ОБЪЯВЛЕННЫМ методом носителя — то есть будет ли вообще
+     * что вплетать. Вынесено чистой функцией: так её проверяют на подставных типах, не трогая
+     * настоящий RestAssured и не завися от статики {@link #INSTALLED}.
+     */
+    static boolean matchesValidationMethods(TypeDescription carrier) {
+        return !carrier.getDeclaredMethods().filter(validationMethods()).isEmpty();
     }
 
     /** Публичные проверочные методы .then() минус log-варианты (0-арг/boolean) и ResponseAwareMatcher-обёртки. */
