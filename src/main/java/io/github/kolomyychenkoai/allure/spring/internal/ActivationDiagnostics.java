@@ -66,7 +66,8 @@ public final class ActivationDiagnostics {
         if (byteBuddyPresent && byteBuddyTooOld) {
             problems.add("byte-buddy " + byteBuddyVersion + " не знает формат классов Java "
                     + Runtime.version().feature() + " → байткод-перехват (ассерты, JDBC, Kafka, "
-                    + "WireMock, Liquibase, Mockito) МОЛЧА выключен, в отчёт попадут только шаги "
+                    + "WireMock, Liquibase, Mockito, проверки RestAssured) МОЛЧА выключен, в отчёт попадут "
+                    + "только шаги "
                     + "из Spring-каналов. Подними byte-buddy до версии, знающей эту JVM "
                     + "(обычно вместе со Spring Boot), либо включи -Dnet.bytebuddy.experimental=true "
                     + "ОСОЗНАННО.");
@@ -115,10 +116,14 @@ public final class ActivationDiagnostics {
     }
 
     /**
-     * Новость про модуль, выключённый НАСТРОЙКОЙ потребителя — в отличие от {@link #problems},
-     * которая про «класса нет на classpath». Такой исход спроектирован, поэтому уходит в
-     * {@link AllureInstrumentationLogger#note} (не {@code warn}: слова «сбой» и стека там нет
-     * за что предъявлять).
+     * Новость про раздел отчёта, которого не будет по причине, не являющейся сбоем: настройка
+     * потребителя, занятое им имя бина, разошедшиеся внутренности чужой библиотеки. В отличие
+     * от {@link #problems}, которая про «класса нет на classpath» и считается один раз на весь
+     * старт. Сбоя тут нет, поэтому уходит в {@link AllureInstrumentationLogger#note}, а не
+     * в {@code warn}: слова «сбой» и стека там нет за что предъявлять.
+     * <p>
+     * ⚠️ Текст обязан быть КОНСТАНТОЙ: он же ключ дедупликации, и переменная часть увезла бы
+     * данные потребителя в артефакт CI. Держит {@code ActivationDiagnosticsTest}.
      * <p>
      * Живёт здесь, а не в автоконфигурации, ради двух вещей этого класса: общего выключателя
      * {@code -Dallure.spring.diagnostics=off} и однократности НА JVM. Второе не косметика —

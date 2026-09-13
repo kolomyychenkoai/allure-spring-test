@@ -13,6 +13,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.logging.Level;
 import java.util.logging.LogRecord;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -39,7 +40,10 @@ class RestAssuredValidationMatcherTest {
         }
     }
 
-    /** Носитель, унаследовавший проверку. Мутация: getDeclaredMethods() → getMethods() — RED. */
+    /**
+     * Носитель, унаследовавший проверку. Мутация: обойти иерархию вверх
+     * ({@code t.getSuperClass().asErasure()}) вместо одних объявленных — RED.
+     */
     public static class Inheriting extends Declaring {
     }
 
@@ -63,71 +67,90 @@ class RestAssuredValidationMatcherTest {
     public static class Empty {
     }
 
+    /** Только новости потребителю: след «какие именно» идёт на FINE и от соседей зависит. */
+    private static List<String> новости(List<LogRecord> records) {
+        return records.stream()
+                .filter(record -> record.getLevel() == Level.WARNING)
+                .map(LogRecord::getMessage)
+                .toList();
+    }
+
     @BeforeEach
     void забытьСказанное() {
         DiagnosticsReset.forget();
     }
 
     @Test
-    @DisplayName("настоящий носитель RestAssured совпадает — положительный якорь детектора")
-    void настоящийНосительСовпадает() {
-        // Без него все проверки ниже доказывали бы лишь то, что детектор умеет говорить «нет».
+    @DisplayName("настоящий носитель RestAssured покрыт целиком — положительный якорь детектора")
+    void настоящийНосительПокрытЦеликом() {
+        // Без него всё ниже доказывало бы лишь то, что детектор умеет говорить «нет».
         TypePool pool = TypePool.Default.of(getClass().getClassLoader());
         TypeDescription carrier = pool
                 .describe("io.restassured.internal.ValidatableResponseOptionsImpl").resolve();
 
-        assertThat(AllureRestAssuredValidationInstrumentation.matchesValidationMethods(carrier))
-                .as("матчер не совпал с настоящим RestAssured — перехват проверок мёртв уже сейчас")
-                .isTrue();
+        assertThat(AllureRestAssuredValidationInstrumentation.uncoveredValidationMethods(carrier))
+                .as("перехват проверок RestAssured мёртв уже сейчас — эти имена вплетать не во что")
+                .isEmpty();
     }
 
     @Test
     @DisplayName("метод объявлен в предке — вплетать в этот тип нечего")
     void унаследованныйМетодНеСчитается() {
-        // ByteBuddy вплетает ТОЛЬКО в объявителя. Рефлексивный getMethods() отдал бы
-        // унаследованный statusCode и сказал бы «всё хорошо» при мёртвом перехвате.
+        // ByteBuddy вплетает ТОЛЬКО в объявителя, поэтому унаследованный метод — это «нет».
         assertThat(AllureRestAssuredValidationInstrumentation
-                .matchesValidationMethods(TypeDescription.ForLoadedType.of(Inheriting.class)))
+                .uncoveredValidationMethods(TypeDescription.ForLoadedType.of(Inheriting.class)))
                 .as("унаследованный метод посчитан за свой — детектор врёт в самую опасную сторону")
-                .isFalse();
+                .contains("statusCode");
         assertThat(AllureRestAssuredValidationInstrumentation
-                .matchesValidationMethods(TypeDescription.ForLoadedType.of(Declaring.class)))
+                .uncoveredValidationMethods(TypeDescription.ForLoadedType.of(Declaring.class)))
                 .as("свой объявленный метод не посчитан — детектор слеп и в обратную сторону")
-                .isTrue();
+                .doesNotContain("statusCode");
     }
 
     @Test
-    @DisplayName("остались только исключённые перегрузки — тоже нечего")
+    @DisplayName("остались только исключённые перегрузки — считается за «нечего»")
     void толькоИсключённыеПерегрузкиНеСчитаются() {
         // Имена на месте, а вплетать не во что: 0-арг и boolean — log-варианты, header
         // с матчером-обёрткой матчер исключает сам.
         assertThat(AllureRestAssuredValidationInstrumentation
-                .matchesValidationMethods(TypeDescription.ForLoadedType.of(OnlyExcluded.class)))
-                .as("проверка смотрит на имена, а не на перегрузки — так мёртвый перехват пройдёт")
-                .isFalse();
+                .uncoveredValidationMethods(TypeDescription.ForLoadedType.of(OnlyExcluded.class)))
+                .as("детектор смотрит на имена, а не на перегрузки — так мёртвый перехват пройдёт")
+                .contains("body", "header");
+    }
+
+    @Test
+    @DisplayName("расхождение по ОДНОМУ имени уже видно: порог не «совпало хоть что-то»")
+    void частичноеРасхождениеЗамечено() {
+        // Носитель расходится по одному методу, а не целиком. Порог «хоть что-то» молчал бы
+        // ровно там, где дефект и появляется: statusCode уехал, а cookie и time уцелели.
+        assertThat(AllureRestAssuredValidationInstrumentation
+                .uncoveredValidationMethods(TypeDescription.ForLoadedType.of(Inheriting.class)))
+                .as("пропажа отдельной проверки не замечена — детектор меряет не то разрешение")
+                .isNotEmpty();
     }
 
     @Test
     @DisplayName("пустой носитель: детектор не выдаёт «ничего не измерил» за «всё хорошо»")
     void пустойНосительНеСовпадает() {
         assertThat(AllureRestAssuredValidationInstrumentation
-                .matchesValidationMethods(TypeDescription.ForLoadedType.of(Empty.class)))
-                .isFalse();
+                .uncoveredValidationMethods(TypeDescription.ForLoadedType.of(Empty.class)))
+                .hasSize(10);
     }
 
     @Test
     @DisplayName("вплетать нечего — сказано вслух, и ровно один раз")
     void молчанияНеОстаётся() {
         List<LogRecord> said = LibraryLog.capture(() -> {
-            AllureRestAssuredValidationInstrumentation.announceIfSilent(false);
-            AllureRestAssuredValidationInstrumentation.announceIfSilent(false);
+            AllureRestAssuredValidationInstrumentation.announceIfSilent(List.of("statusCode"));
+            AllureRestAssuredValidationInstrumentation.announceIfSilent(List.of("statusCode"));
         });
 
-        assertThat(said)
-                .extracting(LogRecord::getMessage)
-                .as("раздел проверок исчез молча — отчёт выглядит полным, и никто не поймёт почему")
-                .anyMatch(message -> message.contains("шагов «Проверка ответа: …» в отчёте не будет"));
-        assertThat(said)
+        // Фильтр по уровню обязателен: след «какие именно» идёт на FINE, и виден он или нет —
+        // зависит от настроек логирования вокруг, то есть от соседних тест-классов.
+        assertThat(новости(said))
+                .as("раздел проверок обеднел молча — отчёт выглядит полным, и никто не поймёт почему")
+                .anyMatch(message -> message.contains("не нашёл, во что вплетаться"));
+        assertThat(новости(said))
                 .as("сказано дважды — это шум в каждой сборке, ровно то, от чего лечит #74")
                 .hasSize(1);
     }
@@ -138,11 +161,10 @@ class RestAssuredValidationMatcherTest {
         // Предупреждать о потере того, что выключили сам, — шум в чужой сборке.
         String was = System.getProperty(AllureInstrumentation.SWITCH);
         System.setProperty(AllureInstrumentation.SWITCH, "off");
+        List<LogRecord> приВыключенном;
         try {
-            List<LogRecord> said = LibraryLog.capture(
-                    () -> AllureRestAssuredValidationInstrumentation.announceIfSilent(false));
-
-            assertThat(said).as("сказали про потерю раздела, который потребитель выключил сам").isEmpty();
+            приВыключенном = LibraryLog.capture(
+                    () -> AllureRestAssuredValidationInstrumentation.announceIfSilent(List.of("statusCode")));
         } finally {
             if (was == null) {
                 System.clearProperty(AllureInstrumentation.SWITCH);
@@ -150,14 +172,31 @@ class RestAssuredValidationMatcherTest {
                 System.setProperty(AllureInstrumentation.SWITCH, was);
             }
         }
+
+        assertThat(новости(приВыключенном))
+                .as("сказали про потерю раздела, который потребитель выключил сам")
+                .isEmpty();
+        // ЯКОРЬ на том же канале: пустой список выше неотличим от сломанной фикстуры перехвата.
+        DiagnosticsReset.forget();
+        assertThat(новости(LibraryLog.capture(
+                () -> AllureRestAssuredValidationInstrumentation.announceIfSilent(List.of("statusCode")))))
+                .as("канал молчит и при включённом перехвате — проверка отсутствия ничего не значит")
+                .hasSize(1);
     }
 
     @Test
     @DisplayName("вплетать есть что — молчим")
     void приСовпаденииМолчим() {
+        DiagnosticsReset.forget();
         List<LogRecord> said = LibraryLog.capture(
-                () -> AllureRestAssuredValidationInstrumentation.announceIfSilent(true));
+                () -> AllureRestAssuredValidationInstrumentation.announceIfSilent(List.of()));
 
-        assertThat(said).as("детектор говорит всегда — это шум, а не сигнал").isEmpty();
+        assertThat(новости(said)).as("детектор говорит всегда — это шум, а не сигнал").isEmpty();
+        // ЯКОРЬ: тот же канал обязан говорить, когда есть о чём.
+        DiagnosticsReset.forget();
+        assertThat(новости(LibraryLog.capture(
+                () -> AllureRestAssuredValidationInstrumentation.announceIfSilent(List.of("body")))))
+                .as("канал молчит всегда — проверка отсутствия выше ничего не доказывает")
+                .hasSize(1);
     }
 }

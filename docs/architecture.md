@@ -33,8 +33,8 @@
    значения: в `clean`, `render`, `describeResponse`. В `describeEntity` свой `catch`
    стоит на каждом поле.
 
-В `src/main` лежит **70 классов / 7482 строк** в 20 пакетах, в `src/test` — **119 классов**
-и 587 тестов. У клиентского проекта появляется ровно одна зависимость в `compile`
+В `src/main` лежит **70 классов / 7528 строк** в 20 пакетах, в `src/test` — **119 классов**
+и 588 тестов. У клиентского проекта появляется ровно одна зависимость в `compile`
 (`allure-java-commons`), остальные 24 помечены `provided`/`optional`: модуль включается,
 только если технология уже есть в тестах.
 
@@ -97,6 +97,12 @@ flowchart LR
     AL --> R[("target/allure-results")]
 ```
 
+⚠️ **Колонка «нет технологии» — не про расхождение версий.** Когда RestAssured на classpath
+есть, а его внутренний носитель проверок разошёлся с нашим матчером, HTTP-шаги остаются (их
+пишет фильтр), а шаги «Проверка ответа: …» исчезают — отчёт выглядит полным. Это отдельный
+исход, и о нём модуль говорит сам: покрытие по каждому имени проверки меряется после
+установки, непокрытые называются в следе на FINE (#55).
+
 ⚠️ **Четыре модуля стоят на схеме дважды, и это не ошибка: у них работают оба механизма.**
 У MockMvc это кастомайзер из автоконфигурации и байткод на `perform`. У WebTestClient
 кастомайзер снимает обмен, а листенер его проигрывает. У WireMock работают листенер на
@@ -137,7 +143,7 @@ running». Выглядит этот гейт в разных модулях п�
 |---|---|---|---|
 | `logs/AllureApplicationLogsListener` | логи приложения за тест | аппендер Logback за гейтом `ClassPresence` + `instanceof` | молчит (Log4j2/JUL — не падает) |
 | `config/AllureConfigurationListener` | снимок `Environment` перед тестом | Spring API | всегда применим |
-| `rest/AllureRestAssuredListener` | HTTP через глобальный `given()` и проверки `.then()` | фильтр в `RestAssured.filters` (ставится в `beforeTestExecution`) + байткод на проверках `ValidatableResponseOptionsImpl` | **говорит**, если матчер не совпал ни с одним объявленным методом носителя: HTTP-шаги остаются, шаги проверок исчезают, и отчёт выглядит полным (#55) |
+| `rest/AllureRestAssuredListener` | HTTP через глобальный `given()` и проверки `.then()` | фильтр в `RestAssured.filters` (ставится в `beforeTestExecution`) + байткод на проверках `ValidatableResponseOptionsImpl` | молчит |
 | `rest/AllureMockMvcListener` | `MockMvc.perform` | байткод | молчит |
 | `rest/AllureRestTemplateListener` | вызовы `RestTemplate` | байткод (интерсептор, см. §9) | молчит |
 | `rest/AllureRestClientListener` | вызовы `RestClient` | байткод (внутренний класс Spring, см. §9) | молчит |
@@ -292,7 +298,7 @@ grep -rn "ThreadLocal<\|static final \(Map\|Set\|List\|Atomic\|ClassValue\)" src
 
 ## 10. Что уже проверено
 
-- **587 тестов** в двух уровнях. Уровень A — детерминированные проверки содержимого отчёта
+- **588 тестов** в двух уровнях. Уровень A — детерминированные проверки содержимого отчёта
   через in-memory Allure, уровень B — живые `*ReportIT`, которые читают реально записанные
   `allure-results`.
 - **Инвентарь видов шагов и вложений** — эталон `src/test/inventory/report-inventory.txt`,
