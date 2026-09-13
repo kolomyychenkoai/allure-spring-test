@@ -8,9 +8,7 @@ package io.github.kolomyychenkoai.allure.spring.internal;
  * снаружи ими нечего делать.
  * <p>
  * Зачем именно мостик, а не вызов логгера напрямую: тест обязан ходить ТЕМ ЖЕ входом, что
- * продакшен. Пока тест звал {@code AllureInstrumentationLogger.warn} сам, появление отдельного
- * текста для сбоя привязки сделало бы его холостым — продакшен ушёл бы другой веткой, а тест
- * остался бы зелёным на старой.
+ * продакшен. Прямой вызов логгера зеленеет на ветке, которой продакшен больше не ходит.
  */
 public final class FailureLog {
 
@@ -35,13 +33,18 @@ public final class FailureLog {
         InstrumentationDiagnostics.logFailure(AllureInstrumentation.INSTALL_MARKER, t);
     }
 
-    /** Забыть бюджет напечатанных WARNING; зачем — в {@code InstrumentationDiagnostics}. */
-    public static void forgetBudget() {
-        InstrumentationDiagnostics.forgetLoggedForTests();
+    /** Снять счётчики бюджета; зачем — в {@code InstrumentationDiagnostics}. */
+    public static int[] budget() {
+        return InstrumentationDiagnostics.countersForTests();
     }
 
-    /** Полная запись — со счётчиком и выборкой. Имя типа обязано быть мишенью нашего теста. */
-    public static void recordFailure(String typeName, Throwable t) {
-        InstrumentationDiagnostics.recordFailure(typeName, t);
+    /** Вернуть счётчики бюджета как было (или обнулить, передав нули). */
+    public static void restoreBudget(int[] counters) {
+        InstrumentationDiagnostics.restoreCountersForTests(counters[0], counters[1]);
+    }
+
+    /** Имя исключения «описание типа не разрешилось» — из продакшена, а не из литерала в тесте. */
+    public static String unresolvedTypeName() {
+        return InstrumentationDiagnostics.unresolvedTypeName();
     }
 }

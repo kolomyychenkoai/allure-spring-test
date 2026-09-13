@@ -16,17 +16,33 @@ import java.util.logging.Logger;
  * сразу трёх тест-классов. Жил тремя дословными копиями, пока копий было две; на третьей
  * стало ясно, что это фикстура.
  * <p>
- * Уровень {@code ALL} ставится И коллектору, И самому логгеру: JUL отсекает запись по уровню
- * логгера ДО хендлеров, поэтому без второй половины ни одна запись уровня {@code FINE} до
- * коллектора не доходит и тест «ушло на FINE» зеленеет вхолостую. Прежний уровень логгера
- * возвращается в {@code finally} — иначе след из одного теста залил бы лог всей сборки.
+ * Два входа, и путать их нельзя. {@link #capture(Runnable)} уровень логгера НЕ трогает: он
+ * отдаёт то, что видно при текущей настройке, и на нём стоят два десятка чужих ассертов вида
+ * «библиотека не шумит». Тест, которому нужен {@code FINE}, ставит уровень сам и получает
+ * его через этот же вход.
+ * <p>
+ * {@link #captureAll(Runnable)} поднимает уровень САМОГО логгера до {@code ALL} и возвращает
+ * прежний в {@code finally}. Нужен там, где проверяется сам уровень записи: JUL отсекает
+ * запись по уровню логгера ДО хендлеров, и без этого тест «ушло на FINE» зеленеет вхолостую.
+ * Менять ради него {@code capture} нельзя — чужие ассерты «не шумит» молча стали бы читаться
+ * как «не сказала ничего».
  */
 public final class LibraryLog {
 
     private LibraryLog() {
     }
 
+    /** Что видно при текущей настройке логгера; сам уровень логгера не меняется. */
     public static List<LogRecord> capture(Runnable action) {
+        return capture(action, false);
+    }
+
+    /** Всё, включая {@code FINE}: только для проверок самого уровня записи. */
+    public static List<LogRecord> captureAll(Runnable action) {
+        return capture(action, true);
+    }
+
+    private static List<LogRecord> capture(Runnable action, boolean raiseLogger) {
         List<LogRecord> records = new ArrayList<>();
         Handler collector = new Handler() {
             @Override
@@ -46,7 +62,9 @@ public final class LibraryLog {
         Logger logger = AllureInstrumentationLogger.logger();
         logger.addHandler(collector);
         Level was = logger.getLevel();
-        logger.setLevel(Level.ALL);
+        if (raiseLogger) {
+            logger.setLevel(Level.ALL);
+        }
         // ⚠️ Родительские хендлеры на время замера отключаем: тест потолка делает 70 настоящих
         // noteOnce, и они уходили бы в лог сборки, разбавляя настоящие строки библиотеки в 24
         // раза. Канал ценен ровно своей читаемостью — на ней стоит весь класс диагностики.
@@ -55,7 +73,9 @@ public final class LibraryLog {
         try {
             action.run();
         } finally {
-            logger.setLevel(was);
+            if (raiseLogger) {
+                logger.setLevel(was);
+            }
             logger.setUseParentHandlers(parents);
             logger.removeHandler(collector);
         }

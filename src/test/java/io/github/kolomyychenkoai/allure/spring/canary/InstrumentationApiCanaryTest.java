@@ -4,6 +4,7 @@ import io.qameta.allure.Epic;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import io.github.kolomyychenkoai.allure.spring.internal.FailureLog;
 import io.github.kolomyychenkoai.allure.spring.internal.JpaLaziness;
 import io.github.kolomyychenkoai.allure.spring.internal.MovedTypeNames;
 
@@ -574,10 +575,12 @@ class InstrumentationApiCanaryTest {
     @Test
     @DisplayName("byte-buddy зовёт «тип не разрешился» тем же именем (иначе ожидаемый шум снова полезет на WARNING)")
     void unresolvedTypeExceptionKeepsItsName() {
-        // По этому имени InstrumentationDiagnostics уводит чужой нерезолвнутый тип на FINE
+        // По этому имени InstrumentationDiagnostics уводит чужой тип, который не разрешился на FINE
         // (#74). Сверка строкой: компилятор её не проверит, а переименование в byte-buddy
         // вернуло бы WARN со стеком в каждую сборку потребителя.
-        String name = "net.bytebuddy.pool.TypePool$Resolution$NoSuchTypeException";
+        // Имя берём из ПРОДАКШЕНА: сверка с собственным литералом оставила бы канарейку
+        // зелёной при мутации константы, то есть стерегла бы саму себя.
+        String name = FailureLog.unresolvedTypeName();
         Class<?> thrown;
         try {
             thrown = Class.forName(name);

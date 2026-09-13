@@ -43,6 +43,12 @@ public final class InstrumentationDiagnostics {
     private static final String UNRESOLVED_TYPE = "net.bytebuddy.pool.TypePool$Resolution$NoSuchTypeException";
     /** Предел обхода цепочки причин: у чужого исключения она бывает закольцована. */
     private static final int MAX_CAUSE_DEPTH = 20;
+    /**
+     * Сколько неразрешённых типов считаем обычным фоном. Замер: на 21 приложении харнесса
+     * из 22 их от одного до трёх. Выше этого числа молчание перестаёт быть безобидным —
+     * значит матчеры не смогли решить про целую пачку типов, и раздел отчёта мог обеднеть.
+     */
+    private static final int UNRESOLVED_CEILING = 10;
 
     private static final AtomicBoolean INSTALLED = new AtomicBoolean();
     private static final AtomicBoolean SAMPLE_TRUNCATED = new AtomicBoolean();
@@ -53,6 +59,8 @@ public final class InstrumentationDiagnostics {
      * съедал бы слоты у настоящей поломки, и шестая по счёту настоящая уходила бы на FINE.
      */
     private static final AtomicInteger LOGGED = new AtomicInteger();
+    /** Сколько сбоев «описание типа не разрешилось» скрыто на FINE. Уходит в дамп и в гейт. */
+    private static final AtomicInteger UNRESOLVED = new AtomicInteger();
     private static final AtomicInteger TRANSFORMED = new AtomicInteger();
     private static final Queue<String> SAMPLE = new ConcurrentLinkedQueue<>();
     /** Множество уже увиденных записей: putIfAbsent даёт атомарное «я первый». */
@@ -76,6 +84,11 @@ public final class InstrumentationDiagnostics {
      * Сколько трансформаций реально применено — позитивный сигнал «агент не просто установился».
      * Считаются СОБЫТИЯ, а не уникальные типы: один тип, попавший под два модуля, даёт 2.
      */
+    /** Сколько сбоев «описание типа не разрешилось» ушло на FINE: сигнал для дампа и гейта. */
+    public static int unresolvedCount() {
+        return UNRESOLVED.get();
+    }
+
     public static int transformedCount() {
         return TRANSFORMED.get();
     }
@@ -120,16 +133,27 @@ public final class InstrumentationDiagnostics {
         logFailure(typeName, t);
     }
 
+    /** Имя, по которому отличается неразрешённый тип, — для канарейки на чужое API. */
+    static String unresolvedTypeName() {
+        return UNRESOLVED_TYPE;
+    }
+
     /**
-     * Забыть, сколько сбоев уже напечатано. ТОЛЬКО для тестов и намеренно пакетно-приватный:
-     * бюджет {@link #MAX_LOGGED} глобален на JVM, а порядок тест-классов случайный, и без
-     * сброса проверка уровня зависела бы от того, сколько сбоев записал сосед.
+     * Снять и вернуть счётчики бюджета. ТОЛЬКО для тестов и намеренно пакетно-приватные:
+     * {@link #MAX_LOGGED} и {@link #UNRESOLVED_CEILING} глобальны на JVM, а порядок
+     * тест-классов случайный. Тест обнуляет их перед собой, чтобы не зависеть от соседа,
+     * и ВОЗВРАЩАЕТ прежние после себя — иначе его выдуманные сбои уехали бы в дамп,
+     * который читает гейт инвентаря, и настоящий счёт потерялся бы вместе с ними.
      * <p>
-     * Счётчик сбоев {@link #FAILURES} и выборку НЕ трогает: их читает гейт инвентаря,
-     * и обнулять его сигнал посреди прогона нельзя.
+     * Счётчик сбоев {@link #FAILURES} и выборку не трогают вовсе.
      */
-    static void forgetLoggedForTests() {
-        LOGGED.set(0);
+    static int[] countersForTests() {
+        return new int[] {LOGGED.get(), UNRESOLVED.get()};
+    }
+
+    static void restoreCountersForTests(int logged, int unresolved) {
+        LOGGED.set(logged);
+        UNRESOLVED.set(unresolved);
     }
 
     /**
@@ -139,27 +163,38 @@ public final class InstrumentationDiagnostics {
      * выглядели бы поломкой перехвата.
      */
     static void logFailure(String typeName, Throwable t) {
+        // Проверка маркера стоит ПЕРВОЙ: сбой привязки тоже приходит сюда, и внутри его
+        // причины бывает неразрешённый тип (installOn обходит загруженные классы). Сигнал
+        // «слой отчёта не поднялся весь» не имеет права зависеть от разбора причины.
+        if (AllureInstrumentation.INSTALL_MARKER.equals(typeName)) {
+            AllureInstrumentationLogger.warnInstall(component(typeName), t);
+            return;
+        }
         if (unresolvedType(t)) {
-            // Наш трансформер до него не дошёл, перехват цел, терять в отчёте нечего.
-            // Предупреждение, которое видно в каждой сборке и ничего не значит, обесценивает
-            // канал целиком (#74).
-            AllureInstrumentationLogger.trace(component(typeName), () -> typeName + " → " + brief(t));
+            // Описание типа не разрешилось — чужой загрузчик или предок вне classpath.
+            // Почему это не WARNING — §6 код-стандарта, «Грабли», пункт 5.
+            //
+            // ⚠️ Само по себе это НЕ доказывает, что терять нечего: если матчер не смог решить
+            // про тип, который мы хотели перехватить, раздел отчёта обеднеет молча. Поэтому
+            // тишина держится на МАСШТАБЕ: поштучно такие сбои идут на FINE, а когда их
+            // становится больше UNRESOLVED_CEILING, канал один раз говорит об этом вслух.
+            AllureInstrumentationLogger.trace(component(typeName), () -> brief(t));
+            if (UNRESOLVED.incrementAndGet() == UNRESOLVED_CEILING + 1) {
+                AllureInstrumentationLogger.note("Instrumentation",
+                        "описание типа не разрешилось больше " + UNRESOLVED_CEILING
+                                + " раз — часть перехвата могла не встать, подробности на FINE");
+            }
             return;
         }
         int n = LOGGED.incrementAndGet();
         if (n <= MAX_LOGGED) {
-            if (AllureInstrumentation.INSTALL_MARKER.equals(typeName)) {
-                AllureInstrumentationLogger.warnInstall(component(typeName), t);
-            } else {
-                AllureInstrumentationLogger.warn(component(typeName), t);
-            }
+            AllureInstrumentationLogger.warn(component(typeName), t);
         } else if (n == MAX_LOGGED + 1) {
             AllureInstrumentationLogger.logger().warning(
                     "[Allure Instrumentation] дальнейшие сбои трансформации в лог не печатаются; "
                             + "итог — InstrumentationDiagnostics.failureCount()");
         } else {
-            AllureInstrumentationLogger.logger()
-                    .log(Level.FINE, () -> "[Allure Instrumentation] " + typeName + " → " + brief(t));
+            AllureInstrumentationLogger.trace(component(typeName), () -> brief(t));
         }
     }
 

@@ -7,6 +7,7 @@ import io.github.kolomyychenkoai.allure.spring.internal.InstrumentationDiagnosti
 import io.github.kolomyychenkoai.allure.spring.support.LibraryLog;
 import net.bytebuddy.asm.Advice;
 import net.bytebuddy.pool.TypePool;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -32,9 +33,18 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 @Epic("Внутренние проверки библиотеки")
 class InstrumentationDiagnosticsTest {
 
+    /** Счётчики бюджета на время теста: снимаем свои, возвращаем настоящие. */
+    private int[] бюджет;
+
     @BeforeEach
-    void сбросБюджета() {
-        FailureLog.forgetBudget();
+    void занулитьБюджет() {
+        бюджет = FailureLog.budget();
+        FailureLog.restoreBudget(new int[] {0, 0});
+    }
+
+    @AfterEach
+    void вернутьБюджет() {
+        FailureLog.restoreBudget(бюджет);
     }
 
     /** Мишень перехвата: только для этого теста, чтобы не трогать чужие типы. */
@@ -114,8 +124,10 @@ class InstrumentationDiagnosticsTest {
 
         // Идём ТЕМ ЖЕ входом, что продакшен: вызов логгера напрямую пережил бы появление
         // отдельного текста для сбоя привязки и остался бы зелёным на мёртвой ветке.
-        // Уровень записи в скобку не входит НАМЕРЕННО: под Spring Boot запись уходит в Logback
-        // и печатается как WARN, а не WARNING.
+        // Уровень записи в скобку не входит НАМЕРЕННО: обещать потребителю можно только то,
+        // что не зависит от настроек логирования вокруг, — под Spring Boot запись уходит
+        // в Logback и печатается как WARN. Сам уровень проверяем на своём JUL-логгере:
+        // отображение туда детерминированно, а в README оно не обещано.
         List<LogRecord> said = LibraryLog.capture(
                 () -> FailureLog.logInstallFailure(new IllegalStateException("Could not self-attach")));
         assertThat(said)
@@ -138,14 +150,21 @@ class InstrumentationDiagnosticsTest {
                 .as("сбой привязки агента подан хвостом от сбоя трансформации — это занижение вдвое")
                 .anyMatch(m -> m.contains("байткодный слой отчёта не поднялся"))
                 .noneMatch(m -> m.contains("тест не затронут"));
+
+        // installOn с Reiterating обходит загруженные классы, поэтому внутри причины сбоя
+        // привязки бывает и неразрешённый тип. Сигнал «слой не поднялся весь» не имеет права
+        // от этого зависеть. Мутация: проверку маркера после разбора причины → FINE → RED.
+        List<LogRecord> сПричинойВнутри = LibraryLog.captureAll(() -> FailureLog.logInstallFailure(
+                new IllegalStateException("Could not self-attach", unresolvedType())));
+        assertThat(сПричинойВнутри)
+                .as("сбой привязки замолчали из-за неразрешённого типа в цепочке причин")
+                .anyMatch(r -> r.getLevel() == Level.WARNING);
     }
 
     @Test
     @DisplayName("чужой тип не разрешился: уходит на FINE без стека, но из счётчика не пропадает")
     void нерезолвнутыйЧужойТипНеКричит() {
-        int before = InstrumentationDiagnostics.failureCount();
-
-        List<LogRecord> said = LibraryLog.capture(
+        List<LogRecord> said = LibraryLog.captureAll(
                 () -> FailureLog.logFailure(FOREIGN, unresolvedType()));
 
         assertThat(said)
@@ -160,12 +179,9 @@ class InstrumentationDiagnosticsTest {
                 .filteredOn(r -> r.getLevel() == Level.FINE)
                 .as("стек приложен к следу: он и есть тот шум, из-за которого сбой уводили с WARNING")
                 .allMatch(r -> r.getThrown() == null);
-        // Полная запись — ОДНА и под именем мишени этого тест-класса: уход на FINE не должен
-        // выносить сбой из счётчика.
-        FailureLog.recordFailure(UNRESOLVED_PROBE, unresolvedType());
-        assertThat(InstrumentationDiagnostics.failureCount())
-                .as("сбой исчез из счётчика — гейт инвентаря ослеп вместе с логом")
-                .isGreaterThan(before);
+        // Счётчик сбоев проверять здесь нечем: recordFailure инкрементит его БЕЗУСЛОВНО,
+        // до всякой логики уровня, поэтому такой ассерт не краснеет ни на одной мутации.
+        // Ось «сбой не пропал из дампа» держится структурой, а не тестом — сказано в PR.
     }
 
     @Test
@@ -173,7 +189,7 @@ class InstrumentationDiagnosticsTest {
     void настоящийСбойКричитИБюджетНаНегоЕсть() {
         // Положительный якорь к тесту выше плюс проверка бюджета: MAX_LOGGED = 5, и если
         // тратить его на скрытые сбои (как было до #74), шестой настоящий уехал бы на FINE.
-        List<LogRecord> said = LibraryLog.capture(() -> {
+        List<LogRecord> said = LibraryLog.captureAll(() -> {
             for (int i = 0; i < 6; i++) {
                 FailureLog.logFailure(FOREIGN + i, unresolvedType());
             }
@@ -204,20 +220,57 @@ class InstrumentationDiagnosticsTest {
                 .anyMatch(r -> r.getLevel() == Level.WARNING);
     }
 
+    @Test
+    @DisplayName("причина ищется по всей цепочке: чужой сбой приходит завёрнутым чаще, чем голым")
+    void причинаИщетсяВЦепочке() {
+        // Мутация: смотреть только верхний Throwable → завёрнутый сбой снова на WARNING.
+        Throwable завёрнутый = new IllegalStateException("обёртка чужого кода", unresolvedType());
+
+        List<LogRecord> said = LibraryLog.captureAll(() -> FailureLog.logFailure(FOREIGN, завёрнутый));
+
+        assertThat(said)
+                .as("разбор причины смотрит только верхний уровень — в продакшене он почти всегда обёртка")
+                .noneMatch(r -> r.getLevel() == Level.WARNING);
+    }
+
+    @Test
+    @DisplayName("много нерезолвнутых типов — канал говорит об этом вслух один раз")
+    void масштабСкрытогоОбъявляетОСебе() {
+        // Тишина безопасна, пока сбоев единицы. Если матчеры не смогли решить про пачку типов,
+        // раздел отчёта мог обеднеть, и молчание стало бы той же болезнью, что громкость.
+        List<LogRecord> said = LibraryLog.captureAll(() -> {
+            for (int i = 0; i < 12; i++) {
+                FailureLog.logFailure(FOREIGN + i, unresolvedType());
+            }
+        });
+
+        assertThat(said)
+                .filteredOn(r -> r.getLevel() == Level.WARNING)
+                .extracting(LogRecord::getMessage)
+                .as("скрытых сбоев набралась пачка, а канал промолчал")
+                .anyMatch(m -> m.contains("описание типа не разрешилось больше"));
+        assertThat(said)
+                .filteredOn(r -> r.getLevel() == Level.WARNING)
+                .as("сказано больше одного раза — это снова шум в каждой сборке")
+                .hasSize(1);
+    }
+
     /** Имя чужого типа для проверок уровня: в счётчик не попадает, только в лог. */
     private static final String FOREIGN = "org.foreign.Whatever";
 
-    /** Мишень полной записи: имя нашего тест-класса, которое гейт инвентаря терпит. */
-    private static final String UNRESOLVED_PROBE =
-            "io.github.kolomyychenkoai.allure.spring.unit.InstrumentationDiagnosticsTest$UnresolvedProbe";
-
     /** Исключение, которым byte-buddy сообщает «описание типа не разрешилось». */
     private static Throwable unresolvedType() {
+        Throwable thrown = null;
         try {
             TypePool.Default.ofSystemLoader().describe("no.such.Type$Ever").resolve();
-            throw new AssertionError("резолв заведомо отсутствующего типа прошёл — фикстура мертва");
         } catch (Throwable t) {
-            return t;
+            thrown = t;
         }
+        // Сторож ВНЕ try: внутри его поймал бы собственный catch, и мёртвая фикстура
+        // красила бы соседние тесты чужим сообщением.
+        if (thrown == null) {
+            throw new AssertionError("резолв заведомо отсутствующего типа прошёл — фикстура мертва");
+        }
+        return thrown;
     }
 }
