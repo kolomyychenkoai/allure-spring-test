@@ -4,8 +4,11 @@ import io.qameta.allure.Epic;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import io.github.kolomyychenkoai.allure.spring.internal.FailureLog;
 import io.github.kolomyychenkoai.allure.spring.internal.JpaLaziness;
 import io.github.kolomyychenkoai.allure.spring.internal.MovedTypeNames;
+
+import net.bytebuddy.pool.TypePool;
 
 import java.lang.reflect.Method;
 import java.util.List;
@@ -567,6 +570,39 @@ class InstrumentationApiCanaryTest {
                 "собираемся под Java " + expected + ", а тесты идут на " + actual
                         + " → проверь .java-version / jenv (`jenv local`). "
                         + "Пока не совпало, прогон НИЧЕГО не доказывает про заявленную границу");
+    }
+
+    @Test
+    @DisplayName("byte-buddy зовёт «тип не разрешился» тем же именем (иначе ожидаемый шум снова полезет на WARNING)")
+    void unresolvedTypeExceptionKeepsItsName() {
+        // По этому имени InstrumentationDiagnostics уводит чужой тип, который не разрешился на FINE
+        // (#74). Сверка строкой: компилятор её не проверит, а переименование в byte-buddy
+        // вернуло бы WARN со стеком в каждую сборку потребителя.
+        // Имя берём из ПРОДАКШЕНА: сверка с собственным литералом оставила бы канарейку
+        // зелёной при мутации константы, то есть стерегла бы саму себя.
+        String name = FailureLog.unresolvedTypeName();
+        Class<?> thrown;
+        try {
+            thrown = Class.forName(name);
+        } catch (ClassNotFoundException e) {
+            throw new AssertionError("byte-buddy переименовала " + name
+                    + " → ожидаемый шум снова уедет потребителю на WARNING. "
+                    + "Поправь UNRESOLVED_TYPE в internal/InstrumentationDiagnostics", e);
+        }
+        require(Throwable.class.isAssignableFrom(thrown), name + " перестал быть исключением");
+
+        // Положительный якорь: имя существует — мало, надо чтобы его РЕАЛЬНО бросали на
+        // неразрешимом типе. Иначе канарейка стерегла бы пустое место.
+        Throwable actual = null;
+        try {
+            TypePool.Default.ofSystemLoader().describe("no.such.Type$Ever").resolve();
+        } catch (Throwable t) {
+            actual = t;
+        }
+        require(actual != null, "резолв заведомо отсутствующего типа прошёл без исключения");
+        require(name.equals(actual.getClass().getName()),
+                "byte-buddy бросает на неразрешимом типе " + actual.getClass().getName()
+                        + ", а не " + name + " → поправь UNRESOLVED_TYPE");
     }
 
     /** Объявлен ли метод ИМЕННО в этом классе иерархии (ByteBuddy вплетает только в объявителя). */

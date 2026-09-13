@@ -14,7 +14,8 @@ import java.lang.instrument.Instrumentation;
  * AssertJ, Kafka, WireMock-verify…). Сам {@code ByteBuddyAgent.install()} идемпотентен
  * (переиспользует уже привязанный к JVM агент — совместимо с Mockito), радиус узкий
  * (только заданный тип), {@code disableClassFormatChanges} — безопасно для соседних
- * агентов. Сбой инструментирования логируется на WARNING и НЕ роняет тест.
+ * агентов. Сбой инструментирования логируется и НЕ роняет тест; уровень выбирается
+ * по причине — см. {@code InstrumentationDiagnostics#logFailure}.
  * <p>
  * <b>byte-buddy в scope {@code provided}</b> — у потребителя он обычно есть транзитивно
  * (mockito / spring-boot-starter-test). Если есть сомнение, что byte-buddy на classpath,
@@ -74,7 +75,7 @@ public final class AllureInstrumentation {
 
     /**
      * Ретрансформировать тип(ы) под {@code typeMatcher} переданным {@code transformer}
-     * (advice). Сбой ловится и логируется на WARNING — тест не затрагивается.
+     * (advice). Сбой ловится и логируется — тест не затрагивается.
      * <p>
      * <b>НЕ идемпотентен:</b> каждый вызов регистрирует НОВЫЙ {@code ClassFileTransformer}
      * в {@link Instrumentation} на весь срок жизни JVM и заново ретрансформирует
@@ -86,7 +87,7 @@ public final class AllureInstrumentation {
     /**
      * Имя «типа» для сбоя самой привязки агента: настоящего типа тут нет, а строку в логе
      * потребитель ищет именно по нему (README, раздел «Аварийный выключатель»). Литерал
-     * держит {@code InstrumentationDiagnosticsTest} через мостик {@code InstallLogLine},
+     * держит {@code InstrumentationDiagnosticsTest} через мостик {@code FailureLog},
      * иначе README расходится с логом молча.
      */
     static final String INSTALL_MARKER = "<install>";

@@ -41,6 +41,7 @@ public class InstrumentationDiagnosticsDump implements LauncherSessionListener {
                 .append("installed=").append(InstrumentationDiagnostics.installed()).append('\n')
                 .append("transformed=").append(InstrumentationDiagnostics.transformedCount()).append('\n')
                 .append("failures=").append(InstrumentationDiagnostics.failureCount()).append('\n')
+                .append("unresolved=").append(InstrumentationDiagnostics.unresolvedCount()).append('\n')
                 .append("sample_truncated=").append(InstrumentationDiagnostics.sampleTruncated()).append('\n');
         InstrumentationDiagnostics.failures().forEach(failure -> out.append("failure: ").append(failure).append('\n'));
         try {

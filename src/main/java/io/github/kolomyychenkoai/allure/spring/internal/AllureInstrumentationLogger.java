@@ -9,8 +9,8 @@ import java.util.logging.Logger;
  * Используется java.util.logging, а НЕ SLF4J: advice-классы инлайнятся в чужой байткод,
  * где ссылка на SLF4J недоступна из-за ограничений загрузки классов.
  * <p>
- * Сбой инструментирования логируется на {@link Level#WARNING} — он виден по умолчанию
- * (JUL печатает WARNING в stderr), но тест НЕ роняет. Как включить подробный след
+ * Сбой инструментирования тест НЕ роняет. Уровень выбирает не этот класс, а
+ * {@code InstrumentationDiagnostics#logFailure} — по причине сбоя. Как включить подробный след
  * ({@link #trace}), описано в README: одним {@code setLevel} на логгере не обойтись —
  * у JUL два уровня подряд, а под Spring Boot запись уходит в Logback со своим уровнем.
  */
@@ -34,6 +34,19 @@ public final class AllureInstrumentationLogger {
      */
     public static void warn(String component, Throwable t) {
         LOGGER.log(Level.WARNING, t, () -> "[Allure " + component + "] сбой инструментирования (тест не затронут)");
+    }
+
+    /**
+     * Сбой самой привязки агента. Отдельно от {@link #warn(String, Throwable)} намеренно:
+     * там хвост «тест не затронут», и для этого случая он занижает вдвое. Тест действительно
+     * цел, а байткодный слой отчёта не поднялся ВЕСЬ — пропадают ассерты, SQL, Kafka,
+     * Liquibase, вызовы {@code RestTemplate} и {@code RestClient}. Потребитель, прочитавший
+     * «тест не затронут», закроет лог и не поймёт, почему отчёт пустой.
+     */
+    public static void warnInstall(String component, Throwable t) {
+        LOGGER.log(Level.WARNING, t,
+                () -> "[Allure " + component + "] агент не привязался: байткодный слой отчёта "
+                        + "не поднялся, тесты идут без него");
     }
 
     /**

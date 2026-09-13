@@ -58,6 +58,14 @@ final class InstrumentationFailures {
     private static final int SUPPRESSED_CEILING = 5;
 
     /**
+     * Потолок сбоев «описание типа не разрешилось». Они уходят на FINE и в логе сборки не
+     * видны — то есть это ровно тот сигнал, который собирается и без гейта никем не читается.
+     * Замер по дампу: в нашем прогоне их ноль или один. Потолок 5 — запас на пару новых
+     * вариантов; выше него молчание перестаёт быть безобидным, и разбираться надо глазами.
+     */
+    private static final int UNRESOLVED_CEILING = 5;
+
+    /**
      * Пол реально применённых трансформаций. Сегодня их 145–151 (замер на трёх прогонах).
      * <p>
      * Зачем: сценарий «агент встал, ошибок нет, а матчеры не совпали ни разу» гейт сбоев не
@@ -93,6 +101,7 @@ final class InstrumentationFailures {
         int transformed = 0;
         boolean truncated = false;
         Set<String> failures = new LinkedHashSet<>();
+        int unresolved = 0;
         for (Path dump : dumps) {
             List<String> lines;
             try {
@@ -103,6 +112,7 @@ final class InstrumentationFailures {
             installed |= lines.contains("installed=true");
             truncated |= lines.contains("sample_truncated=true");
             transformed += number(lines, "transformed=");
+            unresolved += number(lines, "unresolved=");
             List<String> all = lines.stream()
                     .filter(line -> line.startsWith("failure: "))
                     .map(line -> line.substring("failure: ".length()))
@@ -111,13 +121,19 @@ final class InstrumentationFailures {
             suppressed += (int) all.stream().filter(failure -> !ours(failure)).count();
         }
         if (installed && failures.isEmpty() && suppressed <= SUPPRESSED_CEILING && !truncated
-                && transformed >= TRANSFORMED_FLOOR) {
+                && transformed >= TRANSFORMED_FLOOR && unresolved <= UNRESOLVED_CEILING) {
             return null;
         }
         StringBuilder out = new StringBuilder("СБОИ ПЕРЕХВАТА (байткод-агент):\n");
         if (!installed) {
             out.append("  ✗ агент НЕ установлен НИ В ОДНОЙ JVM — весь байткод-слой мёртв.\n")
                     .append("    Обычно это запрет self-attach: нужен -XX:+EnableDynamicAgentLoading (JEP 451).\n");
+        }
+        if (unresolved > UNRESOLVED_CEILING) {
+            out.append("  ✗ описание типа не разрешилось ").append(unresolved)
+                    .append(" раз при потолке ").append(UNRESOLVED_CEILING)
+                    .append(" — такие сбои идут на FINE и в логе сборки не видны.\n")
+                    .append("    Перемерь по дампу: матчеры могли не решить про пачку типов, и раздел отчёта обеднел.\n");
         }
         if (installed && transformed < TRANSFORMED_FLOOR) {
             // Позитивный сигнал: агент может встать и не перехватить НИЧЕГО — матчеры заданы
