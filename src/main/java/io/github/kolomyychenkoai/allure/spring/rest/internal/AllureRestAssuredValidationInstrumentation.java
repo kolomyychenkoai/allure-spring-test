@@ -1,18 +1,24 @@
 package io.github.kolomyychenkoai.allure.spring.rest.internal;
 
+import io.github.kolomyychenkoai.allure.spring.internal.ActivationDiagnostics;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureAdviceSupport;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
 import net.bytebuddy.asm.Advice;
 import net.bytebuddy.description.method.MethodDescription;
+import net.bytebuddy.description.type.TypeDescription;
 import net.bytebuddy.matcher.ElementMatcher;
+import net.bytebuddy.pool.TypePool;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static net.bytebuddy.matcher.ElementMatchers.hasParameters;
 import static net.bytebuddy.matcher.ElementMatchers.hasType;
 import static net.bytebuddy.matcher.ElementMatchers.isPublic;
 import static net.bytebuddy.matcher.ElementMatchers.named;
+import static net.bytebuddy.matcher.ElementMatchers.none;
 import static net.bytebuddy.matcher.ElementMatchers.not;
 import static net.bytebuddy.matcher.ElementMatchers.takesArguments;
 import static net.bytebuddy.matcher.ElementMatchers.whereAny;
@@ -67,6 +73,29 @@ import static net.bytebuddy.matcher.ElementMatchers.whereAny;
  */
 public final class AllureRestAssuredValidationInstrumentation {
 
+    /** Внутренний носитель всех перегрузок проверок {@code .then()} — то, во что вплетаемся. */
+    private static final String CARRIER = "io.restassured.internal.ValidatableResponseOptionsImpl";
+
+    /**
+     * Имена проверок {@code .then()}, которые дают шаг. Список ОДИН: из него строится сам
+     * матчер ({@link #validationMethods()}), по нему же меряется покрытие. Второго источника
+     * нет, поэтому разъехаться нечему.
+     */
+    private static final List<String> VALIDATION_METHODS = List.of(
+            "statusCode", "statusLine", "body", "content", "header", "headers",
+            "cookie", "cookies", "contentType", "time");
+
+    /**
+     * Что сказать, когда матчер не совпал ни с одним объявленным методом носителя.
+     * <p>
+     * Константой: переменный текст ломает однократность {@code noteOnce} (ключ дедупликации —
+     * сам текст) и уводит данные потребителя в артефакт CI.
+     */
+    private static final String NO_VALIDATION_METHODS =
+            "перехват проверок RestAssured не нашёл, во что вплетаться — шагов «Проверка ответа: …» "
+                    + "в отчёте не будет или будет меньше, HTTP-шаги при этом останутся. "
+                    + "Какие именно проверки не нашлись — в следе на FINE";
+
     private static final AtomicBoolean INSTALLED = new AtomicBoolean(false);
 
     /** Глубина вложенности инструментированных вызовов в потоке: внешний (пользовательский) — 1. */
@@ -97,24 +126,106 @@ public final class AllureRestAssuredValidationInstrumentation {
             return;
         }
         AllureInstrumentation.retransform(
-                named("io.restassured.internal.ValidatableResponseOptionsImpl"),
+                named(CARRIER),
                 (builder, type, cl, module, pd) ->
                         builder.visit(Advice.to(ValidationAdvice.class).on(validationMethods())));
+        reportIfMatcherFindsNothing();
+    }
+
+    /**
+     * Сказать потребителю, если наш матчер не совпал ни с чем: раздел проверок в отчёте тогда
+     * пуст, а HTTP-шаги на месте — отчёт выглядит полным. Отключение раздела обязано объявлять
+     * о себе (диагноз-корень 3 в {@code docs/consumer-affects.md}).
+     * <p>
+     * <b>Проверяем матчером, а не списком имён.</b> Вплетение идёт ТОЛЬКО в объявителя и только
+     * в перегрузки, прошедшие {@link #validationMethods()}. Рефлексивный список имён ответил бы
+     * на другой вопрос: {@code getMethods()} отдаёт и унаследованные, и те перегрузки, которые
+     * матчер как раз исключает, — и оба случая прошли бы проверку при мёртвом перехвате.
+     * <p>
+     * <b>Перехват ставится ВСЕГДА, это только доклад.</b> От пропуска установки не выигрывается
+     * ничего, а от ошибочного пропуска теряется раздел отчёта.
+     * <p>
+     * {@link TypePool} читает class-файл и НЕ загружает носитель: рефлексия загрузила бы его
+     * у потребителя, который {@code .then()} не зовёт ни разу.
+     */
+    private static void reportIfMatcherFindsNothing() {
+        List<String> missing;
+        try {
+            TypePool pool = TypePool.Default.of(
+                    AllureRestAssuredValidationInstrumentation.class.getClassLoader());
+            missing = uncoveredValidationMethods(pool.describe(CARRIER).resolve());
+        } catch (Throwable unresolved) {
+            // Носитель не прочитался — во что вплетать, мы не нашли. Причина могла быть и другой
+            // (чужой загрузчик, нечитаемый ресурс), поэтому текст новости про причину молчит.
+            missing = VALIDATION_METHODS;
+        }
+        announceIfSilent(missing);
+    }
+
+    /**
+     * Сказать, если вплетать нечего. Отдельной функцией от резолва — чтобы обе ветки
+     * проверялись без настоящего RestAssured и без статики {@link #INSTALLED}.
+     * <p>
+     * Выключатель уважаем: предупреждать о потере того, что потребитель выключил сам, — это
+     * ровно тот шум в чужой сборке, от которого лечит #74.
+     */
+    static void announceIfSilent(List<String> missing) {
+        if (missing.isEmpty() || AllureInstrumentation.disabled()) {
+            return;
+        }
+        // Текст — КОНСТАНТА: ключ дедупликации noteOnce это сам текст, а имена ушли бы
+        // в артефакт CI переменной частью. Какие именно проверки не нашлись — в след на FINE.
+        AllureInstrumentationLogger.trace("RestAssuredValidation",
+                () -> "не во что вплести: " + String.join(", ", missing));
+        ActivationDiagnostics.noteOnce("RestAssuredValidation", NO_VALIDATION_METHODS);
+    }
+
+    /**
+     * Какие проверки {@code .then()} вплести НЕ во что: для каждого имени спрашиваем тот же
+     * матчер, суженный до этого имени.
+     * <p>
+     * Порог «совпало хоть что-то» тут не годится: носитель расходится по одному методу, а не
+     * целиком. Переименуют {@code statusCode} и {@code body} — из отчёта уйдёт большая часть
+     * проверок, а «хоть что-то» останется истинным из-за уцелевших {@code cookie} и
+     * {@code time}. Детектор молчал бы ровно там, где дефект и появляется.
+     * <p>
+     * Вынесено чистой функцией: так её проверяют на подставных типах, не трогая настоящий
+     * RestAssured и не завися от статики {@link #INSTALLED}.
+     */
+    static List<String> uncoveredValidationMethods(TypeDescription carrier) {
+        List<String> missing = new ArrayList<>();
+        for (String name : VALIDATION_METHODS) {
+            if (carrier.getDeclaredMethods().filter(validationMethods(named(name))).isEmpty()) {
+                missing.add(name);
+            }
+        }
+        return missing;
     }
 
     /** Публичные проверочные методы .then() минус log-варианты (0-арг/boolean) и ResponseAwareMatcher-обёртки. */
     private static ElementMatcher<MethodDescription> validationMethods() {
+        return validationMethods(anyOfNames());
+    }
+
+    /** Тот же матчер, суженный до одного имени: им меряется покрытие по каждой проверке. */
+    private static ElementMatcher<MethodDescription> validationMethods(ElementMatcher<MethodDescription> names) {
         return isPublic()
-                .and(named("statusCode").or(named("statusLine")).or(named("body"))
-                        .or(named("content")).or(named("header")).or(named("headers"))
-                        .or(named("cookie")).or(named("cookies")).or(named("contentType"))
-                        .or(named("time")))
+                .and(names)
                 // log-варианты того же имени: body()/headers()/cookies()/body(boolean)
                 .and(not(takesArguments(0)))
                 .and(not(takesArguments(boolean.class)))
                 // ResponseAwareMatcher-обёртки: их значение пишет внутренний plain-вызов (см. class-javadoc)
                 .and(not(hasParameters(whereAny(hasType(
                         named("io.restassured.matcher.ResponseAwareMatcher"))))));
+    }
+
+    /** Дизъюнкция всех имён списка — ровно то, что раньше стояло в матчере россыпью. */
+    private static ElementMatcher.Junction<MethodDescription> anyOfNames() {
+        ElementMatcher.Junction<MethodDescription> any = none();
+        for (String name : VALIDATION_METHODS) {
+            any = any.or(named(name));
+        }
+        return any;
     }
 
     /** Логика шага проверки (вынесена из advice для level-A теста). Шаг — только для УСПЕШНОЙ проверки. */
