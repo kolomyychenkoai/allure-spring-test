@@ -188,6 +188,33 @@ class AutoConfigurationDegradationTest {
     }
 
     @Test
+    @DisplayName("ЗАПАСНОЕ имя тоже не затирается: гард стоит на каждом, а не только на основном")
+    void extraNameAlsoRespectsConsumer() {
+        // В переходном состоянии миграции на classpath бывают ОБА интерфейса, и тогда мы
+        // регистрируем второй бин под именем «…Alt1». Имя не наше собственное изобретение
+        // ровно настолько же, насколько основное, — занять его потребитель может так же.
+        //
+        // Мутация: регистрировать запасное имя без проверки занятости → RED.
+        DefaultListableBeanFactory registry = new DefaultListableBeanFactory();
+        registry.setAllowBeanDefinitionOverriding(true);
+        registry.registerBeanDefinition("allureCustomizerAlt1",
+                BeanDefinitionBuilder.genericBeanDefinition(String.class, () -> "бин потребителя")
+                        .getBeanDefinition());
+        List<String> bothAlive = List.of(
+                MovedCustomizerRegistrar.resolve(getClass().getClassLoader(),
+                        MovedTypeNames.MOCKMVC_CUSTOMIZER).orElseThrow().getName(),
+                MovedCustomizerRegistrar.resolve(getClass().getClassLoader(),
+                        MovedTypeNames.WEBTESTCLIENT_CUSTOMIZER).orElseThrow().getName());
+
+        MovedCustomizerRegistrar.register(registry, getClass().getClassLoader(),
+                AutoConfigurationDegradationTest.class.getName(), "allureCustomizer", bothAlive, builder -> { });
+
+        assertThat(registry.getBean("allureCustomizerAlt1"))
+                .as("запасное имя затёрто нашим бином — на нём гард не стоит")
+                .isEqualTo("бин потребителя");
+    }
+
+    @Test
     @DisplayName("имена дополнительных бинов без «#» — у решётки в Spring особый смысл")
     void extraBeanNamesAreSpringSafe() {
         DefaultListableBeanFactory registry = new DefaultListableBeanFactory();
