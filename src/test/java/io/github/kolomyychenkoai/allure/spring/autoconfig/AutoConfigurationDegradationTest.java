@@ -1,9 +1,11 @@
 package io.github.kolomyychenkoai.allure.spring.autoconfig;
 
+import io.github.kolomyychenkoai.allure.spring.internal.DiagnosticsReset;
 import io.github.kolomyychenkoai.allure.spring.internal.MovedCustomizerRegistrar;
 import io.github.kolomyychenkoai.allure.spring.rest.AllureMockMvcAutoConfiguration;
 import io.github.kolomyychenkoai.allure.spring.rest.AllureWebTestClientAutoConfiguration;
 import io.github.kolomyychenkoai.allure.spring.internal.MovedTypeNames;
+import io.github.kolomyychenkoai.allure.spring.support.LibraryLog;
 import io.qameta.allure.Epic;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -17,6 +19,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.List;
+import java.util.logging.LogRecord;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -68,12 +71,18 @@ class AutoConfigurationDegradationTest {
                 BeanDefinitionBuilder.genericBeanDefinition(String.class, () -> "бин потребителя")
                         .getBeanDefinition());
 
-        MovedCustomizerRegistrar.register(registry, getClass().getClassLoader(), AutoConfigurationDegradationTest.class.getName(),
-                MovedTypeNames.MOCKMVC_CUSTOMIZER_BEAN, MovedTypeNames.MOCKMVC_CUSTOMIZER, builder -> { });
+        DiagnosticsReset.forget();
+        List<LogRecord> said = LibraryLog.capture(() ->
+                MovedCustomizerRegistrar.register(registry, getClass().getClassLoader(),
+                        AutoConfigurationDegradationTest.class.getName(),
+                        MovedTypeNames.MOCKMVC_CUSTOMIZER_BEAN, MovedTypeNames.MOCKMVC_CUSTOMIZER, builder -> { }));
 
         assertThat(registry.getBean(MovedTypeNames.MOCKMVC_CUSTOMIZER_BEAN))
                 .as("со старым @Bean побеждала пользовательская конфигурация — ведём себя так же")
                 .isEqualTo("бин потребителя");
+        assertThat(said)
+                .as("пропуск промолчал: у потребителя пустой раздел HTTP и ни строки о причине")
+                .anyMatch(record -> record.getMessage().contains("имя этого бина занято"));
     }
 
     /** Бин потребителя, по которому видно, что спорное имя досталось именно ему. */
@@ -95,15 +104,16 @@ class AutoConfigurationDegradationTest {
 
     /**
      * Ось: потребитель занимает наше имя ПОЗЖЕ разбора конфигураций — постпроцессором реестра.
-     * Пока мы регистрировались на разборе, падала его регистрация (переопределение по умолчанию
-     * запрещено), и вместе с ней весь его прогон — issue #73.
+     * Регистрация на разборе конфигурации роняет регистрацию потребителя: переопределение
+     * по умолчанию запрещено, и вместе с ней падает весь его прогон — issue #73.
      * <p>
      * ⚠️ Ассерт «не упало» тут недостаточен: он зеленеет и когда постпроцессор потребителя не
      * позвали вовсе, и когда он отработал раньше разбора. Поэтому якорь — сам бин: спорное имя
      * обязано указывать на объект ПОТРЕБИТЕЛЯ.
      * <p>
-     * Мутация: вернуть регистрацию на разбор конфигурации (или сделать наш постпроцессор
-     * PriorityOrdered) → контекст не поднимается → RED.
+     * Мутация: вернуть регистрацию на разбор конфигурации → контекст не поднимается → RED.
+     * Порядок среди постпроцессоров фабрики тут ни при чём: их фаза целиком идёт после
+     * реестровой, поэтому {@code PriorityOrdered} на нашей стороне ничего не меняет.
      */
     private void lateCollisionLeavesConsumerBean(Class<?> autoConfiguration, Class<?> lateRegistrar, String beanName) {
         new ApplicationContextRunner()
@@ -135,8 +145,7 @@ class AutoConfigurationDegradationTest {
     @Test
     @DisplayName("наше определение помечено инфраструктурным и называет своё происхождение")
     void ourDefinitionNamesItself() {
-        // Без этого бин выглядит прикладным бином потребителя, а в тексте падения стоит
-        // «defined in null» — решение библиотеки нечем аудировать.
+        // Зачем роль и происхождение — в комментарии MovedCustomizerRegistrar#registerProxy.
         DefaultListableBeanFactory registry = new DefaultListableBeanFactory();
 
         MovedCustomizerRegistrar.register(registry, getClass().getClassLoader(), "origin.Marker",
@@ -144,7 +153,7 @@ class AutoConfigurationDegradationTest {
 
         BeanDefinition definition = registry.getBeanDefinition(MovedTypeNames.MOCKMVC_CUSTOMIZER_BEAN);
         assertThat(definition.getRole())
-                .as("наш бин виден потребителю как прикладной — он кандидат на автовайринг и на /actuator/beans")
+                .as("наш бин виден потребителю как прикладной и лезет в /actuator/beans")
                 .isEqualTo(BeanDefinition.ROLE_INFRASTRUCTURE);
         assertThat(definition.getResourceDescription())
                 .as("в тексте падения будет «defined in null», и чей это бин — не понять")

@@ -33,15 +33,12 @@ import org.springframework.test.web.servlet.setup.ConfigurableMockMvcBuilder;
 public class AllureMockMvcAutoConfiguration {
 
     /**
-     * Резолвит переехавший интерфейс и регистрирует наш кастомайзер прокси-бином — после всех
-     * постпроцессоров реестра, чтобы поздняя регистрация того же имени у потребителя не роняла
-     * старт (issue #73, разбор — в javadoc {@link MovedCustomizerRegistrar#postProcessor}).
-     * <p>
-     * ⚠️ {@code static} и без аргументов — иначе конфигурация уедет в раннюю инициализацию.
+     * Регистрирует кастомайзер прокси-бином; фаза, причина и требование {@code static} —
+     * в javadoc {@link MovedCustomizerRegistrar#postProcessor}.
      */
     @Bean
     static BeanFactoryPostProcessor allureMockMvcCustomizerRegistrar() {
-        return MovedCustomizerRegistrar.postProcessor(AllureMockMvcAutoConfiguration.class.getName(),
+        return MovedCustomizerRegistrar.postProcessor(AllureMockMvcAutoConfiguration.class,
                 MovedTypeNames.MOCKMVC_CUSTOMIZER_BEAN, MovedTypeNames.MOCKMVC_CUSTOMIZER,
                 builder -> ((ConfigurableMockMvcBuilder<?>) builder)
                         .alwaysDo(new AllureMockMvcResultHandler()));

@@ -32,16 +32,31 @@ import java.util.function.Consumer;
  */
 public final class MovedCustomizerRegistrar {
 
+    /**
+     * Что сказать, когда имя за потребителем: раздел отчёта при этом пуст.
+     * <p>
+     * Имя бина в текст НЕ подставляем — оно уже стоит в названии канала, а переменный текст
+     * ломает однократность (ключ дедупликации — сам текст) и уводит данные потребителя
+     * в артефакт CI. Держит {@code ActivationDiagnosticsTest#noteOnceIsCalledWithConstantsOnly}.
+     */
+    private static final String NAME_TAKEN =
+            "имя этого бина занято вашей конфигурацией — кастомайзер не регистрируем, "
+                    + "и HTTP-шаги соответствующего клиента в отчёт не попадут. "
+                    + "Заглушить эту строку: -Dallure.spring.diagnostics=off";
+
+    /** Что сказать, когда фабрика не реестр или загрузчик неизвестен: регистрировать нечем. */
+    private static final String SKIPPED_NO_REGISTRY =
+            "контекст не отдаёт реестр определений или загрузчик классов — кастомайзер "
+                    + "не регистрируем, HTTP-шаги этого клиента в отчёт не попадут";
+
     private MovedCustomizerRegistrar() {
     }
 
-    /**
-     * Регистрирует кастомайзер, если интерфейс нашёлся под одним из известных имён.
-     * Не нашёлся — тихо ничего не делает (модуль просто выключен, ошибок нет).
-     *
-     * @param customize что сделать с билдером; аргумент — тип из {@code spring-test},
-     *                  который между мажорами НЕ переезжал, поэтому приводится обычным кастом
-     */
+    /** Имя канала диагностики: по имени бина, чтобы новости двух кастомайзеров не слиплись. */
+    private static String componentOf(String beanName) {
+        return "CustomizerRegistrar/" + beanName;
+    }
+
     /**
      * Постпроцессор, который зарегистрирует кастомайзер ПОСЛЕ всех постпроцессоров реестра.
      * <p>
@@ -60,16 +75,34 @@ public final class MovedCustomizerRegistrar {
      * загрузчик этого класса нельзя: тесты автоконфигов прячут типы через
      * {@code FilteredClassLoader}, и проверка «модуль выключился» стала бы фиктивной.
      */
-    public static BeanFactoryPostProcessor postProcessor(String origin, String beanName,
+    public static BeanFactoryPostProcessor postProcessor(Class<?> origin, String beanName,
                                                          List<String> candidateNames, Consumer<Object> customize) {
         return factory -> {
-            ClassLoader loader = factory.getBeanClassLoader();
-            if (factory instanceof BeanDefinitionRegistry registry && loader != null) {
-                register(registry, loader, origin, beanName, candidateNames, customize);
+            // Внутри refresh чужого контекста: наружу отсюда не бросаем НИЧЕГО, иначе у
+            // потребителя не поднимется контекст и упадёт весь прогон.
+            try {
+                ClassLoader loader = factory.getBeanClassLoader();
+                if (factory instanceof BeanDefinitionRegistry registry && loader != null) {
+                    register(registry, loader, origin.getName(), beanName, candidateNames, customize);
+                } else {
+                    // Молчащий отказ — та же тихая потеря раздела, от которой лечат #76 и #77.
+                    ActivationDiagnostics.noteOnce(componentOf(beanName), SKIPPED_NO_REGISTRY);
+                }
+            } catch (Throwable degraded) {
+                AllureInstrumentationLogger.warn("CustomizerRegistrar/" + beanName, degraded);
             }
         };
     }
 
+    /**
+     * Регистрирует кастомайзер, если интерфейс нашёлся под одним из известных имён.
+     * Не нашёлся — тихо ничего не делает (модуль просто выключен, ошибок нет).
+     *
+     * @param origin    чьё это решение: попадает в {@code resourceDescription} определения
+     *                  и в текст падения Spring вместо «defined in null»
+     * @param customize что сделать с билдером; аргумент — тип из {@code spring-test},
+     *                  который между мажорами НЕ переезжал, поэтому приводится обычным кастом
+     */
     public static void register(BeanDefinitionRegistry registry, ClassLoader loader, String origin, String beanName,
                                 List<String> candidateNames, Consumer<Object> customize) {
         // Регистрируем под КАЖДОЕ найденное имя, а не под первое. Если у потребителя на classpath
@@ -86,9 +119,15 @@ public final class MovedCustomizerRegistrar {
                 // Имя уже занято — НЕ трогаем: пользовательская конфигурация обязана побеждать
                 // нашу. Проверка именно про это — не затереть чужой бин там, где переопределение
                 // разрешено; падение при ЗАПРЕЩЁННОМ переопределении ловит catch ниже.
-                if (!registry.containsBeanDefinition(name)) {
-                    registerProxy(registry, loader, origin, name, types.get(i), customize);
+                if (registry.containsBeanDefinition(name)) {
+                    // Имя за потребителем — это правильный исход, но НЕ безобидный: без нашего
+                    // кастомайзера раздел HTTP в отчёте пуст, а тестам от этого не плохо.
+                    // Отключение раздела обязано объявлять о себе — иначе потребитель ищет
+                    // пропавшие шаги в библиотеке, а причина у него в конфигурации (#73).
+                    ActivationDiagnostics.noteOnce(componentOf(name), NAME_TAKEN);
+                    continue;
                 }
+                registerProxy(registry, loader, origin, name, types.get(i), customize);
             }
         } catch (Throwable degraded) {
             // Мы внутри refresh чужого контекста: исключение отсюда уходит в старт и роняет ВСЕ
@@ -119,13 +158,9 @@ public final class MovedCustomizerRegistrar {
         AbstractBeanDefinition definition = BeanDefinitionBuilder
                 .genericBeanDefinition(customizerType, () -> proxy)
                 .getBeanDefinition();
-        // Роль и происхождение: без них наш бин выглядит прикладным бином потребителя (виден
-        // в /actuator/beans, кандидат на автовайринг), а в тексте падения стоит «defined in null»
-        // и решение библиотеки нечем аудировать.
-        //
-        // ⚠️ Роль — НЕ украшение: при разборе конфигураций определение с ролью выше прикладной
-        // ТИХО перекрывается @Bean потребителя вместо исключения. Мы регистрируемся позже
-        // разбора, поэтому эта ветка недостижима, — но снимать флаг как ничего не значащий нельзя.
+        // Роль прячет наш бин из /actuator/beans, происхождение ставит в текст падения Spring
+        // имя автоконфига вместо «defined in null». Тот же приём и та же причина, что у аспекта
+        // в AllureDataJpaAutoConfiguration.
         definition.setRole(BeanDefinition.ROLE_INFRASTRUCTURE);
         definition.setResourceDescription(origin);
         registry.registerBeanDefinition(beanName, definition);

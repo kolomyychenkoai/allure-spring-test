@@ -35,15 +35,12 @@ import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
 public class AllureWebTestClientAutoConfiguration {
 
     /**
-     * Резолвит переехавший интерфейс и регистрирует наш кастомайзер прокси-бином — после всех
-     * постпроцессоров реестра, чтобы поздняя регистрация того же имени у потребителя не роняла
-     * старт (issue #73, разбор — в javadoc {@link MovedCustomizerRegistrar#postProcessor}).
-     * <p>
-     * ⚠️ {@code static} и без аргументов — иначе конфигурация уедет в раннюю инициализацию.
+     * Регистрирует кастомайзер прокси-бином; фаза, причина и требование {@code static} —
+     * в javadoc {@link MovedCustomizerRegistrar#postProcessor}.
      */
     @Bean
     static BeanFactoryPostProcessor allureWebTestClientCustomizerRegistrar() {
-        return MovedCustomizerRegistrar.postProcessor(AllureWebTestClientAutoConfiguration.class.getName(),
+        return MovedCustomizerRegistrar.postProcessor(AllureWebTestClientAutoConfiguration.class,
                 MovedTypeNames.WEBTESTCLIENT_CUSTOMIZER_BEAN, MovedTypeNames.WEBTESTCLIENT_CUSTOMIZER,
                 // filter ловит КАЖДЫЙ обмен (вкл. статус-онли, без чтения тела) → буфер→replay;
                 // consumer полностью логирует обмены с чтением тела (на тест-потоке, вкл. тела).
