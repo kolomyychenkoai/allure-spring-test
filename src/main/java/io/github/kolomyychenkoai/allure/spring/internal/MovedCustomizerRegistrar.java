@@ -1,5 +1,8 @@
 package io.github.kolomyychenkoai.allure.spring.internal;
 
+import org.springframework.beans.factory.config.BeanDefinition;
+import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
+import org.springframework.beans.factory.support.AbstractBeanDefinition;
 import org.springframework.beans.factory.support.BeanDefinitionBuilder;
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
 
@@ -39,7 +42,35 @@ public final class MovedCustomizerRegistrar {
      * @param customize что сделать с билдером; аргумент — тип из {@code spring-test},
      *                  который между мажорами НЕ переезжал, поэтому приводится обычным кастом
      */
-    public static void register(BeanDefinitionRegistry registry, ClassLoader loader, String beanName,
+    /**
+     * Постпроцессор, который зарегистрирует кастомайзер ПОСЛЕ всех постпроцессоров реестра.
+     * <p>
+     * <b>Почему не {@code ImportBeanDefinitionRegistrar} и не {@code BeanDefinitionRegistryPostProcessor}.</b>
+     * Регистратор импорта видит реестр на момент разбора конфигурации: кто займёт имя позже,
+     * он не знает, и поздняя регистрация того же имени у потребителя роняет старт — бросает
+     * ЕГО регистрация, поэтому наш {@code catch} тут не помогает (issue #73). Постпроцессор
+     * реестра видит больше, но не видит определений, которые заводит другой такой же
+     * постпроцессор после него. Фаза {@link BeanFactoryPostProcessor} идёт после ВСЕХ них,
+     * поэтому остаток сжимается до «чужой {@code BeanFactoryPostProcessor} после нашего».
+     * <p>
+     * ⚠️ Постпроцессор обязан объявляться {@code static}-методом без аргументов: иначе
+     * конфигурация и её зависимости уезжают в раннюю инициализацию, мимо пост-процессоров бинов.
+     * <p>
+     * ⚠️ Реестр не подходит или загрузчик неизвестен — НЕ регистрируем ничего. Подставить сюда
+     * загрузчик этого класса нельзя: тесты автоконфигов прячут типы через
+     * {@code FilteredClassLoader}, и проверка «модуль выключился» стала бы фиктивной.
+     */
+    public static BeanFactoryPostProcessor postProcessor(String origin, String beanName,
+                                                         List<String> candidateNames, Consumer<Object> customize) {
+        return factory -> {
+            ClassLoader loader = factory.getBeanClassLoader();
+            if (factory instanceof BeanDefinitionRegistry registry && loader != null) {
+                register(registry, loader, origin, beanName, candidateNames, customize);
+            }
+        };
+    }
+
+    public static void register(BeanDefinitionRegistry registry, ClassLoader loader, String origin, String beanName,
                                 List<String> candidateNames, Consumer<Object> customize) {
         // Регистрируем под КАЖДОЕ найденное имя, а не под первое. Если у потребителя на classpath
         // окажутся ОБА интерфейса (переходное состояние миграции — старый артефакт ещё не выкинут),
@@ -56,11 +87,11 @@ public final class MovedCustomizerRegistrar {
                 // нашу. Проверка именно про это — не затереть чужой бин там, где переопределение
                 // разрешено; падение при ЗАПРЕЩЁННОМ переопределении ловит catch ниже.
                 if (!registry.containsBeanDefinition(name)) {
-                    registerProxy(registry, loader, name, types.get(i), customize);
+                    registerProxy(registry, loader, origin, name, types.get(i), customize);
                 }
             }
         } catch (Throwable degraded) {
-            // Это разбор конфигурации: исключение отсюда уходит в старт контекста и роняет ВСЕ
+            // Мы внутри refresh чужого контекста: исключение отсюда уходит в старт и роняет ВСЕ
             // тесты потребителя. Библиотека отчётов так делать не вправе — тот же инвариант, что
             // стережёт unit/ListenerDegradationTest. Модуль выключается, причина видна на WARNING.
             AllureInstrumentationLogger.warn("CustomizerRegistrar/" + beanName, degraded);
@@ -81,13 +112,23 @@ public final class MovedCustomizerRegistrar {
     }
 
     /** Отдельный метод ради захвата wildcard: {@code Class<?>} → {@code Class<T>}. */
-    private static <T> void registerProxy(BeanDefinitionRegistry registry, ClassLoader loader, String beanName,
-                                          Class<T> customizerType, Consumer<Object> customize) {
+    private static <T> void registerProxy(BeanDefinitionRegistry registry, ClassLoader loader, String origin,
+                                          String beanName, Class<T> customizerType, Consumer<Object> customize) {
         T proxy = customizerType.cast(Proxy.newProxyInstance(loader, new Class<?>[]{customizerType},
                 new CustomizeHandler(customizerType, customize)));
-        registry.registerBeanDefinition(beanName, BeanDefinitionBuilder
+        AbstractBeanDefinition definition = BeanDefinitionBuilder
                 .genericBeanDefinition(customizerType, () -> proxy)
-                .getBeanDefinition());
+                .getBeanDefinition();
+        // Роль и происхождение: без них наш бин выглядит прикладным бином потребителя (виден
+        // в /actuator/beans, кандидат на автовайринг), а в тексте падения стоит «defined in null»
+        // и решение библиотеки нечем аудировать.
+        //
+        // ⚠️ Роль — НЕ украшение: при разборе конфигураций определение с ролью выше прикладной
+        // ТИХО перекрывается @Bean потребителя вместо исключения. Мы регистрируемся позже
+        // разбора, поэтому эта ветка недостижима, — но снимать флаг как ничего не значащий нельзя.
+        definition.setRole(BeanDefinition.ROLE_INFRASTRUCTURE);
+        definition.setResourceDescription(origin);
+        registry.registerBeanDefinition(beanName, definition);
     }
 
     /** Первый из известных типов, который реально есть у этого загрузчика. */
