@@ -121,12 +121,16 @@ class RestAssuredValidationMatcherTest {
     @Test
     @DisplayName("расхождение по ОДНОМУ имени уже видно: порог не «совпало хоть что-то»")
     void частичноеРасхождениеЗамечено() {
-        // Носитель расходится по одному методу, а не целиком. Порог «хоть что-то» молчал бы
-        // ровно там, где дефект и появляется: statusCode уехал, а cookie и time уцелели.
+        // Носитель расходится по одному методу, а не целиком. У Declaring объявлен statusCode
+        // и больше ничего — то есть девять проверок из десяти вплетать не во что, а порог
+        // «совпало хоть что-то» был бы здесь истинным и промолчал.
+        //
+        // Мутация: вернуть порог «хоть что-то» (одна проверка на весь список) → RED.
         assertThat(AllureRestAssuredValidationInstrumentation
-                .uncoveredValidationMethods(TypeDescription.ForLoadedType.of(Inheriting.class)))
+                .uncoveredValidationMethods(TypeDescription.ForLoadedType.of(Declaring.class)))
                 .as("пропажа отдельной проверки не замечена — детектор меряет не то разрешение")
-                .isNotEmpty();
+                .contains("body", "cookie", "time")
+                .hasSize(9);
     }
 
     @Test
