@@ -34,8 +34,6 @@ class InstrumentationDiagnosticsTest {
 
     @BeforeEach
     void сбросБюджета() {
-        // MAX_LOGGED глобален на JVM, порядок тест-классов случайный: без сброса проверка
-        // уровня зависела бы от того, сколько сбоев успел записать сосед.
         FailureLog.forgetBudget();
     }
 
@@ -162,8 +160,8 @@ class InstrumentationDiagnosticsTest {
                 .filteredOn(r -> r.getLevel() == Level.FINE)
                 .as("стек приложен к следу: он и есть тот шум, из-за которого сбой уводили с WARNING")
                 .allMatch(r -> r.getThrown() == null);
-        // Полная запись — ОДНА и под именем мишени этого тест-класса: гейт инвентаря
-        // терпит только их, а нам надо доказать, что уход на FINE не выносит сбой из счётчика.
+        // Полная запись — ОДНА и под именем мишени этого тест-класса: уход на FINE не должен
+        // выносить сбой из счётчика.
         FailureLog.recordFailure(UNRESOLVED_PROBE, unresolvedType());
         assertThat(InstrumentationDiagnostics.failureCount())
                 .as("сбой исчез из счётчика — гейт инвентаря ослеп вместе с логом")

@@ -574,10 +574,9 @@ class InstrumentationApiCanaryTest {
     @Test
     @DisplayName("byte-buddy зовёт «тип не разрешился» тем же именем (иначе ожидаемый шум снова полезет на WARNING)")
     void unresolvedTypeExceptionKeepsItsName() {
-        // По этому имени InstrumentationDiagnostics отличает чужой нерезолвнутый тип от
-        // настоящей поломки нашего трансформера и уводит первый на FINE (#74). Сверка идёт
-        // СТРОКОЙ — компилятор её не проверит, а переименование в byte-buddy вернуло бы WARN
-        // со стеком в каждую сборку потребителя, и никто бы не понял, откуда он снова взялся.
+        // По этому имени InstrumentationDiagnostics уводит чужой нерезолвнутый тип на FINE
+        // (#74). Сверка строкой: компилятор её не проверит, а переименование в byte-buddy
+        // вернуло бы WARN со стеком в каждую сборку потребителя.
         String name = "net.bytebuddy.pool.TypePool$Resolution$NoSuchTypeException";
         Class<?> thrown;
         try {

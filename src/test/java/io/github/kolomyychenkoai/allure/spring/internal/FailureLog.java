@@ -24,7 +24,7 @@ public final class FailureLog {
 
     /**
      * Записать сбой в ЛОГ тем же кодом, что продакшен, не трогая счётчик сбоев и выборку.
-     * Счётчики читает гейт инвентаря, и выдуманные сбои выглядели бы в нём поломкой перехвата.
+     * Почему разделено — в javadoc {@code InstrumentationDiagnostics#logFailure}.
      */
     public static void logFailure(String typeName, Throwable t) {
         InstrumentationDiagnostics.logFailure(typeName, t);
@@ -35,7 +35,7 @@ public final class FailureLog {
         InstrumentationDiagnostics.logFailure(AllureInstrumentation.INSTALL_MARKER, t);
     }
 
-    /** Забыть бюджет напечатанных WARNING: он глобален на JVM, а порядок тестов случайный. */
+    /** Забыть бюджет напечатанных WARNING; зачем — в {@code InstrumentationDiagnostics}. */
     public static void forgetBudget() {
         InstrumentationDiagnostics.forgetLoggedForTests();
     }
