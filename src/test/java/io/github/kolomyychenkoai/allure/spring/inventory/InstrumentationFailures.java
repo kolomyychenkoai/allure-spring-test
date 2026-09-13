@@ -28,11 +28,8 @@ final class InstrumentationFailures {
      * Чьи сбои не считаются поломкой НАШЕЙ инструментации (сравнение — по ИМЕНИ ТИПА, не по
      * всей строке: иначе настоящий сбой с таким словом в тексте исключения был бы проглочен):
      * <ul>
-     *   <li>мишени из {@code InstrumentationDiagnosticsTest} — сбои, которые тест вызывает
-     *       намеренно; без фильтра гейт краснел бы всегда и его бы отключили. Совпадение здесь
-     *       по ПРЕФИКСУ имени тест-класса, а не по точному имени: мишеней у него несколько,
-     *       и перечислять каждую значит править гейт на каждый новый тест. Префикс — имя
-     *       НАШЕГО класса, чужого он не заденет;</li>
+     *   <li>{@code …$NegativeProbe} — мишень намеренного сбоя из {@code InstrumentationDiagnosticsTest};
+     *       без фильтра гейт краснел бы всегда и его бы отключили;</li>
      *   <li>{@code MockMethodAdvice} — артефакт ЧУЖОГО кода: диспетчер Mockito живёт в отдельном
      *       загрузчике, и обход загруженных классов (стратегия Reiterating) не может разрешить его
      *       тип. Наши матчеры этот класс не трогают, перехват не страдает.</li>
@@ -40,11 +37,8 @@ final class InstrumentationFailures {
      * Список гасит сигнал, поэтому пополнять его можно только с обоснованием, почему сбой НЕ наш.
      */
     private static final List<String> IGNORED_TYPES = List.of(
+            "io.github.kolomyychenkoai.allure.spring.unit.InstrumentationDiagnosticsTest$NegativeProbe",
             "org.mockito.internal.creation.bytebuddy.MockMethodAdvice");
-
-    /** Префикс мишеней нашего же теста диагностики: их сбои вызваны намеренно. */
-    private static final String OWN_PROBES =
-            "io.github.kolomyychenkoai.allure.spring.unit.InstrumentationDiagnosticsTest$";
 
     /**
      * Потолок ожидаемого шума. Подавляется не больше ДВУХ сбоев — по одному на строку
@@ -62,6 +56,14 @@ final class InstrumentationFailures {
      * дампу {@code target/instrumentation-diagnostics} и поправь потолок.
      */
     private static final int SUPPRESSED_CEILING = 5;
+
+    /**
+     * Потолок сбоев «описание типа не разрешилось». Они уходят на FINE и в логе сборки не
+     * видны — то есть это ровно тот сигнал, который собирается и без гейта никем не читается.
+     * Замер по дампу: в нашем прогоне их ноль или один. Потолок 5 — запас на пару новых
+     * вариантов; выше него молчание перестаёт быть безобидным, и разбираться надо глазами.
+     */
+    private static final int UNRESOLVED_CEILING = 5;
 
     /**
      * Пол реально применённых трансформаций. Сегодня их 145–151 (замер на трёх прогонах).
@@ -99,6 +101,7 @@ final class InstrumentationFailures {
         int transformed = 0;
         boolean truncated = false;
         Set<String> failures = new LinkedHashSet<>();
+        int unresolved = 0;
         for (Path dump : dumps) {
             List<String> lines;
             try {
@@ -109,6 +112,7 @@ final class InstrumentationFailures {
             installed |= lines.contains("installed=true");
             truncated |= lines.contains("sample_truncated=true");
             transformed += number(lines, "transformed=");
+            unresolved += number(lines, "unresolved=");
             List<String> all = lines.stream()
                     .filter(line -> line.startsWith("failure: "))
                     .map(line -> line.substring("failure: ".length()))
@@ -117,13 +121,19 @@ final class InstrumentationFailures {
             suppressed += (int) all.stream().filter(failure -> !ours(failure)).count();
         }
         if (installed && failures.isEmpty() && suppressed <= SUPPRESSED_CEILING && !truncated
-                && transformed >= TRANSFORMED_FLOOR) {
+                && transformed >= TRANSFORMED_FLOOR && unresolved <= UNRESOLVED_CEILING) {
             return null;
         }
         StringBuilder out = new StringBuilder("СБОИ ПЕРЕХВАТА (байткод-агент):\n");
         if (!installed) {
             out.append("  ✗ агент НЕ установлен НИ В ОДНОЙ JVM — весь байткод-слой мёртв.\n")
                     .append("    Обычно это запрет self-attach: нужен -XX:+EnableDynamicAgentLoading (JEP 451).\n");
+        }
+        if (unresolved > UNRESOLVED_CEILING) {
+            out.append("  ✗ описание типа не разрешилось ").append(unresolved)
+                    .append(" раз при потолке ").append(UNRESOLVED_CEILING)
+                    .append(" — такие сбои идут на FINE и в логе сборки не видны.\n")
+                    .append("    Перемерь по дампу: матчеры могли не решить про пачку типов, и раздел отчёта обеднел.\n");
         }
         if (installed && transformed < TRANSFORMED_FLOOR) {
             // Позитивный сигнал: агент может встать и не перехватить НИЧЕГО — матчеры заданы
@@ -182,6 +192,6 @@ final class InstrumentationFailures {
     private static boolean ours(String failure) {
         int arrow = failure.indexOf(ARROW);
         String type = arrow < 0 ? failure : failure.substring(0, arrow);
-        return !type.startsWith(OWN_PROBES) && IGNORED_TYPES.stream().noneMatch(type::equals);
+        return IGNORED_TYPES.stream().noneMatch(type::equals);
     }
 }
