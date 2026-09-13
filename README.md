@@ -140,8 +140,13 @@ test-classpath, который сам себя «вшивает». Точки в
 > Если её запретят, молчания не будет: `install()` бросит
 > `IllegalStateException: Could not self-attach`, библиотека напечатает
 > `WARNING [Allure Instrumentation/<install>]` со стеком, а байткодный слой отчёта — ассерты,
-> JDBC, Kafka, WireMock, Liquibase, Mockito — не поднимется. Тесты при этом останутся зелёными,
-> поэтому ищите в логе строку `Could not self-attach`.
+> JDBC, Kafka, WireMock, Liquibase, Mockito — не поднимется. Ищите в логе строку
+> `Could not self-attach`.
+>
+> Сам сбой теста не роняет: библиотека его ловит. Но прогон, скорее всего, покраснеет
+> целиком, и не из-за нас: inline-мок-мейкеру Mockito нужен тот же агент. Замер на
+> приложении из нашего набора потребителей — 29 красных тестов из 29, и ровно столько же
+> без библиотеки (`docs/consumer-affects.md`).
 >
 > Разрешить явно (у нас в `pom.xml` так и сделано, Mockito требует того же):
 >
@@ -155,11 +160,11 @@ test-classpath, который сам себя «вшивает». Точки в
 > </plugin>
 > ```
 >
-> ⚠️ **Если свой `argLine` у вас уже есть** — не заменяйте его, а дописывайте флаг в ту же
-> строку: surefire берёт только последнее значение, и всё, чего вы не написали, пропадёт молча.
+> ⚠️ **Если свой `argLine` у вас уже есть** — не заменяйте его, а дописывайте флаг к тому,
+> что там стоит: `argLine` у плагина один, и всё, чего вы не перенесли, пропадёт молча.
 > С jacoco нужен ещё и `@{argLine}`, иначе покрытие собираться не будет:
-> `<argLine>@{argLine} -XX:+EnableDynamicAgentLoading</argLine>`. С любым своим `-javaagent`
-> (aspectjweaver и подобные) держите оба ключа рядом:
+> `<argLine>@{argLine} -XX:+EnableDynamicAgentLoading</argLine>`. Со своим `-javaagent`
+> (aspectjweaver и подобные) держите оба ключа в одной строке:
 > `<argLine>-javaagent:… -XX:+EnableDynamicAgentLoading</argLine>`.
 
 > **Четыре строки про `sun.misc.Unsafe` в вашей сборке.** На JDK 25 их печатает byte-buddy,
