@@ -430,11 +430,10 @@
                              на другой JVM — красный, а не молчание. Пустое свойство тоже красное. -->
                         <expected.java.feature>25</expected.java.feature>
                     </systemPropertyVariables>
-                    <!-- Self-attach byte-buddy-агента (ByteBuddyAgent.install) на JDK 21+ печатает
-                         предупреждение, а в будущих JDK может быть запрещён по умолчанию (JEP 451).
-                         Разрешаем явно: иначе весь байткод-слой ТИХО выключится.
-                         ⚠️ Если в проекте появится jacoco — писать «@{argLine} -XX:+…», иначе его
-                         argLine затрётся и покрытие пропадёт молча. -->
+                    <!-- Без флага ByteBuddyAgent.install() бросает «Could not self-attach»:
+                         байткод-слой отчёта не встаёт, а прогон валится на Mockito (JEP 451).
+                         ⚠️ argLine у плагина один: НЕ заменять его, а дописывать флаг к тому,
+                         что уже стоит. Подробности — README, «Аварийный выключатель». -->
                     <argLine>-XX:+EnableDynamicAgentLoading</argLine>
                 </configuration>
                 <executions>

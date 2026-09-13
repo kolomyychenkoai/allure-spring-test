@@ -105,7 +105,7 @@ public final class InstrumentationDiagnostics {
             }
         }
         if (n <= MAX_LOGGED) {
-            AllureInstrumentationLogger.warn("Instrumentation/" + typeName, t);
+            AllureInstrumentationLogger.warn(component(typeName), t);
         } else if (n == MAX_LOGGED + 1) {
             AllureInstrumentationLogger.logger().warning(
                     "[Allure Instrumentation] дальнейшие сбои трансформации в лог не печатаются; "
@@ -113,6 +113,11 @@ public final class InstrumentationDiagnostics {
         } else {
             AllureInstrumentationLogger.logger().log(Level.FINE, () -> "[Allure Instrumentation] " + brief);
         }
+    }
+
+    /** Имя компонента в скобке лога: «[Allure Instrumentation/ТИП]». Цитируется в README. */
+    static String component(String typeName) {
+        return "Instrumentation/" + typeName;
     }
 
     /** Только тип и сообщение, с обрезкой: стек не храним (иначе утечка через ClassLoader). */

@@ -2,10 +2,20 @@ package io.github.kolomyychenkoai.allure.spring.unit;
 
 import io.qameta.allure.Epic;
 import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentation;
+import io.github.kolomyychenkoai.allure.spring.internal.AllureInstrumentationLogger;
+import io.github.kolomyychenkoai.allure.spring.internal.InstallLogLine;
 import io.github.kolomyychenkoai.allure.spring.internal.InstrumentationDiagnostics;
+import io.github.kolomyychenkoai.allure.spring.support.LibraryLog;
 import net.bytebuddy.asm.Advice;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
 
 import static net.bytebuddy.matcher.ElementMatchers.named;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -79,5 +89,32 @@ class InstrumentationDiagnosticsTest {
     void выборкаОтдаётсяКопией() {
         assertThatCode(() -> InstrumentationDiagnostics.failures().clear())
                 .isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
+    @DisplayName("строка про сбой привязки агента: README цитирует ровно то, что складывает код")
+    void строкаПроСбойПривязкиСовпадаетСReadme() throws Exception {
+        // Обещание без теста: README учит искать сбой self-attach по строке в логе, а строку
+        // складывают ТРИ места — литерал <install>, сегмент «Instrumentation/» и скобка
+        // «[Allure …]». Мутация в любом из трёх красит этот тест; ссылками это не держится,
+        // README не читает ни один другой гейт (CommentReferenceResolvesTest берёт только
+        // src/main и src/test).
+        String expected = "[Allure " + InstallLogLine.component() + "]";
+
+        String readme = Files.readString(Path.of("README.md"), StandardCharsets.UTF_8);
+        assertThat(readme)
+                .as("README обещает потребителю не ту строку, которую печатает библиотека")
+                .contains(expected);
+
+        // Уровень записи в скобку не входит НАМЕРЕННО: под Spring Boot запись уходит в Logback
+        // и печатается как WARN, а не WARNING. Обещать можно только то, что не зависит от
+        // настроек логирования вокруг.
+        List<LogRecord> said = LibraryLog.capture(() -> AllureInstrumentationLogger.warn(
+                InstallLogLine.component(), new IllegalStateException("Could not self-attach")));
+        assertThat(said)
+                .filteredOn(r -> r.getLevel() == Level.WARNING)
+                .extracting(LogRecord::getMessage)
+                .as("библиотека печатает не ту строку, которую обещает README")
+                .anyMatch(m -> m.contains(expected));
     }
 }
