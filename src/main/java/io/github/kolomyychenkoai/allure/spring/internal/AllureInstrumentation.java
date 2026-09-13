@@ -28,9 +28,10 @@ public final class AllureInstrumentation {
     /**
      * Аварийный выключатель байткод-перехвата: {@code -Dallure.spring.instrumentation=off}.
      * <p>
-     * Нужен потребителю, у которого перехват конфликтует с чужим агентом или ломает сборку:
+     Нужен потребителю, у которого перехват конфликтует с чужим агентом или ломает сборку:
      * без выключателя единственный выход — выкинуть библиотеку целиком, хотя Spring-каналы
-     * (MockMvc, WebTestClient, конфиги, логи, Liquibase) работают и без байткода.
+     * (WebTestClient, конфиги, логи, авто-сконфигурированный MockMvc) работают и без байткода.
+     * Что именно теряется вместе с байткодом — в README, раздел «Аварийный выключатель».
      * <p>
      * ⚠️ Рассчитан на СТАРТ JVM (флаг в командной строке), а не на переключение по ходу прогона.
      * Свойство честно перечитывается на каждом {@link #retransform}, но у каждого модуля
@@ -82,6 +83,14 @@ public final class AllureInstrumentation {
      * модулях), иначе под параллельными тестами навесятся дубли трансформеров и шаги
      * в отчёте задвоятся.
      */
+    /**
+     * Имя «типа» для сбоя самой привязки агента: настоящего типа тут нет, а строку в логе
+     * потребитель ищет именно по нему (README, раздел «Аварийный выключатель»). Литерал
+     * держит {@code InstrumentationDiagnosticsTest} через мостик {@code InstallLogLine},
+     * иначе README расходится с логом молча.
+     */
+    static final String INSTALL_MARKER = "<install>";
+
     public static void retransform(ElementMatcher<? super TypeDescription> typeMatcher,
                                    AgentBuilder.Transformer transformer) {
         if (disabled()) {
@@ -111,7 +120,7 @@ public final class AllureInstrumentation {
                     .transform(transformer)
                     .installOn(instrumentation);
         } catch (Throwable t) {
-            InstrumentationDiagnostics.recordFailure("<install>", t);
+            InstrumentationDiagnostics.recordFailure(INSTALL_MARKER, t);
         }
     }
 

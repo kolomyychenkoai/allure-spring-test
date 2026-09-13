@@ -45,15 +45,17 @@ show() {
     printf '%s' "$out" | grep -c '' | tr -d ' ' > "$PRINTED_FILE"
 }
 
-# Добавленные строки комментариев кода: // /* * #  (шебанг не считаем).
+# Добавленные строки комментариев: // /* * # <!--  (шебанг не считаем).
+# ⚠️ pom.xml входит в радиус НАРЯДУ с src: комментарии там несут те же обещания
+# потребителю, а правило «один факт — одно место» (§6.3) считает их наравне.
 # ⚠️ НОВЫЕ файлы добавляем отдельно: git diff их не видит, пока не сделан `git add`, и проход
 # молча пропускал бы целый новый класс. Гейт на число такое не ловит — оба счётчика согласны.
 added_comments() {
-    { git diff "$RANGE" -- src scripts tools
-      git ls-files --others --exclude-standard -- src scripts tools \
+    { git diff "$RANGE" -- src scripts tools pom.xml
+      git ls-files --others --exclude-standard -- src scripts tools pom.xml \
           | while read -r f; do sed 's/^/+/' "$f"; done
     } | grep -E '^\+' | grep -vE '^\+\+\+' \
-        | grep -E '^\+[[:space:]]*(//|/\*|\*|#)' | grep -vE '^\+#!'
+        | grep -E '^\+[[:space:]]*(//|/\*|\*|#|<!--)' | grep -vE '^\+#!'
 }
 
 echo "Скан комментариев: $RANGE (включая рабочее дерево)"
@@ -62,15 +64,15 @@ echo "Скан комментариев: $RANGE (включая рабочее �
 # Цифра «сколько я насыпал» не видна ни автору, ни ревьюеру, пока её не посчитать.
 # Она же — единственный измеримый результат прохода: «было N, стало M».
 hdr "1. ОБЪЁМ: строк комментариев добавлено (по файлам)"
-for f in $(git diff --name-only "$RANGE" -- src scripts tools
-           git ls-files --others --exclude-standard -- src scripts tools); do
+for f in $(git diff --name-only "$RANGE" -- src scripts tools pom.xml
+           git ls-files --others --exclude-standard -- src scripts tools pom.xml); do
     [ -f "$f" ] || continue
     if git ls-files --error-unmatch "$f" >/dev/null 2>&1; then
         body=$(git diff "$RANGE" -- "$f" | grep -E '^\+' | grep -vE '^\+\+\+')
     else
         body=$(sed 's/^/+/' "$f")   # новый файл целиком считается добавленным
     fi
-    n=$(printf '%s\n' "$body" | grep -cE '^\+[[:space:]]*(//|/\*|\*|#)')
+    n=$(printf '%s\n' "$body" | grep -cE '^\+[[:space:]]*(//|/\*|\*|#|<!--)')
     [ "$n" -gt 0 ] && printf '  %4s  %s\n' "$n" "$f"
 done | sort -rn | show
 COUNTED=$(added_comments | wc -l | tr -d ' ')
@@ -95,9 +97,9 @@ fi
 # «общей точке» в двух местах бывает законно, но именно так выглядит факт, размазанный
 # по репозиторию. Один факт — одно место, остальные ссылаются (§6, правило 3).
 hdr "3. КАНДИДАТЫ НА ДУБЛЬ: пары слов в комментариях 2+ файлов"
-git diff "$RANGE" -- src scripts tools | awk '
+git diff "$RANGE" -- src scripts tools pom.xml | awk '
     /^\+\+\+ b\// { file = substr($2, 3); next }
-    /^\+[ \t]*(\/\/|\/\*|\*|#)/ {
+    /^\+[ \t]*(\/\/|\/\*|\*|#|<!--)/ {
         line = $0
         gsub(/[.,;:()«»"\047`—–\-]/, " ", line)
         n = split(line, w, /[ \t]+/)
