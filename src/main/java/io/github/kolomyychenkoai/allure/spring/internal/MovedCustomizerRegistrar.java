@@ -1,5 +1,8 @@
 package io.github.kolomyychenkoai.allure.spring.internal;
 
+import org.springframework.beans.factory.config.BeanDefinition;
+import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
+import org.springframework.beans.factory.support.AbstractBeanDefinition;
 import org.springframework.beans.factory.support.BeanDefinitionBuilder;
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
 
@@ -29,17 +32,78 @@ import java.util.function.Consumer;
  */
 public final class MovedCustomizerRegistrar {
 
+    /**
+     * Что сказать, когда имя за потребителем: раздел отчёта при этом пуст.
+     * <p>
+     * Имя бина в текст НЕ подставляем — оно уже стоит в названии канала, а переменный текст
+     * ломает однократность (ключ дедупликации — сам текст) и уводит данные потребителя
+     * в артефакт CI. Держит {@code ActivationDiagnosticsTest#noteOnceIsCalledWithConstantsOnly}.
+     */
+    private static final String NAME_TAKEN =
+            "имя этого бина занято вашей конфигурацией — кастомайзер не регистрируем, "
+                    + "и HTTP-шаги соответствующего клиента в отчёт не попадут. "
+                    + "Заглушить эту строку: -Dallure.spring.diagnostics=off";
+
+    /** Что сказать, когда фабрика не реестр или загрузчик неизвестен: регистрировать нечем. */
+    private static final String SKIPPED_NO_REGISTRY =
+            "контекст не отдаёт реестр определений или загрузчик классов — кастомайзер "
+                    + "не регистрируем, HTTP-шаги этого клиента в отчёт не попадут";
+
     private MovedCustomizerRegistrar() {
+    }
+
+    /** Имя канала диагностики: по имени бина, чтобы новости двух кастомайзеров не слиплись. */
+    private static String componentOf(String beanName) {
+        return "CustomizerRegistrar/" + beanName;
+    }
+
+    /**
+     * Постпроцессор, который зарегистрирует кастомайзер ПОСЛЕ всех постпроцессоров реестра.
+     * <p>
+     * <b>Почему не {@code ImportBeanDefinitionRegistrar} и не {@code BeanDefinitionRegistryPostProcessor}.</b>
+     * Регистратор импорта видит реестр на момент разбора конфигурации: кто займёт имя позже,
+     * он не знает, и поздняя регистрация того же имени у потребителя роняет старт — бросает
+     * ЕГО регистрация, поэтому наш {@code catch} тут не помогает (issue #73). Постпроцессор
+     * реестра видит больше, но не видит определений, которые заводит другой такой же
+     * постпроцессор после него. Фаза {@link BeanFactoryPostProcessor} идёт после ВСЕХ них,
+     * поэтому остаток сжимается до «чужой {@code BeanFactoryPostProcessor} после нашего».
+     * <p>
+     * ⚠️ Постпроцессор обязан объявляться {@code static}-методом без аргументов: иначе
+     * конфигурация и её зависимости уезжают в раннюю инициализацию, мимо пост-процессоров бинов.
+     * <p>
+     * ⚠️ Реестр не подходит или загрузчик неизвестен — НЕ регистрируем ничего. Подставить сюда
+     * загрузчик этого класса нельзя: тесты автоконфигов прячут типы через
+     * {@code FilteredClassLoader}, и проверка «модуль выключился» стала бы фиктивной.
+     */
+    public static BeanFactoryPostProcessor postProcessor(Class<?> origin, String beanName,
+                                                         List<String> candidateNames, Consumer<Object> customize) {
+        return factory -> {
+            // Внутри refresh чужого контекста: наружу отсюда не бросаем НИЧЕГО, иначе у
+            // потребителя не поднимется контекст и упадёт весь прогон.
+            try {
+                ClassLoader loader = factory.getBeanClassLoader();
+                if (factory instanceof BeanDefinitionRegistry registry && loader != null) {
+                    register(registry, loader, origin.getName(), beanName, candidateNames, customize);
+                } else {
+                    // Молчащий отказ — та же тихая потеря раздела, от которой лечат #76 и #77.
+                    ActivationDiagnostics.noteOnce(componentOf(beanName), SKIPPED_NO_REGISTRY);
+                }
+            } catch (Throwable degraded) {
+                AllureInstrumentationLogger.warn("CustomizerRegistrar/" + beanName, degraded);
+            }
+        };
     }
 
     /**
      * Регистрирует кастомайзер, если интерфейс нашёлся под одним из известных имён.
      * Не нашёлся — тихо ничего не делает (модуль просто выключен, ошибок нет).
      *
+     * @param origin    чьё это решение: попадает в {@code resourceDescription} определения
+     *                  и в текст падения Spring вместо «defined in null»
      * @param customize что сделать с билдером; аргумент — тип из {@code spring-test},
      *                  который между мажорами НЕ переезжал, поэтому приводится обычным кастом
      */
-    public static void register(BeanDefinitionRegistry registry, ClassLoader loader, String beanName,
+    public static void register(BeanDefinitionRegistry registry, ClassLoader loader, String origin, String beanName,
                                 List<String> candidateNames, Consumer<Object> customize) {
         // Регистрируем под КАЖДОЕ найденное имя, а не под первое. Если у потребителя на classpath
         // окажутся ОБА интерфейса (переходное состояние миграции — старый артефакт ещё не выкинут),
@@ -55,12 +119,18 @@ public final class MovedCustomizerRegistrar {
                 // Имя уже занято — НЕ трогаем: пользовательская конфигурация обязана побеждать
                 // нашу. Проверка именно про это — не затереть чужой бин там, где переопределение
                 // разрешено; падение при ЗАПРЕЩЁННОМ переопределении ловит catch ниже.
-                if (!registry.containsBeanDefinition(name)) {
-                    registerProxy(registry, loader, name, types.get(i), customize);
+                if (registry.containsBeanDefinition(name)) {
+                    // Имя за потребителем — это правильный исход, но НЕ безобидный: без нашего
+                    // кастомайзера раздел HTTP в отчёте пуст, а тестам от этого не плохо.
+                    // Отключение раздела обязано объявлять о себе — иначе потребитель ищет
+                    // пропавшие шаги в библиотеке, а причина у него в конфигурации (#73).
+                    ActivationDiagnostics.noteOnce(componentOf(name), NAME_TAKEN);
+                    continue;
                 }
+                registerProxy(registry, loader, origin, name, types.get(i), customize);
             }
         } catch (Throwable degraded) {
-            // Это разбор конфигурации: исключение отсюда уходит в старт контекста и роняет ВСЕ
+            // Мы внутри refresh чужого контекста: исключение отсюда уходит в старт и роняет ВСЕ
             // тесты потребителя. Библиотека отчётов так делать не вправе — тот же инвариант, что
             // стережёт unit/ListenerDegradationTest. Модуль выключается, причина видна на WARNING.
             AllureInstrumentationLogger.warn("CustomizerRegistrar/" + beanName, degraded);
@@ -81,13 +151,19 @@ public final class MovedCustomizerRegistrar {
     }
 
     /** Отдельный метод ради захвата wildcard: {@code Class<?>} → {@code Class<T>}. */
-    private static <T> void registerProxy(BeanDefinitionRegistry registry, ClassLoader loader, String beanName,
-                                          Class<T> customizerType, Consumer<Object> customize) {
+    private static <T> void registerProxy(BeanDefinitionRegistry registry, ClassLoader loader, String origin,
+                                          String beanName, Class<T> customizerType, Consumer<Object> customize) {
         T proxy = customizerType.cast(Proxy.newProxyInstance(loader, new Class<?>[]{customizerType},
                 new CustomizeHandler(customizerType, customize)));
-        registry.registerBeanDefinition(beanName, BeanDefinitionBuilder
+        AbstractBeanDefinition definition = BeanDefinitionBuilder
                 .genericBeanDefinition(customizerType, () -> proxy)
-                .getBeanDefinition());
+                .getBeanDefinition();
+        // Роль прячет наш бин из /actuator/beans, происхождение ставит в текст падения Spring
+        // имя автоконфига вместо «defined in null». Тот же приём и та же причина, что у аспекта
+        // в AllureDataJpaAutoConfiguration.
+        definition.setRole(BeanDefinition.ROLE_INFRASTRUCTURE);
+        definition.setResourceDescription(origin);
+        registry.registerBeanDefinition(beanName, definition);
     }
 
     /** Первый из известных типов, который реально есть у этого загрузчика. */

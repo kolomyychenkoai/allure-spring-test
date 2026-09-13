@@ -63,7 +63,7 @@ class MovedCustomizerRegistrarTest {
                 MovedCustomizerRegistrar.resolve(getClass().getClassLoader(),
                         MovedTypeNames.WEBTESTCLIENT_CUSTOMIZER).orElseThrow().getName());
 
-        MovedCustomizerRegistrar.register(registry, getClass().getClassLoader(),
+        MovedCustomizerRegistrar.register(registry, getClass().getClassLoader(), MovedCustomizerRegistrarTest.class.getName(),
                 "allureCustomizer", bothAlive, builder -> { });
 
         assertThat(registry.getBeanDefinitionNames())
@@ -91,7 +91,7 @@ class MovedCustomizerRegistrarTest {
                 "org.springframework.boot.webmvc.test.")) {
             DefaultListableBeanFactory registry = new DefaultListableBeanFactory();
 
-            assertThatCode(() -> MovedCustomizerRegistrar.register(registry, loader,
+            assertThatCode(() -> MovedCustomizerRegistrar.register(registry, loader, MovedCustomizerRegistrarTest.class.getName(),
                     MovedTypeNames.MOCKMVC_CUSTOMIZER_BEAN, MovedTypeNames.MOCKMVC_CUSTOMIZER,
                     builder -> { }))
                     .doesNotThrowAnyException();
@@ -110,7 +110,7 @@ class MovedCustomizerRegistrarTest {
         Class<?> iface = MovedCustomizerRegistrar
                 .resolve(getClass().getClassLoader(), MovedTypeNames.MOCKMVC_CUSTOMIZER).orElseThrow();
 
-        MovedCustomizerRegistrar.register(registry, getClass().getClassLoader(),
+        MovedCustomizerRegistrar.register(registry, getClass().getClassLoader(), MovedCustomizerRegistrarTest.class.getName(),
                 MovedTypeNames.MOCKMVC_CUSTOMIZER_BEAN, MovedTypeNames.MOCKMVC_CUSTOMIZER, got::set);
 
         assertThat(registry.getBeanNamesForType(iface))

@@ -653,8 +653,12 @@
                          технологиям. Компиляция — всё или ничего, поэтому без этого списка
                          профиль не собрался бы и после починки зависимостей.
 
-                         Что при этом НЕ проверяется на Boot 3: авто-регистрация кастомайзеров
-                         MockMvc/WebTestClient и демо-витрины MockMvc/WebTestClient/TestRestTemplate.
+                         Что при этом НЕ проверяется на Boot 3: демо-витрины
+                         MockMvc/WebTestClient/TestRestTemplate и присутствие кастомайзера
+                         в поднятом контексте. Фаза регистрации и поведение при занятом имени
+                         проверяются: autoconfig/AutoConfigurationDegradationTest из списка
+                         исключений не выведен и поднимает оба автоконфига через
+                         ApplicationContextRunner.
                          Проверяется всё остальное — байткод-слой целиком, канарейки, диагностика,
                          резолв переехавших имён (unit/MovedCustomizerRegistrarTest и
                          unit/ActivationDiagnosticsTest держат имена СТРОКАМИ, поэтому собираются

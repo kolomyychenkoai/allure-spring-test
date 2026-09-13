@@ -101,9 +101,10 @@ public class AllureDataJpaAutoConfiguration {
                         return;
                     }
                     RootBeanDefinition definition = new RootBeanDefinition(AllureRepositoryAspect.class);
-                    // Роль и происхождение: иначе наш бин выглядит прикладным бином потребителя
-                    // (виден в /actuator/beans, кандидат на автовайринг), а в тексте ошибки
-                    // стоит «defined in null» — решение библиотеки нечем аудировать.
+                    // Роль и происхождение: иначе наш бин виден в /actuator/beans как прикладной,
+                    // а в тексте ошибки стоит «defined in null» — решение библиотеки нечем
+                    // аудировать. На автовайринг роль НЕ влияет: его решает флаг
+                    // autowireCandidate, а getRole() читает только выбор уровня лога.
                     definition.setRole(BeanDefinition.ROLE_INFRASTRUCTURE);
                     definition.setResourceDescription(AllureDataJpaAutoConfiguration.class.getName());
                     registry.registerBeanDefinition(ASPECT_BEAN_NAME, definition);

@@ -4,13 +4,10 @@ import io.github.kolomyychenkoai.allure.spring.internal.MovedCustomizerRegistrar
 import io.github.kolomyychenkoai.allure.spring.internal.MovedTypeNames;
 import io.github.kolomyychenkoai.allure.spring.rest.internal.AllureWebTestClientFilter;
 import io.github.kolomyychenkoai.allure.spring.rest.internal.AllureWebTestClientLogger;
-import org.springframework.beans.factory.BeanClassLoaderAware;
-import org.springframework.beans.factory.support.BeanDefinitionRegistry;
+import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
-import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.ImportBeanDefinitionRegistrar;
-import org.springframework.core.type.AnnotationMetadata;
+import org.springframework.context.annotation.Bean;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
 
@@ -35,28 +32,20 @@ import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
 // Оба типа НЕ переезжали, поэтому здесь литералы безопасны; имя самого кастомайзера от
 // мажора зависит, и его проверяет регистратор — строкой.
 @ConditionalOnClass({WebTestClient.class, ExchangeFilterFunction.class})
-@Import(AllureWebTestClientAutoConfiguration.Registrar.class)
 public class AllureWebTestClientAutoConfiguration {
 
-    /** Резолвит переехавший интерфейс и регистрирует наш кастомайзер прокси-бином. */
-    public static class Registrar implements ImportBeanDefinitionRegistrar, BeanClassLoaderAware {
-
-        private ClassLoader loader = getClass().getClassLoader();
-
-        @Override
-        public void setBeanClassLoader(ClassLoader classLoader) {
-            this.loader = classLoader;
-        }
-
-        @Override
-        public void registerBeanDefinitions(AnnotationMetadata metadata, BeanDefinitionRegistry registry) {
-            MovedCustomizerRegistrar.register(registry, loader,
-                    MovedTypeNames.WEBTESTCLIENT_CUSTOMIZER_BEAN, MovedTypeNames.WEBTESTCLIENT_CUSTOMIZER,
-                    // filter ловит КАЖДЫЙ обмен (вкл. статус-онли, без чтения тела) → буфер→replay;
-                    // consumer полностью логирует обмены с чтением тела (на тест-потоке, вкл. тела).
-                    builder -> ((WebTestClient.Builder) builder)
-                            .filter(new AllureWebTestClientFilter())
-                            .entityExchangeResultConsumer(AllureWebTestClientLogger::log));
-        }
+    /**
+     * Регистрирует кастомайзер прокси-бином; фаза, причина и требование {@code static} —
+     * в javadoc {@link MovedCustomizerRegistrar#postProcessor}.
+     */
+    @Bean
+    static BeanFactoryPostProcessor allureWebTestClientCustomizerRegistrar() {
+        return MovedCustomizerRegistrar.postProcessor(AllureWebTestClientAutoConfiguration.class,
+                MovedTypeNames.WEBTESTCLIENT_CUSTOMIZER_BEAN, MovedTypeNames.WEBTESTCLIENT_CUSTOMIZER,
+                // filter ловит КАЖДЫЙ обмен (вкл. статус-онли, без чтения тела) → буфер→replay;
+                // consumer полностью логирует обмены с чтением тела (на тест-потоке, вкл. тела).
+                builder -> ((WebTestClient.Builder) builder)
+                        .filter(new AllureWebTestClientFilter())
+                        .entityExchangeResultConsumer(AllureWebTestClientLogger::log));
     }
 }

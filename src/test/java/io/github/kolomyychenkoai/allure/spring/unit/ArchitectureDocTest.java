@@ -130,7 +130,9 @@ class ArchitectureDocTest {
         expected.put("листенеры", "%d листенеров".formatted(entryPoints(FACTORIES).size()));
         expected.put("автоконфиги", "%d автоконфига".formatted(entryPoints(IMPORTS).size()));
         expected.put("классы internal", "(%d классов + `package-info`)".formatted(internalClasses));
-        expected.put("объём маршрута", "Итого %d строка".formatted(routeLines()));
+        // «Итого строк: N», а не «Итого N строка»: при числе, не кончающемся на 1, вторая
+        // форма нечитаема, а шаблон один на все числа не согласуешь.
+        expected.put("объём маршрута", "Итого строк: %d".formatted(routeLines()));
         expected.put("файлы со строковым матчером", "%d файлов".formatted(filesContaining("named(\"")));
 
         List<String> stale = expected.entrySet().stream()
