@@ -86,7 +86,7 @@ public final class AllureInstrumentation {
     /**
      * Имя «типа» для сбоя самой привязки агента: настоящего типа тут нет, а строку в логе
      * потребитель ищет именно по нему (README, раздел «Аварийный выключатель»). Литерал
-     * держит {@code InstrumentationDiagnosticsTest} через мостик {@code InstallLogLine},
+     * держит {@code InstrumentationDiagnosticsTest} через мостик {@code FailureLog},
      * иначе README расходится с логом молча.
      */
     static final String INSTALL_MARKER = "<install>";

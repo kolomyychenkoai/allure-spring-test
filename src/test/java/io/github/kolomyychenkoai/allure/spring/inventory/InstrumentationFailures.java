@@ -28,8 +28,11 @@ final class InstrumentationFailures {
      * Чьи сбои не считаются поломкой НАШЕЙ инструментации (сравнение — по ИМЕНИ ТИПА, не по
      * всей строке: иначе настоящий сбой с таким словом в тексте исключения был бы проглочен):
      * <ul>
-     *   <li>{@code …$NegativeProbe} — мишень намеренного сбоя из {@code InstrumentationDiagnosticsTest};
-     *       без фильтра гейт краснел бы всегда и его бы отключили;</li>
+     *   <li>мишени из {@code InstrumentationDiagnosticsTest} — сбои, которые тест вызывает
+     *       намеренно; без фильтра гейт краснел бы всегда и его бы отключили. Совпадение здесь
+     *       по ПРЕФИКСУ имени тест-класса, а не по точному имени: мишеней у него несколько,
+     *       и перечислять каждую значит править гейт на каждый новый тест. Префикс — имя
+     *       НАШЕГО класса, чужого он не заденет;</li>
      *   <li>{@code MockMethodAdvice} — артефакт ЧУЖОГО кода: диспетчер Mockito живёт в отдельном
      *       загрузчике, и обход загруженных классов (стратегия Reiterating) не может разрешить его
      *       тип. Наши матчеры этот класс не трогают, перехват не страдает.</li>
@@ -37,8 +40,11 @@ final class InstrumentationFailures {
      * Список гасит сигнал, поэтому пополнять его можно только с обоснованием, почему сбой НЕ наш.
      */
     private static final List<String> IGNORED_TYPES = List.of(
-            "io.github.kolomyychenkoai.allure.spring.unit.InstrumentationDiagnosticsTest$NegativeProbe",
             "org.mockito.internal.creation.bytebuddy.MockMethodAdvice");
+
+    /** Префикс мишеней нашего же теста диагностики: их сбои вызваны намеренно. */
+    private static final String OWN_PROBES =
+            "io.github.kolomyychenkoai.allure.spring.unit.InstrumentationDiagnosticsTest$";
 
     /**
      * Потолок ожидаемого шума. Подавляется не больше ДВУХ сбоев — по одному на строку
@@ -176,6 +182,6 @@ final class InstrumentationFailures {
     private static boolean ours(String failure) {
         int arrow = failure.indexOf(ARROW);
         String type = arrow < 0 ? failure : failure.substring(0, arrow);
-        return IGNORED_TYPES.stream().noneMatch(type::equals);
+        return !type.startsWith(OWN_PROBES) && IGNORED_TYPES.stream().noneMatch(type::equals);
     }
 }

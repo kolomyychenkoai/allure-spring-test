@@ -16,8 +16,10 @@ import java.util.logging.Logger;
  * сразу трёх тест-классов. Жил тремя дословными копиями, пока копий было две; на третьей
  * стало ясно, что это фикстура.
  * <p>
- * Уровень коллектора — {@code ALL}: иначе тест зависел бы от настроек логирования вокруг,
- * а проверять надо в том числе САМ уровень записи.
+ * Уровень {@code ALL} ставится И коллектору, И самому логгеру: JUL отсекает запись по уровню
+ * логгера ДО хендлеров, поэтому без второй половины ни одна запись уровня {@code FINE} до
+ * коллектора не доходит и тест «ушло на FINE» зеленеет вхолостую. Прежний уровень логгера
+ * возвращается в {@code finally} — иначе след из одного теста залил бы лог всей сборки.
  */
 public final class LibraryLog {
 
@@ -43,6 +45,8 @@ public final class LibraryLog {
         collector.setLevel(Level.ALL);
         Logger logger = AllureInstrumentationLogger.logger();
         logger.addHandler(collector);
+        Level was = logger.getLevel();
+        logger.setLevel(Level.ALL);
         // ⚠️ Родительские хендлеры на время замера отключаем: тест потолка делает 70 настоящих
         // noteOnce, и они уходили бы в лог сборки, разбавляя настоящие строки библиотеки в 24
         // раза. Канал ценен ровно своей читаемостью — на ней стоит весь класс диагностики.
@@ -51,6 +55,7 @@ public final class LibraryLog {
         try {
             action.run();
         } finally {
+            logger.setLevel(was);
             logger.setUseParentHandlers(parents);
             logger.removeHandler(collector);
         }
