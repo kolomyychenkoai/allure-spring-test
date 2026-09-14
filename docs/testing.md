@@ -95,6 +95,7 @@ Surefire берёт классы по маскам `*Test`, `*Tests`, `*IT` — 
 | `inventory/ReportInventoryCheck` | одно из: отчёт разошёлся со снапшотом, вложение без файла, мусор в имени или теле, сбои инструментирования, пустой прогон | читать текст ошибки, дальше §5 |
 | `inventory/TestCountCheck` | число тестов устарело в `docs/architecture.md`, в `docs/testing.md` или в обоих | поправить оба |
 | `unit/TestingDocTest` | числа или ссылки в этом файле разошлись с репозиторием | поправить текст |
+| `unit/MeasuredNumbersDocTest` | число, выданное за замер, разошлось со своим источником | поправить документ, а если изменился сам замер — сначала источник |
 | `canary/InstrumentationApiCanaryTest` | в сторонней библиотеке пропал или переехал метод, который мы инструментируем | §4 |
 | `unit/ListenerDegradationTest` | листенер роняет тест, когда чужой библиотеки нет в classpath. Если упал `everyListenerCovered` — просто нет сценария | чинить гард в листенере; для `everyListenerCovered` добавить сценарий |
 | `unit/ReportITVerifyChannelGuardTest` | в демо-тесте появился ассерт мимо `CurrentReport` | переписать через `CurrentReport` |
@@ -250,6 +251,6 @@ CI нет. Единственная защита — полный `mvn clean tes
 
 ---
 
-Числа в этом файле пересчитывает `unit/TestingDocTest`, а число тестов и разбивку
-по пакетам — `inventory/TestCountCheck`. Добавили тест-класс и не поправили текст:
-сборка красная.
+Числа в этом файле пересчитывает `unit/TestingDocTest`, число тестов и разбивку
+по пакетам — `inventory/TestCountCheck`, а число тестов инструментов ревью —
+`unit/MeasuredNumbersDocTest`. Добавили тест-класс и не поправили текст: сборка красная.
