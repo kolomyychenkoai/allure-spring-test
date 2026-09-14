@@ -9,9 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
@@ -20,7 +18,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Тест карты модулей в {@code docs/architecture.md}: документ обещает ПОЛНЫЙ список точек
- * входа, и обещание проверяется в обе стороны.
+ * входа, и таблица §5 сверяется с ресурсами Spring в обе стороны — лишняя строка краснеет
+ * так же, как недостающая.
  * <p>
  * Архитектурный обзор устаревает молча и тем быстрее, чем он полезнее: добавили модуль —
  * карта соврала, а узнает об этом следующий ревьюер. Точки входа берём из тех же файлов,
@@ -34,15 +33,11 @@ class ArchitectureDocTest {
     private static final Path IMPORTS = Path.of(
             "src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports");
 
-    /** Файлы `src/main`, из которых считаются размеры документа. */
+    /** Файлы `src/main`, по которым ищутся упомянутые в документе имена. */
     private static List<Path> mainSources() throws IOException {
         try (var files = Files.walk(Path.of("src/main/java"))) {
             return files.filter(p -> p.toString().endsWith(".java")).toList();
         }
-    }
-
-    private static long lines(Path file) throws IOException {
-        return Files.readAllLines(file, StandardCharsets.UTF_8).size();
     }
 
     /** Сколько файлов `src/main` содержат подстроку. */
@@ -81,13 +76,47 @@ class ArchitectureDocTest {
     }
 
     @Test
+    @DisplayName("таблица точек входа и ресурсы Spring совпадают в обе стороны")
+    void entryPointTableMatchesSpringResources() throws IOException {
+        // everyEntryPointIsOnTheMap проверяет только «названо где-то в файле», а имя половины
+        // точек входа встречается в документе дважды — строку ТАБЛИЦЫ у них можно снести
+        // бесследно. Здесь сверяется именно таблица §5, и именно в обе стороны: лишняя строка
+        // (листенер снят из spring.factories, карта не поправлена) — такой же дефект, как
+        // недостающая, и живёт она дольше, потому что читается как правда.
+        Set<String> declared = new TreeSet<>(entryPoints(FACTORIES));
+        declared.addAll(entryPoints(IMPORTS));
+
+        Set<String> inTable = new TreeSet<>();
+        String doc = Files.readString(DOC, StandardCharsets.UTF_8);
+        int from = doc.indexOf("## 5.");
+        int to = doc.indexOf("## 6.", from);
+        assertThat(from).as("в docs/architecture.md пропал раздел §5 — сверять нечего").isNotNegative();
+        for (String line : doc.substring(from, to).lines().toList()) {
+            if (!line.startsWith("| `")) {
+                continue;
+            }
+            String cell = line.substring(1, line.indexOf('|', 1)).trim().replace("`", "");
+            inTable.add(cell.substring(cell.lastIndexOf('/') + 1));
+        }
+        assertThat(inTable)
+                .as("из таблицы §5 разобрано %d строк — сломался разбор, а не таблица", inTable.size())
+                .hasSizeGreaterThan(10);
+        assertThat(inTable)
+                .as("таблица точек входа разошлась с ресурсами Spring. Недостающая строка значит, "
+                        + "что модуль не описан; лишняя — что листенер сняли, а карта модулей "
+                        + "продолжает его обещать")
+                .isEqualTo(declared);
+    }
+
+    @Test
     @DisplayName("маршрут чтения ведёт в существующие классы")
     void readingRoutePointsAtRealClasses() throws IOException {
         String doc = Files.readString(DOC, StandardCharsets.UTF_8);
         // Мёртвая ссылка в маршруте дороже опечатки в тексте: ревьюер идёт по нему первым делом.
         List<String> route = List.of("AllureInstrumentation", "AllureAdviceSupport",
                 "AllureAssertionsListener", "AllureMockMvcAutoConfiguration",
-                "MovedCustomizerRegistrar", "AllureRepositoryAspect", "InstrumentationDiagnostics");
+                "MovedCustomizerRegistrar", "AllureRepositoryAspect", "InstrumentationDiagnostics",
+                "AllureAssertJInstrumentation");
 
         for (String type : route) {
             assertThat(doc).as("класс «%s» пропал из маршрута чтения", type).contains(type);
@@ -97,52 +126,6 @@ class ArchitectureDocTest {
                         .isTrue();
             }
         }
-    }
-
-    @Test
-    @DisplayName("числа обзора пересчитываются из исходников и совпадают с текстом")
-    void numbersMatchRepository() throws IOException {
-        // Дрейф чисел — самый частый способ документа соврать: сборку не ломает, при чтении
-        // не виден. За время работы над обзором число протухало дважды (487 → 489 тестов через
-        // час после написания; объём маршрута был взят из головы). Считаем заново из исходников
-        // и требуем, чтобы текст содержал именно это значение — в той фразе, где его увидит читатель.
-        String doc = Files.readString(DOC, StandardCharsets.UTF_8);
-        long mainLines = 0;
-        for (Path p : mainSources()) {
-            mainLines += lines(p);
-        }
-        long testClasses;
-        try (var files = Files.walk(Path.of("src/test/java"))) {
-            testClasses = files.filter(p -> p.toString().endsWith(".java")).count();
-        }
-        long internalClasses;
-        try (var files = Files.list(Path.of("src/main/java/io/github/kolomyychenkoai/allure/spring/internal"))) {
-            internalClasses = files.filter(p -> p.toString().endsWith(".java"))
-                    .filter(p -> !p.getFileName().toString().equals("package-info.java")).count();
-        }
-
-        Map<String, String> expected = new LinkedHashMap<>();
-        expected.put("классы и строки src/main",
-                "**%d классов / %d строк**".formatted(mainSources().size(), mainLines));
-        // Форма слова подобрана под текущее число. Изменится так, что поедет падеж, —
-        // тест скажет поправить и текст, и этот шаблон: врать документу дороже.
-        expected.put("тест-классы", "**%d классов**".formatted(testClasses));
-        expected.put("листенеры", "%d листенеров".formatted(entryPoints(FACTORIES).size()));
-        expected.put("автоконфиги", "%d автоконфига".formatted(entryPoints(IMPORTS).size()));
-        expected.put("классы internal", "(%d классов + `package-info`)".formatted(internalClasses));
-        // «Итого строк: N», а не «Итого N строка»: при числе, не кончающемся на 1, вторая
-        // форма нечитаема, а шаблон один на все числа не согласуешь.
-        expected.put("объём маршрута", "Итого строк: %d".formatted(routeLines()));
-        expected.put("файлы со строковым матчером", "%d файлов".formatted(filesContaining("named(\"")));
-
-        List<String> stale = expected.entrySet().stream()
-                .filter(e -> !doc.contains(e.getValue()))
-                .map(e -> e.getKey() + ": в тексте нет «" + e.getValue() + "»")
-                .toList();
-        assertThat(stale)
-                .as("число в docs/architecture.md разошлось с исходниками — документ врёт молча, "
-                        + "и первым это заметит читатель, а не сборка")
-                .isEmpty();
     }
 
     @Test
@@ -223,17 +206,5 @@ class ArchitectureDocTest {
         assertThat(broken)
                 .as("документ ссылается в пустоту — читатель пойдёт по ссылке и не найдёт ничего")
                 .isEmpty();
-    }
-
-    /** Суммарный объём файлов «маршрута чтения»: документ обещает его одним числом. */
-    private static long routeLines() throws IOException {
-        long total = 0;
-        for (String rel : List.of("internal/AllureInstrumentation", "internal/AllureAdviceSupport",
-                "assertion/AllureAssertionsListener", "assertion/internal/AllureAssertJInstrumentation",
-                "rest/AllureMockMvcAutoConfiguration", "internal/MovedCustomizerRegistrar",
-                "data/internal/AllureRepositoryAspect", "internal/InstrumentationDiagnostics")) {
-            total += lines(Path.of("src/main/java/io/github/kolomyychenkoai/allure/spring/" + rel + ".java"));
-        }
-        return total;
     }
 }

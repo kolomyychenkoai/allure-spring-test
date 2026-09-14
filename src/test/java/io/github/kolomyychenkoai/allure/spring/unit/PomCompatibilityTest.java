@@ -60,6 +60,12 @@ class PomCompatibilityTest {
                 .as("execution обязан включать сам детектор — без include профиль пустой")
                 .contains("ReportInventoryCheck.java");
         assertThat(profile)
+                .as("execution обязан включать и TestCountCheck: он единственный видит отчёты "
+                        + "ПЕРВОГО исполнения, и после снятия числовых сверок с доков вся защита "
+                        + "от обвала сьюта держится на нём одном. Убери строку из профиля — "
+                        + "сборка останется зелёной, а сторожа не будет")
+                .contains("TestCountCheck.java");
+        assertThat(profile)
                 .as("детектор должен исполняться в фазе test, иначе результатов ещё нет")
                 .contains("<phase>test</phase>");
     }
