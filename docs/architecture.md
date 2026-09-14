@@ -33,8 +33,8 @@
    значения: в `clean`, `render`, `describeResponse`. В `describeEntity` свой `catch`
    стоит на каждом поле.
 
-В `src/main` лежит **70 классов / 7528 строк** в 20 пакетах, в `src/test` — **119 классов**
-и 588 тестов. У клиентского проекта появляется ровно одна зависимость в `compile`
+В `src/main` лежит **71 классов / 7658 строк** в 20 пакетах, в `src/test` — **121 классов**
+и 595 тестов. У клиентского проекта появляется ровно одна зависимость в `compile`
 (`allure-java-commons`), остальные 24 помечены `provided`/`optional`: модуль включается,
 только если технология уже есть в тестах.
 
@@ -191,7 +191,7 @@ cat src/main/resources/META-INF/spring.factories src/main/resources/META-INF/spr
 
 ---
 
-## 6. Что лежит в `internal/` (12 классов + `package-info`)
+## 6. Что лежит в `internal/` (13 классов + `package-info`)
 
 Публичного API тут нет: это внутренний код, и `package-info` это фиксирует.
 
@@ -298,7 +298,7 @@ grep -rn "ThreadLocal<\|static final \(Map\|Set\|List\|Atomic\|ClassValue\)" src
 
 ## 10. Что уже проверено
 
-- **588 тестов** в двух уровнях. Уровень A — детерминированные проверки содержимого отчёта
+- **595 тестов** в двух уровнях. Уровень A — детерминированные проверки содержимого отчёта
   через in-memory Allure, уровень B — живые `*ReportIT`, которые читают реально записанные
   `allure-results`.
 - **Инвентарь видов шагов и вложений** — эталон `src/test/inventory/report-inventory.txt`,

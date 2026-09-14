@@ -21,4 +21,9 @@ public final class DiagnosticsReset {
     public static void forget() {
         ActivationDiagnostics.forgetForTests();
     }
+
+    /** Забыть пик одновременно открытых тест-методов: счётчики глобальны на JVM. */
+    public static void forgetConcurrency() {
+        ConcurrencyWitness.forgetForTests();
+    }
 }

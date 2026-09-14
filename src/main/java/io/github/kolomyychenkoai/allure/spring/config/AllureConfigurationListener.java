@@ -1,6 +1,8 @@
 package io.github.kolomyychenkoai.allure.spring.config;
 
 import io.github.kolomyychenkoai.allure.spring.internal.ActivationDiagnostics;
+import io.github.kolomyychenkoai.allure.spring.internal.ClassPresence;
+import io.github.kolomyychenkoai.allure.spring.internal.ConcurrencyWitness;
 import io.qameta.allure.Allure;
 import org.springframework.core.Ordered;
 import org.springframework.core.env.ConfigurableEnvironment;
@@ -25,8 +27,9 @@ import java.util.stream.Collectors;
  * насколько чувствительна конфигурация тестов у потребителя.
  * Активируется автоматически через {@code META-INF/spring.factories}.
  * <p>
- * Потокобезопасен: без изменяемого состояния ({@code SYSTEM_SOURCES} — неизменяемый Set,
- * локальные переменные — на стеке метода).
+ * Потокобезопасен: собственного изменяемого состояния нет ({@code SYSTEM_SOURCES} —
+ * неизменяемый Set, локальные переменные — на стеке метода); счётчики параллели живут
+ * в {@link ConcurrencyWitness} и атомарны.
  */
 public class AllureConfigurationListener implements TestExecutionListener, Ordered {
 
@@ -43,10 +46,18 @@ public class AllureConfigurationListener implements TestExecutionListener, Order
         // место, откуда можно пожаловаться на модуль, который молча не активировался
         // (автоконфиг в этом случае не выполняется и сказать ничего не может).
         ActivationDiagnostics.reportOnce();
+        // Параллель становится фактом только после того, как два окна тестов пересеклись,
+        // поэтому спрашиваем на КАЖДОМ классе, а не один раз вместе с reportOnce.
+        ActivationDiagnostics.noteConcurrentRunOnce(ClassPresence::isPresent,
+                ConcurrencyWitness.concurrentSeen());
     }
 
     @Override
     public void beforeTestMethod(TestContext testContext) {
+        // Свидетель параллели: считаем ОДНОВРЕМЕННО открытые окна тестов. Спросить у JUnit,
+        // включена ли потоковая параллель, нельзя — разбор каналов в ConcurrencyWitness.
+        ConcurrencyWitness.testStarted();
+
         Environment base = environment(testContext);
         if (!(base instanceof ConfigurableEnvironment env)) {
             return;
@@ -69,6 +80,13 @@ public class AllureConfigurationListener implements TestExecutionListener, Order
             Allure.addAttachment("Свойства", "text/plain",
                     config.isEmpty() ? "No properties" : config);
         });
+    }
+
+    @Override
+    public void afterTestMethod(TestContext testContext) {
+        // Парный вызов обязателен: без него каждый последовательный тест поднимал бы пик,
+        // и библиотека объявляла бы параллель там, где её нет.
+        ConcurrencyWitness.testFinished();
     }
 
     private static Environment environment(TestContext testContext) {
