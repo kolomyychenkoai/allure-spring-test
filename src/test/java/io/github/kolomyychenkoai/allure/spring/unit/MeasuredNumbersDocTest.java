@@ -44,6 +44,13 @@ class MeasuredNumbersDocTest {
     private static final Path TESTING = Path.of("docs/testing.md");
 
     /**
+     * Разрыв между словами фразы: пробел, перенос строки и маркер цитаты. Фразы живут
+     * во врезках {@code > …}, и перенос строки внутри фразы вставляет туда «&gt;» — правка,
+     * факта не меняющая. Шаблон на голом {@code \s+} краснел бы на ней «фразы больше нет».
+     */
+    private static final String GAP = "[\\s>]+";
+
+    /**
      * Фраза-источник: «запрет … валит N тестов из M» в разборе замеров по потребителям.
      * <p>
      * ⚠️ Кириллица в классах символов — ЯВНЫМ диапазоном {@code [а-я]}: у Java {@code \w} без
@@ -55,11 +62,11 @@ class MeasuredNumbersDocTest {
      * искать удалённый абзац вместо правки шаблона.
      */
     private static final Pattern SOURCE =
-            Pattern.compile("валит\\s+(\\d+)\\s+тест(?:а|ов)?\\s+из\\s+(\\d+)");
+            Pattern.compile("валит" + GAP + "(\\d+)" + GAP + "тест(?:а|ов)?" + GAP + "из" + GAP + "(\\d+)");
 
     /** Тот же замер у потребителя. */
     private static final Pattern QUOTE =
-            Pattern.compile("упал[а-я]*\\s+(\\d+)\\s+тест(?:а|ов)?\\s+из\\s+(\\d+)");
+            Pattern.compile("упал[а-я]*" + GAP + "(\\d+)" + GAP + "тест(?:а|ов)?" + GAP + "из" + GAP + "(\\d+)");
 
     /**
      * Число тестов инструментов ревью. Шаблон привязан к ПРЕДМЕТУ, а не к слову «тест»:
@@ -67,9 +74,9 @@ class MeasuredNumbersDocTest {
      * и документ мог бы вообще перестать называть это число при зелёной сборке.
      */
     private static final Pattern README_TOOLS =
-            Pattern.compile("инструментов\\s+(\\d+)\\s+тест");
+            Pattern.compile("инструментов" + GAP + "(\\d+)" + GAP + "тест");
     private static final Pattern TESTING_TOOLS =
-            Pattern.compile("Инструменты ревью[\\s\\S]{0,80}?(\\d+)\\s+свой\\s+тест");
+            Pattern.compile("Инструменты ревью[\\s\\S]{0,80}?(\\d+)" + GAP + "свой" + GAP + "тест");
 
     @Test
     @DisplayName("замер про запрет привязки агента: README называет ту же пару, что и источник")
