@@ -259,13 +259,10 @@ public final class ActivationDiagnostics {
     /**
      * Сказать один раз на JVM, что отчёт под этой параллелью может врать.
      * <p>
-     * Зовётся из {@code beforeTestClass}, а не из {@link #reportOnce()}: тот стреляет на первом
-     * же классе, когда параллели ещё не видно — она становится фактом только после того, как
-     * два окна тестов пересеклись.
-     * <p>
-     * ⚠️ Под параллелью и это окно может пересечься с чужим тестом, и тогда строка попадёт
-     * в его вложение «Application Logs». Избежать этого нечем: аппендер вешается на время
-     * тест-метода, а раньше факта параллели не существует.
+     * Зовётся из {@code afterTestMethod}, а не из {@link #reportOnce()} и не из
+     * {@code beforeTestClass}: первый стреляет на первом же классе, когда параллели ещё не
+     * видно, а второй к моменту пересечения окон уже не зовётся — классы начались. Замерено
+     * на потребителе: из {@code beforeTestClass} строка не выходила ни разу.
      */
     public static void noteConcurrentRunOnce(Predicate<String> present, boolean concurrentSeen) {
         if (parallelMixesData(present, concurrentSeen)) {

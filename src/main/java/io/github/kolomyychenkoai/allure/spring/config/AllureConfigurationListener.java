@@ -46,10 +46,6 @@ public class AllureConfigurationListener implements TestExecutionListener, Order
         // место, откуда можно пожаловаться на модуль, который молча не активировался
         // (автоконфиг в этом случае не выполняется и сказать ничего не может).
         ActivationDiagnostics.reportOnce();
-        // Параллель становится фактом только после того, как два окна тестов пересеклись,
-        // поэтому спрашиваем на КАЖДОМ классе, а не один раз вместе с reportOnce.
-        ActivationDiagnostics.noteConcurrentRunOnce(ClassPresence::isPresent,
-                ConcurrencyWitness.concurrentSeen());
     }
 
     @Override
@@ -87,6 +83,18 @@ public class AllureConfigurationListener implements TestExecutionListener, Order
         // Парный вызов обязателен: без него каждый последовательный тест поднимал бы пик,
         // и библиотека объявляла бы параллель там, где её нет.
         ConcurrencyWitness.testFinished();
+
+        // Докладываем ИМЕННО отсюда, а не из beforeTestClass: параллель становится фактом
+        // только после того, как два окна пересеклись, а к этому моменту классы уже начались
+        // и beforeTestClass больше не позовут. Замерено на потребителе: из beforeTestClass
+        // строка не выходила ни разу.
+        //
+        // Здесь же она не попадёт во вложение «Application Logs», о перемешивании которого
+        // предупреждает: «после»-колбэки Spring зовёт в ОБРАТНОМ порядке, а этот листенер
+        // идёт первым, значит его afterTestMethod срабатывает последним — когда аппендер
+        // логов уже снят.
+        ActivationDiagnostics.noteConcurrentRunOnce(ClassPresence::isPresent,
+                ConcurrencyWitness.concurrentSeen());
     }
 
     private static Environment environment(TestContext testContext) {
