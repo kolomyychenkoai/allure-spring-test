@@ -112,9 +112,10 @@ class InstrumentationDiagnosticsTest {
     void строкаПроСбойПривязкиСовпадаетСReadme() throws Exception {
         // Обещание без теста: README учит искать сбой self-attach по строке в логе, а строку
         // складывают ТРИ места — литерал <install>, сегмент «Instrumentation/» и скобка
-        // «[Allure …]». Мутация в любом из трёх красит этот тест; ссылками это не держится,
-        // README не читает ни один другой гейт (CommentReferenceResolvesTest берёт только
-        // src/main и src/test).
+        // «[Allure …]». Мутация в любом из трёх красит этот тест; ссылками это не держится:
+        // CommentReferenceResolvesTest берёт только src/main и src/test, а те гейты, что
+        // README всё-таки читают, сверяют другое — рецепт логов, врезку про параллель,
+        // существование скриптов и замеренные числа.
         String expected = "[Allure " + FailureLog.installComponent() + "]";
 
         String readme = Files.readString(Path.of("README.md"), StandardCharsets.UTF_8);
