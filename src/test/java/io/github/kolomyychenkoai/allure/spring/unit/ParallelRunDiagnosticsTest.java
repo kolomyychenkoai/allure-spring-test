@@ -1,5 +1,6 @@
 package io.github.kolomyychenkoai.allure.spring.unit;
 
+import io.github.kolomyychenkoai.allure.spring.config.AllureConfigurationListener;
 import io.github.kolomyychenkoai.allure.spring.internal.ActivationDiagnostics;
 import io.github.kolomyychenkoai.allure.spring.internal.ConcurrencyWitness;
 import io.github.kolomyychenkoai.allure.spring.internal.DiagnosticsReset;
@@ -56,6 +57,25 @@ class ParallelRunDiagnosticsTest {
 
         assertThat(ConcurrencyWitness.concurrentSeen())
                 .as("пять тестов подряд объявлены параллелью — так шумят в каждой сборке")
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("листенер закрывает окно теста — иначе последовательный прогон станет «параллелью»")
+    void листенерЗакрываетОкно() {
+        // Тест выше проверяет свидетеля напрямую и мимо проводки: он остался бы зелёным, если
+        // бы листенер перестал звать testFinished. Здесь ось — сама проводка.
+        //
+        // Мутация: убрать ConcurrencyWitness.testFinished() из afterTestMethod → RED.
+        AllureConfigurationListener listener = new AllureConfigurationListener();
+
+        ConcurrencyWitness.testStarted();
+        listener.afterTestMethod(null);
+        ConcurrencyWitness.testStarted();
+        listener.afterTestMethod(null);
+
+        assertThat(ConcurrencyWitness.concurrentSeen())
+                .as("окно теста не закрылось — два последовательных теста объявлены параллелью")
                 .isFalse();
     }
 
