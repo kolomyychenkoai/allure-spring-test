@@ -5,7 +5,9 @@ import io.github.kolomyychenkoai.allure.spring.internal.ActivationDiagnostics;
 import io.github.kolomyychenkoai.allure.spring.internal.ConcurrencyWitness;
 import io.github.kolomyychenkoai.allure.spring.internal.DiagnosticsReset;
 import io.github.kolomyychenkoai.allure.spring.support.LibraryLog;
+import io.github.kolomyychenkoai.allure.spring.support.TestContexts;
 import io.qameta.allure.Epic;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -45,18 +47,25 @@ class ParallelRunDiagnosticsTest {
         DiagnosticsReset.forgetConcurrency();
     }
 
+    @AfterEach
+    void убратьЗаСобой() {
+        // Пик глобален на JVM: оставленный здесь, он объявил бы параллель всем соседям
+        // и посадил бы новость в случайный витринный тест.
+        DiagnosticsReset.forgetConcurrency();
+    }
+
     @Test
     @DisplayName("последовательный прогон параллелью не считается")
     void последовательныйПрогонНеПараллель() {
-        // Мутация: убрать парный afterTestMethod (testFinished) → каждый последовательный тест
-        // поднимает пик, и библиотека объявляет параллель там, где её нет → RED.
+        // Мутация: убрать парный afterTestMethod (testFinished) → RED. Почему парность
+        // обязательна — в javadoc ConcurrencyWitness#testStarted.
         for (int i = 0; i < 5; i++) {
             ConcurrencyWitness.testStarted();
             ConcurrencyWitness.testFinished();
         }
 
         assertThat(ConcurrencyWitness.concurrentSeen())
-                .as("пять тестов подряд объявлены параллелью — так шумят в каждой сборке")
+                .as("пять тестов подряд объявлены параллелью — это шум в каждой сборке")
                 .isFalse();
     }
 
@@ -70,9 +79,9 @@ class ParallelRunDiagnosticsTest {
         AllureConfigurationListener listener = new AllureConfigurationListener();
 
         ConcurrencyWitness.testStarted();
-        listener.afterTestMethod(null);
+        listener.afterTestMethod(TestContexts.withEnvironment(new org.springframework.mock.env.MockEnvironment()));
         ConcurrencyWitness.testStarted();
-        listener.afterTestMethod(null);
+        listener.afterTestMethod(TestContexts.withEnvironment(new org.springframework.mock.env.MockEnvironment()));
 
         assertThat(ConcurrencyWitness.concurrentSeen())
                 .as("окно теста не закрылось — два последовательных теста объявлены параллелью")
@@ -95,13 +104,13 @@ class ParallelRunDiagnosticsTest {
     @Test
     @DisplayName("говорим только когда параллель ЕСТЬ и есть чему перемешаться")
     void говоримТолькоПоДелу() {
-        Set<String> сОбщимБуфером = Set.of(ActivationDiagnostics.sharedBufferMarkers().get(0));
+        Set<String> сОбщимБуфером = Set.of(DiagnosticsReset.sharedBufferMarkers().get(0));
 
         assertThat(ActivationDiagnostics.parallelMixesData(сОбщимБуфером::contains, true))
                 .as("параллель и модуль с общим буфером — а библиотека молчит")
                 .isTrue();
         assertThat(ActivationDiagnostics.parallelMixesData(сОбщимБуфером::contains, false))
-                .as("параллели нет, а мы уже пугаем — это шум в каждой сборке (#74)")
+                .as("параллели нет, а мы уже пугаем — предупреждение без повода обесценивает канал")
                 .isFalse();
         assertThat(ActivationDiagnostics.parallelMixesData(name -> false, true))
                 .as("параллель есть, но перемешивать нечему — молчать")
@@ -114,7 +123,7 @@ class ParallelRunDiagnosticsTest {
     @Test
     @DisplayName("сказано вслух и ровно один раз на JVM")
     void сказаноОдинРаз() {
-        Set<String> сОбщимБуфером = Set.of(ActivationDiagnostics.sharedBufferMarkers().get(0));
+        Set<String> сОбщимБуфером = Set.of(DiagnosticsReset.sharedBufferMarkers().get(0));
 
         List<LogRecord> said = LibraryLog.capture(() -> {
             ActivationDiagnostics.noteConcurrentRunOnce(сОбщимБуфером::contains, true);

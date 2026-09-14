@@ -51,7 +51,7 @@ public final class ActivationDiagnostics {
      */
     private static final String CONCURRENT_MIXES_DATA =
             "тесты идут в несколько потоков ОДНОЙ JVM. Шаги Kafka consumer и WireMock, "
-                    + "статус-онли обмены WebTestClient и вложение «Application Logs» собираются "
+                    + "обмены WebTestClient, где виден только статус, и вложение «Application Logs» собираются "
                     + "на чужих потоках в общий буфер — их записи могут уехать в соседний "
                     + "тест-кейс. Гоняй такие классы форками (forkCount) или в один поток; "
                     + "полные списки «что ОК» и «что не ОК» — в README, раздел про параллельный "
@@ -231,28 +231,20 @@ public final class ActivationDiagnostics {
     }
 
     /**
-     * Один раз на JVM, WARNING в логгер библиотеки; прогон не роняем.
-     * <p>
-     * ⚠️ <b>НЕ добавляй сюда проверку «зарегистрирован ли наш бин-кастомайзер»</b> (по имени,
-     * через контекст). Замерено: она срабатывает на КАЖДОМ контексте без автоконфигурации
-     * ({@code @SpringBootConfiguration} без {@code @EnableAutoConfiguration} — обычное дело
-     * для узких тест-приложений), то есть сыплет WARNING в каждом прогоне.
-     * Случай, который она закрывала бы («крючок есть, а наш автоконфиг собран против другого
-     * имени»), закрыт конструктивно: интерфейс резолвится ПО ИМЕНИ
-     * ({@link MovedCustomizerRegistrar}), а имя из списка находится в любом мажоре. Остаток —
-     * ТРЕТЬЕ, неизвестное имя — ловит проверка ниже по тому же списку {@link MovedTypeNames}.
-     */
-    /**
      * Перемешивает ли параллель данные ПРЯМО СЕЙЧАС: параллель увидена по факту, и на classpath
      * есть хоть один модуль с общим буфером. Чистая функция от двух ответов — так её проверяют
-     * без classloader-фокусов и без зависимости от ключей, с которыми запущен сьют.
+     * без classloader-фокусов и без зависимости от того, с какими ключами запущен прогон.
      */
     public static boolean parallelMixesData(Predicate<String> present, boolean concurrentSeen) {
         return concurrentSeen && SHARED_BUFFER_MARKERS.stream().anyMatch(present);
     }
 
-    /** Имена-маркеры модулей с общим буфером — для гейта, сверяющего список с README. */
-    public static List<String> sharedBufferMarkers() {
+    /**
+     * Имена-маркеры модулей с общим буфером — для гейта, сверяющего список с README.
+     * Пакетно-приватный по тому же правилу, что {@link #forgetForTests()}: тест-хуки
+     * не уезжают потребителю. Мостик — {@code DiagnosticsReset} в тестах.
+     */
+    static List<String> sharedBufferMarkers() {
         return List.copyOf(SHARED_BUFFER_MARKERS);
     }
 
@@ -270,6 +262,18 @@ public final class ActivationDiagnostics {
         }
     }
 
+    /**
+     * Один раз на JVM, WARNING в логгер библиотеки; прогон не роняем.
+     * <p>
+     * ⚠️ <b>НЕ добавляй сюда проверку «зарегистрирован ли наш бин-кастомайзер»</b> (по имени,
+     * через контекст). Замерено: она срабатывает на КАЖДОМ контексте без автоконфигурации
+     * ({@code @SpringBootConfiguration} без {@code @EnableAutoConfiguration} — обычное дело
+     * для узких тест-приложений), то есть сыплет WARNING в каждом прогоне.
+     * Случай, который она закрывала бы («крючок есть, а наш автоконфиг собран против другого
+     * имени»), закрыт конструктивно: интерфейс резолвится ПО ИМЕНИ
+     * ({@link MovedCustomizerRegistrar}), а имя из списка находится в любом мажоре. Остаток —
+     * ТРЕТЬЕ, неизвестное имя — ловит проверка ниже по тому же списку {@link MovedTypeNames}.
+     */
     public static void reportOnce() {
         if ("off".equalsIgnoreCase(System.getProperty(SWITCH)) || !REPORTED.compareAndSet(false, true)) {
             return;

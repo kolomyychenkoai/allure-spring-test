@@ -47,7 +47,13 @@ class AllureConfigurationListenerTest {
                 .withProperty("spring.datasource.password", "hunter2"));
         TestContext ctx = TestContexts.withEnvironment(env);
 
-        TestResult result = allure.run("config", () -> listener.beforeTestMethod(ctx));
+        TestResult result = allure.run("config", () -> {
+            // Вызовы ПАРНЫЕ: beforeTestMethod открывает окно теста в ConcurrencyWitness,
+            // и без afterTestMethod счётчик уезжает навсегда — библиотека объявляет
+            // параллель в последовательной сборке.
+            listener.beforeTestMethod(ctx);
+            listener.afterTestMethod(ctx);
+        });
 
         assertThat(allure.hasStep(result, "Конфиги приложения")).isTrue();
         String props = allure.attachment(result, "Свойства").orElseThrow();
@@ -66,7 +72,13 @@ class AllureConfigurationListenerTest {
         env.getPropertySources().addFirst(new MapPropertySource("test", map));
         TestContext ctx = TestContexts.withEnvironment(env);
 
-        TestResult result = allure.run("config-unset", () -> listener.beforeTestMethod(ctx));
+        TestResult result = allure.run("config-unset", () -> {
+            // Вызовы ПАРНЫЕ: beforeTestMethod открывает окно теста в ConcurrencyWitness,
+            // и без afterTestMethod счётчик уезжает навсегда — библиотека объявляет
+            // параллель в последовательной сборке.
+            listener.beforeTestMethod(ctx);
+            listener.afterTestMethod(ctx);
+        });
 
         assertThat(allure.attachment(result, "Свойства").orElseThrow())
                 .contains("custom.nullable=<unset>");
@@ -81,7 +93,13 @@ class AllureConfigurationListenerTest {
         env.getPropertySources().addFirst(new MapPropertySource("test", map));
         TestContext ctx = TestContexts.withEnvironment(env);
 
-        TestResult result = allure.run("config-unresolved", () -> listener.beforeTestMethod(ctx));
+        TestResult result = allure.run("config-unresolved", () -> {
+            // Вызовы ПАРНЫЕ: beforeTestMethod открывает окно теста в ConcurrencyWitness,
+            // и без afterTestMethod счётчик уезжает навсегда — библиотека объявляет
+            // параллель в последовательной сборке.
+            listener.beforeTestMethod(ctx);
+            listener.afterTestMethod(ctx);
+        });
 
         assertThat(allure.attachment(result, "Свойства").orElseThrow())
                 .contains("custom.bad=<unresolved>");

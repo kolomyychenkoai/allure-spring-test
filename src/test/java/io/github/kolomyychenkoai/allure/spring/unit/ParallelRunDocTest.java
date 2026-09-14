@@ -56,7 +56,7 @@ class ParallelRunDocTest {
         // в новости: гейт ниже просто не знал бы о нём.
         assertThat(HUMAN_NAMES.keySet())
                 .as("в коде появился модуль с общим буфером, о котором гейт не знает")
-                .isEqualTo(Set.copyOf(ActivationDiagnostics.sharedBufferMarkers()));
+                .isEqualTo(Set.copyOf(DiagnosticsReset.sharedBufferMarkers()));
     }
 
     @Test
@@ -88,7 +88,7 @@ class ParallelRunDocTest {
         // noteOnce дедуплицируется НА JVM, а порядок тест-классов случайный: без сброса
         // новость мог сказать сосед, и гейт проверил бы пустоту.
         DiagnosticsReset.forget();
-        String marker = ActivationDiagnostics.sharedBufferMarkers().get(0);
+        String marker = DiagnosticsReset.sharedBufferMarkers().get(0);
         List<LogRecord> said = LibraryLog.capture(
                 () -> ActivationDiagnostics.noteConcurrentRunOnce(Set.of(marker)::contains, true));
         String message = said.stream()

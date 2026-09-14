@@ -80,19 +80,19 @@ public class AllureConfigurationListener implements TestExecutionListener, Order
 
     @Override
     public void afterTestMethod(TestContext testContext) {
-        // Парный вызов обязателен: без него каждый последовательный тест поднимал бы пик,
-        // и библиотека объявляла бы параллель там, где её нет.
         ConcurrencyWitness.testFinished();
+    }
 
-        // Докладываем ИМЕННО отсюда, а не из beforeTestClass: параллель становится фактом
-        // только после того, как два окна пересеклись, а к этому моменту классы уже начались
-        // и beforeTestClass больше не позовут. Замерено на потребителе: из beforeTestClass
-        // строка не выходила ни разу.
-        //
-        // Здесь же она не попадёт во вложение «Application Logs», о перемешивании которого
-        // предупреждает: «после»-колбэки Spring зовёт в ОБРАТНОМ порядке, а этот листенер
-        // идёт первым, значит его afterTestMethod срабатывает последним — когда аппендер
-        // логов уже снят.
+    @Override
+    public void afterTestClass(TestContext testContext) {
+        // Момент доклада выбран замером, а не рассуждением, и оба очевидных места не подошли.
+        // beforeTestClass: параллель становится фактом только после пересечения окон, а к тому
+        // времени классы уже начались — на потребителе строка не вышла ни разу.
+        // afterTestMethod: аппендер логов ещё висит, и строка садится внутрь вложения
+        // «Application Logs» — того самого, о перемешивании которого она предупреждает
+        // (обратный порядок «после»-колбэков тут не спасает: оба листенера объявлены
+        // HIGHEST_PRECEDENCE, а в spring.factories логи стоят раньше, значит после разворота
+        // они идут ПОСЛЕ нас).
         ActivationDiagnostics.noteConcurrentRunOnce(ClassPresence::isPresent,
                 ConcurrencyWitness.concurrentSeen());
     }
