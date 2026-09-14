@@ -59,7 +59,6 @@ public final class InstrumentationDiagnostics {
      * съедал бы слоты у настоящей поломки, и шестая по счёту настоящая уходила бы на FINE.
      */
     private static final AtomicInteger LOGGED = new AtomicInteger();
-    /** Сколько сбоев «описание типа не разрешилось» скрыто на FINE. Уходит в дамп и в гейт. */
     private static final AtomicInteger UNRESOLVED = new AtomicInteger();
     private static final AtomicInteger TRANSFORMED = new AtomicInteger();
     private static final Queue<String> SAMPLE = new ConcurrentLinkedQueue<>();

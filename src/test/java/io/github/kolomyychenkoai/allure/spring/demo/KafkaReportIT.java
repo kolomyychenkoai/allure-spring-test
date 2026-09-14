@@ -42,16 +42,12 @@ class KafkaReportIT {
     @Autowired
     private EmbeddedKafkaBroker broker;
 
-    // Подавление ТОЧЕЧНОЕ и только здесь: в spring-kafka-test 3.3.11 все три перегрузки
-    // KafkaTestUtils.consumerProps помечены как удаляемые, живой замены в этой версии нет
-    // (проверено javap по jar). Сборка идёт с -Werror, поэтому без подавления упадёт компиляция.
-    // Категорию целиком не глушим: подавление висит на одном методе, и при апгрейде spring-kafka
-    // его надо снять — строка в docs/upgrade-checklist.md об этом напоминает.
-    @SuppressWarnings("removal")
     @Test
     @DisplayName("отправка и приём Kafka автоматически попадают в отчёт")
     void kafkaExchangeAppearsInReport() throws Exception {
-        Map<String, Object> props = KafkaTestUtils.consumerProps("allure-group", "true", broker);
+        // Перегрузка (group, autoCommit, broker) помечена forRemoval в spring-kafka-test 4.1.0
+        // и под -Werror валит сборку; живая замена — (broker, group, autoCommit).
+        Map<String, Object> props = KafkaTestUtils.consumerProps(broker, "allure-group", true);
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");

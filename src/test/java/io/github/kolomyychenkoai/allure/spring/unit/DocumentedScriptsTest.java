@@ -8,11 +8,14 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -56,14 +59,23 @@ class DocumentedScriptsTest {
             "plan-reader",
             "читает ЗАМЫСЕЛ до первой правки; матрица охвата описывает диф, оси у него нет");
 
-    /** Файлы, где процедура встречается с человеком: доки, README, шаблон PR. */
+    /**
+     * Файлы, где процедура встречается с человеком: доки, README, шаблон PR, мандаты.
+     * <p>
+     * Мандаты попали сюда не для полноты: они обещают пути и инструменты наравне с доками,
+     * а поймано это было мандатом, который звал эталон инвентаря из несуществующего каталога.
+     */
     private static List<Path> documents() throws IOException {
+        List<Path> all = new ArrayList<>();
         try (Stream<Path> docs = Files.walk(Path.of("docs"))) {
-            List<Path> all = new java.util.ArrayList<>(docs.filter(p -> p.toString().endsWith(".md")).toList());
-            all.add(Path.of("README.md"));
-            all.add(Path.of(".github/pull_request_template.md"));
-            return all;
+            docs.filter(p -> p.toString().endsWith(".md")).forEach(all::add);
         }
+        try (Stream<Path> mandates = Files.list(MANDATES)) {
+            mandates.filter(p -> p.toString().endsWith(".md")).forEach(all::add);
+        }
+        all.add(Path.of("README.md"));
+        all.add(Path.of(".github/pull_request_template.md"));
+        return all;
     }
 
     private static Set<String> mentionedScripts() throws IOException {
@@ -90,7 +102,7 @@ class DocumentedScriptsTest {
                     // .py тоже: их зовут и напрямую, и из .sh — незадокументированный
                     // python-скрипт ломает шаг процедуры так же, как незадокументированный shell
                     .filter(n -> n.endsWith(".sh") || n.endsWith(".py"))
-                    .collect(java.util.stream.Collectors.toCollection(TreeSet::new));
+                    .collect(Collectors.toCollection(TreeSet::new));
         }
     }
 
@@ -294,7 +306,7 @@ class DocumentedScriptsTest {
                 .as("в %s пропал заголовок «%s» — разбор таблицы ниже стал бы пустым, "
                         + "а пустой разбор гейт принял бы за «расхождений нет»", doc, heading)
                 .isNotNegative();
-        List<String[]> rows = new java.util.ArrayList<>();
+        List<String[]> rows = new ArrayList<>();
         boolean seenSeparator = false;
         for (String line : text.substring(start).lines().toList()) {
             String trimmed = line.trim();
@@ -319,15 +331,25 @@ class DocumentedScriptsTest {
     private static Map<String, List<String>> axes() {
         Map<String, List<String>> axes = new LinkedHashMap<>();
         for (String[] row : tableAfter(PLAYBOOK, "### Оси — что смотрим")) {
+            // Ровно четыре: три ячейки плюс хвостовая пустая от замыкающей трубы. Меньше или
+            // больше значит, что труба стоит ВНУТРИ ячейки — и тогда разбор съедет на колонку,
+            // а сообщение ниже обвинит несуществующий мандат вместо разметки.
             assertThat(row.length)
-                    .as("строка матрицы охвата потеряла колонку: «%s»", String.join("|", row))
-                    .isGreaterThanOrEqualTo(3);
+                    .as("строка матрицы охвата разобралась не на три ячейки, а на %d: «%s». "
+                            + "Скорее всего труба стоит внутри ячейки — экранируй её",
+                            row.length - 1, String.join("|", row))
+                    .isEqualTo(4);
             // Составная клетка «architect + security» — законная форма: ось делят двое.
-            axes.put(rowKey(row[0]), java.util.Arrays.stream(row[2].split("\\+"))
+            axes.put(rowKey(row[0]), Arrays.stream(row[2].split("\\+"))
                     .map(String::trim).filter(m -> !m.isEmpty()).toList());
         }
         // Якорь на пустой вход: разбор, сломавшийся о правку разметки, обязан покраснеть сам,
         // а не отдать пустую карту, на которой все сверки ниже сойдутся (playbook, 2.8).
+        //
+        // Порог, а не точное число: точное пришлось бы поднимать на каждую новую ось, то есть
+        // держать самосчёт в тесте. Чего порог НЕ ловит: осознанное удаление двух-трёх осей
+        // сразу ИЗ ОБОИХ файлов. Это ослабление, и его ловит чтение удалённых строк
+        // (мандат gatekeeper), а не гейт.
         assertThat(axes)
                 .as("из матрицы охвата разобрано %d осей — столько их не бывает, сломался разбор "
                         + "таблицы, а не таблица", axes.size())
@@ -340,7 +362,7 @@ class DocumentedScriptsTest {
             return files.map(f -> f.getFileName().toString())
                     .filter(n -> n.endsWith(".md"))
                     .map(n -> n.substring(0, n.length() - ".md".length()))
-                    .collect(java.util.stream.Collectors.toCollection(TreeSet::new));
+                    .collect(Collectors.toCollection(TreeSet::new));
         }
     }
 
@@ -422,6 +444,13 @@ class DocumentedScriptsTest {
                         + "в одном месте из двух, либо это приём, а не ось — тогда назови его "
                         + "в ROWS_BEYOND_AXES с причиной")
                 .isEmpty();
+
+        // Обратная сторона, как у MANDATES_OUTSIDE_MATRIX: реестр не должен пережить свой
+        // предмет. Иначе запись продолжит молча разрешать строку, которой в шаблоне давно нет.
+        assertThat(rows)
+                .as("исключение названо для строки, которой в шаблоне PR больше нет: реестр "
+                        + "пережил свой предмет и теперь разрешает несуществующее")
+                .containsAll(ROWS_BEYOND_AXES.keySet());
     }
 
     @Test

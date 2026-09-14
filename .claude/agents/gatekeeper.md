@@ -49,9 +49,9 @@ README, javadoc, `docs/*.md`, чек-листы и таблицы сравнен
 ### 3. Синхронность артефактов
 
 Одна и та же вещь записана в нескольких местах, и они расходятся молча:
-эталон `src/test/resources/**/report-inventory.txt`, README, `docs/architecture.md`,
-`docs/testing.md`, `docs/upgrade-checklist.md`, ADR, `CLAUDE.md`, `.claude/agents/*.md`,
-`.github/pull_request_template.md`, таблица осей playbook.
+эталон `src/test/inventory/report-inventory.txt`, README, `docs/architecture.md`,
+`docs/testing.md`, `docs/upgrade-checklist.md`, `docs/consumer-affects.md`, ADR,
+`.claude/agents/*.md`, `.github/pull_request_template.md`, таблица осей playbook.
 
 Вопрос по каждой правке: **где эта же вещь записана ещё раз** — и поехало ли оно.
 
