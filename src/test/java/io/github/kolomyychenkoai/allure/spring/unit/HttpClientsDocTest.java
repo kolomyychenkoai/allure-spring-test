@@ -56,12 +56,17 @@ class HttpClientsDocTest {
     @Test
     @DisplayName("README называет ровно тех клиентов, что пишут HTTP-шаги в эталоне")
     void readmeНазываетТехЖеКлиентов() {
-        String limits = limitsEntry();
+        // Сверяется ИМЕННО перечень, а не вся врезка: имя клиента встречается в ней и в других
+        // предложениях, и по всей врезке гейт зеленел бы при вырезанном из перечня клиенте.
+        String listed = coveredClientsSentence();
 
         for (String author : stepAuthors()) {
             String client = CLIENT_NAMES.get(author);
-            assertThat(limits)
-                    .as("для клиента «%s» шаг пишется (автор %s), а README о нём в этом месте молчит",
+            assertThat(client)
+                    .as("автор шагов %s неизвестен гейту — сначала поправь карту имён", author)
+                    .isNotNull();
+            assertThat(listed)
+                    .as("для клиента «%s» шаг пишется (автор %s), а перечень в README его не называет",
                             client, author)
                     .contains(client);
         }
@@ -82,14 +87,15 @@ class HttpClientsDocTest {
         return authors;
     }
 
-    /** Врезка README про то, каким клиентом ходит тест. */
-    private static String limitsEntry() {
+    /** Ровно то предложение README, которое перечисляет покрытых клиентов. */
+    private static String coveredClientsSentence() {
         String readme = read(README);
-        int from = readme.indexOf("- **Пусто в разделе исходящих HTTP?");
-        assertThat(from).as("врезка про исходящий HTTP пропала из README — гейт проверял бы пустоту")
+        int from = readme.indexOf("библиотека пишет для ");
+        assertThat(from)
+                .as("перечень покрытых клиентов пропал из README — гейт проверял бы пустоту")
                 .isPositive();
-        int to = readme.indexOf("\n- **", from + 1);
-        assertThat(to).as("конец врезки не найден — гейт проверял бы пустоту").isGreaterThan(from);
+        int to = readme.indexOf(".", from);
+        assertThat(to).as("конец перечня не найден — гейт проверял бы пустоту").isGreaterThan(from);
         return readme.substring(from, to);
     }
 
