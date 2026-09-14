@@ -102,6 +102,24 @@ class ParallelRunDiagnosticsTest {
     }
 
     @Test
+    @DisplayName("сосед бросил до нас: закрытие окна, которого мы не открывали, не слепит детектор")
+    void закрытиеБезОткрытияНеСлепит() {
+        // Spring рвёт цикл «до» на первом бросившем листенере, а цикл «после» обходит ВСЕХ.
+        // Значит наш testStarted может не случиться, а testFinished случится. Без гарда на ноль
+        // счётчик ушёл бы в минус, и настоящую параллель пришлось бы «догонять».
+        //
+        // Мутация: снять у закрытия окна гард на ноль → RED.
+        ConcurrencyWitness.testFinished();
+
+        ConcurrencyWitness.testStarted();
+        ConcurrencyWitness.testStarted();
+
+        assertThat(ConcurrencyWitness.concurrentSeen())
+                .as("счётчик ушёл в минус — настоящая параллель пропущена")
+                .isTrue();
+    }
+
+    @Test
     @DisplayName("говорим только когда параллель ЕСТЬ и есть чему перемешаться")
     void говоримТолькоПоДелу() {
         Set<String> сОбщимБуфером = Set.of(DiagnosticsReset.sharedBufferMarkers().get(0));
