@@ -9,9 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
@@ -20,7 +18,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Тест карты модулей в {@code docs/architecture.md}: документ обещает ПОЛНЫЙ список точек
- * входа, и обещание проверяется в обе стороны.
+ * входа, и таблица §5 сверяется с ресурсами Spring в обе стороны — лишняя строка краснеет
+ * так же, как недостающая.
  * <p>
  * Архитектурный обзор устаревает молча и тем быстрее, чем он полезнее: добавили модуль —
  * карта соврала, а узнает об этом следующий ревьюер. Точки входа берём из тех же файлов,
@@ -34,7 +33,7 @@ class ArchitectureDocTest {
     private static final Path IMPORTS = Path.of(
             "src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports");
 
-    /** Файлы `src/main`, из которых считаются размеры документа. */
+    /** Файлы `src/main`, по которым ищутся упомянутые в документе имена. */
     private static List<Path> mainSources() throws IOException {
         try (var files = Files.walk(Path.of("src/main/java"))) {
             return files.filter(p -> p.toString().endsWith(".java")).toList();
@@ -77,13 +76,47 @@ class ArchitectureDocTest {
     }
 
     @Test
+    @DisplayName("таблица точек входа и ресурсы Spring совпадают в обе стороны")
+    void entryPointTableMatchesSpringResources() throws IOException {
+        // everyEntryPointIsOnTheMap проверяет только «названо где-то в файле», а имя половины
+        // точек входа встречается в документе дважды — строку ТАБЛИЦЫ у них можно снести
+        // бесследно. Здесь сверяется именно таблица §5, и именно в обе стороны: лишняя строка
+        // (листенер снят из spring.factories, карта не поправлена) — такой же дефект, как
+        // недостающая, и живёт она дольше, потому что читается как правда.
+        Set<String> declared = new TreeSet<>(entryPoints(FACTORIES));
+        declared.addAll(entryPoints(IMPORTS));
+
+        Set<String> inTable = new TreeSet<>();
+        String doc = Files.readString(DOC, StandardCharsets.UTF_8);
+        int from = doc.indexOf("## 5.");
+        int to = doc.indexOf("## 6.", from);
+        assertThat(from).as("в docs/architecture.md пропал раздел §5 — сверять нечего").isNotNegative();
+        for (String line : doc.substring(from, to).lines().toList()) {
+            if (!line.startsWith("| `")) {
+                continue;
+            }
+            String cell = line.substring(1, line.indexOf('|', 1)).trim().replace("`", "");
+            inTable.add(cell.substring(cell.lastIndexOf('/') + 1));
+        }
+        assertThat(inTable)
+                .as("из таблицы §5 разобрано %d строк — сломался разбор, а не таблица", inTable.size())
+                .hasSizeGreaterThan(10);
+        assertThat(inTable)
+                .as("таблица точек входа разошлась с ресурсами Spring. Недостающая строка значит, "
+                        + "что модуль не описан; лишняя — что листенер сняли, а карта модулей "
+                        + "продолжает его обещать")
+                .isEqualTo(declared);
+    }
+
+    @Test
     @DisplayName("маршрут чтения ведёт в существующие классы")
     void readingRoutePointsAtRealClasses() throws IOException {
         String doc = Files.readString(DOC, StandardCharsets.UTF_8);
         // Мёртвая ссылка в маршруте дороже опечатки в тексте: ревьюер идёт по нему первым делом.
         List<String> route = List.of("AllureInstrumentation", "AllureAdviceSupport",
                 "AllureAssertionsListener", "AllureMockMvcAutoConfiguration",
-                "MovedCustomizerRegistrar", "AllureRepositoryAspect", "InstrumentationDiagnostics");
+                "MovedCustomizerRegistrar", "AllureRepositoryAspect", "InstrumentationDiagnostics",
+                "AllureAssertJInstrumentation");
 
         for (String type : route) {
             assertThat(doc).as("класс «%s» пропал из маршрута чтения", type).contains(type);
@@ -174,5 +207,4 @@ class ArchitectureDocTest {
                 .as("документ ссылается в пустоту — читатель пойдёт по ссылке и не найдёт ничего")
                 .isEmpty();
     }
-
 }

@@ -9,22 +9,21 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Тест чисел и ссылок в {@code docs/testing.md}.
+ * Тест ссылок и ключей в {@code docs/testing.md}.
  * <p>
  * Документ описывает набор тестов, то есть ровно ту часть репозитория, которая меняется чаще
- * всего. Без пересчёта он устареет с первым же новым тест-классом, причём молча: сборку это
- * не ломает, а при чтении незаметно. Так уже случилось с обзором архитектуры — число тестов
- * в нём разошлось с реальностью за день.
+ * всего: классы переименовывают, пакеты двигают, снапшот пересевают. Мёртвая ссылка в таком
+ * документе не ломает сборку и при чтении незаметна, а приходят в него ровно тогда, когда
+ * что-то покраснело и надо действовать.
+ * <p>
+ * Чисел этот класс больше не считает — разбор в {@code docs/review-playbook.md}, проход 2.10.
  */
 @Epic("Внутренние проверки библиотеки")
 class TestingDocTest {
