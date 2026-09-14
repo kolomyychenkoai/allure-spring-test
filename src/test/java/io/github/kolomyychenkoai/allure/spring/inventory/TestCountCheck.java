@@ -115,7 +115,14 @@ class TestCountCheck {
                 // Только первый сегмент: вложенные пакеты вроде rest/internal отчитываются
                 // под именем своего корня, потому что имя отчёта строится из имени класса.
                 if (relative.getNameCount() > 1) {
-                    packages.add(relative.getName(0).toString());
+                    String pkg = relative.getName(0).toString();
+                    // Симметрично reportFiles(): отчёты пакета inventory оттуда выброшены,
+                    // потому что он идёт вторым исполнением. Без этой же строки класс
+                    // *Test, заведённый здесь, дал бы «пакет перестал запускаться» —
+                    // красный с диагнозом не про то.
+                    if (!pkg.equals("inventory")) {
+                        packages.add(pkg);
+                    }
                 }
             });
         }
