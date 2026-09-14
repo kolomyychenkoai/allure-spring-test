@@ -676,7 +676,7 @@ inline mock maker из Mockito 5.x), вручную не задирай.
 - `docs/upgrade-checklist.md` — порядок апгрейда Java/Spring по одной переменной за раз.
 - `canary/InstrumentationApiCanaryTest` — канарейки версионных допущений: при апгрейде
   чужих библиотек краснеют точечно, показывая, какой матчер обновить.
-- `.claude/agents/` — мандаты ревьюеров (architect/security/java-lead/tester/maintainer/qa-lead).
+- `.claude/agents/` — мандаты ревьюеров (architect/gatekeeper/java-lead/maintainer/plan-reader/qa-lead/security/tester).
 
 ```bash
 mvn clean test            # полный прогон (офлайн, без Docker)

@@ -399,6 +399,20 @@
                 <configuration>
                     <!-- сохранять имена параметров: нужно Spring MVC (@PathVariable/@RequestParam) -->
                     <parameters>true</parameters>
+                    <!--
+                      Оторванный javadoc: блок /** */ перестал принадлежать члену. Правило,
+                      что именно линт ловит и чего НЕ ловит — docs/java-code-standard.md, §6, javadoc.
+
+                      -Werror обязателен: без него javac печатает предупреждение и собирается зелёным,
+                      то есть гейт без зубов. Цена: любое НОВОЕ предупреждение валит сборку — в том
+                      числе в профилях совместимости, где src/main пересобирается против других
+                      версий Allure. Причина стоит строкой ВЫШЕ итогового «warnings found and
+                      -Werror specified», с уровнем [WARNING] и координатами файл:[строка,колонка].
+                    -->
+                    <compilerArgs>
+                        <arg>-Xlint:dangling-doc-comments</arg>
+                        <arg>-Werror</arg>
+                    </compilerArgs>
                 </configuration>
             </plugin>
 

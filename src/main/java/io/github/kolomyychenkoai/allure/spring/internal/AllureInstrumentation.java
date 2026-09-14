@@ -74,6 +74,14 @@ public final class AllureInstrumentation {
     }
 
     /**
+     * Имя «типа» для сбоя самой привязки агента: настоящего типа тут нет, а строку в логе
+     * потребитель ищет именно по нему (README, раздел «Аварийный выключатель»). Литерал
+     * держит {@code InstrumentationDiagnosticsTest} через мостик {@code FailureLog},
+     * иначе README расходится с логом молча.
+     */
+    static final String INSTALL_MARKER = "<install>";
+
+    /**
      * Ретрансформировать тип(ы) под {@code typeMatcher} переданным {@code transformer}
      * (advice). Сбой ловится и логируется — тест не затрагивается.
      * <p>
@@ -84,14 +92,6 @@ public final class AllureInstrumentation {
      * модулях), иначе под параллельными тестами навесятся дубли трансформеров и шаги
      * в отчёте задвоятся.
      */
-    /**
-     * Имя «типа» для сбоя самой привязки агента: настоящего типа тут нет, а строку в логе
-     * потребитель ищет именно по нему (README, раздел «Аварийный выключатель»). Литерал
-     * держит {@code InstrumentationDiagnosticsTest} через мостик {@code FailureLog},
-     * иначе README расходится с логом молча.
-     */
-    static final String INSTALL_MARKER = "<install>";
-
     public static void retransform(ElementMatcher<? super TypeDescription> typeMatcher,
                                    AgentBuilder.Transformer transformer) {
         if (disabled()) {

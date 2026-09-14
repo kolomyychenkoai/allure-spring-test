@@ -8,9 +8,14 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -30,15 +35,47 @@ import static org.assertj.core.api.Assertions.assertThat;
 class DocumentedScriptsTest {
 
     private static final Path SCRIPTS = Path.of("scripts");
+    private static final Path PLAYBOOK = Path.of("docs/review-playbook.md");
+    private static final Path PR_TEMPLATE = Path.of(".github/pull_request_template.md");
+    private static final Path MANDATES = Path.of(".claude/agents");
 
-    /** Файлы, где процедура встречается с человеком: доки, README, шаблон PR. */
+    /**
+     * Строки матрицы шаблона PR, которые осями не являются, и почему это законно.
+     * Реестр нужен, чтобы гейт не требовал равенства множеств: у шаблона и playbook разные
+     * жанры, и строка «перемер утверждений» не описывает предмет, а называет приём.
+     * Появится ещё одна строка не из матрицы осей — гейт покраснеет и потребует решения.
+     */
+    private static final Map<String, String> ROWS_BEYOND_AXES = Map.of(
+            "перемер утверждений",
+            "это проход 2.1, а не ось: перемеряется утверждение по ЛЮБОЙ оси",
+            "call sites изменённых общих точек",
+            "это артефакт из раздела «Артефакты — по чему проходим», а не ось");
+
+    /**
+     * Мандаты, у которых оси в матрице охвата нет, и почему это законно.
+     * Матрица описывает чтение ДИФА; мандат, работающий до первой правки, в ней не помещается.
+     */
+    private static final Map<String, String> MANDATES_OUTSIDE_MATRIX = Map.of(
+            "plan-reader",
+            "читает ЗАМЫСЕЛ до первой правки; матрица охвата описывает диф, оси у него нет");
+
+    /**
+     * Файлы, где процедура встречается с человеком: доки, README, шаблон PR, мандаты.
+     * <p>
+     * Мандаты попали сюда не для полноты: они обещают пути и инструменты наравне с доками,
+     * а поймано это было мандатом, который звал эталон инвентаря из несуществующего каталога.
+     */
     private static List<Path> documents() throws IOException {
+        List<Path> all = new ArrayList<>();
         try (Stream<Path> docs = Files.walk(Path.of("docs"))) {
-            List<Path> all = new java.util.ArrayList<>(docs.filter(p -> p.toString().endsWith(".md")).toList());
-            all.add(Path.of("README.md"));
-            all.add(Path.of(".github/pull_request_template.md"));
-            return all;
+            docs.filter(p -> p.toString().endsWith(".md")).forEach(all::add);
         }
+        try (Stream<Path> mandates = Files.list(MANDATES)) {
+            mandates.filter(p -> p.toString().endsWith(".md")).forEach(all::add);
+        }
+        all.add(Path.of("README.md"));
+        all.add(Path.of(".github/pull_request_template.md"));
+        return all;
     }
 
     private static Set<String> mentionedScripts() throws IOException {
@@ -65,7 +102,7 @@ class DocumentedScriptsTest {
                     // .py тоже: их зовут и напрямую, и из .sh — незадокументированный
                     // python-скрипт ломает шаг процедуры так же, как незадокументированный shell
                     .filter(n -> n.endsWith(".sh") || n.endsWith(".py"))
-                    .collect(java.util.stream.Collectors.toCollection(TreeSet::new));
+                    .collect(Collectors.toCollection(TreeSet::new));
         }
     }
 
@@ -240,6 +277,198 @@ class DocumentedScriptsTest {
                 .as("вопрос «что гейт говорит на ПУСТОМ входе» пропал из 2.8 — мутация его "
                         + "не заменяет: она проверяет ловлю дефекта, а не поведение без данных")
                 .contains("ПУСТОМ входе");
+    }
+
+    /**
+     * Ключ строки таблицы: имя до первой скобки или двоеточия, со свёрнутыми пробелами.
+     * Полное имя сравнивать нельзя — шаблон PR намеренно несёт в скобках подсказку с командой
+     * (`scripts/repeat.sh`), а playbook её не несёт и не должен: это разные жанры текста.
+     * Двоеточие расщепляет одну ось на несколько строк чек-листа («отчёт: тела вложений»
+     * и «отчёт: дерево прочитано глазами» — обе про ось «отчёт»).
+     */
+    private static String rowKey(String cell) {
+        String name = cell.trim();
+        int cut = name.length();
+        for (char c : new char[]{'(', ':'}) {
+            int at = name.indexOf(c);
+            if (at >= 0 && at < cut) {
+                cut = at;
+            }
+        }
+        return name.substring(0, cut).replace("`", "").trim().replaceAll("\\s+", " ");
+    }
+
+    /** Строки таблицы, идущей сразу после заголовка: без шапки и без разделителя. */
+    private static List<String[]> tableAfter(Path doc, String heading) {
+        String text = read(doc.toString());
+        int start = text.indexOf(heading);
+        assertThat(start)
+                .as("в %s пропал заголовок «%s» — разбор таблицы ниже стал бы пустым, "
+                        + "а пустой разбор гейт принял бы за «расхождений нет»", doc, heading)
+                .isNotNegative();
+        List<String[]> rows = new ArrayList<>();
+        boolean seenSeparator = false;
+        for (String line : text.substring(start).lines().toList()) {
+            String trimmed = line.trim();
+            if (!trimmed.startsWith("|")) {
+                if (seenSeparator) {
+                    break;
+                }
+                continue;
+            }
+            if (trimmed.replace("|", "").replace("-", "").replace(":", "").isBlank()) {
+                seenSeparator = true;
+                continue;
+            }
+            if (seenSeparator) {
+                rows.add(trimmed.substring(1).split("\\|", -1));
+            }
+        }
+        return rows;
+    }
+
+    /** Оси охвата: имя оси → мандаты, которым она принадлежит. */
+    private static Map<String, List<String>> axes() {
+        Map<String, List<String>> axes = new LinkedHashMap<>();
+        for (String[] row : tableAfter(PLAYBOOK, "### Оси — что смотрим")) {
+            // Ровно четыре: три ячейки плюс хвостовая пустая от замыкающей трубы. Меньше или
+            // больше значит, что труба стоит ВНУТРИ ячейки — и тогда разбор съедет на колонку,
+            // а сообщение ниже обвинит несуществующий мандат вместо разметки.
+            assertThat(row.length)
+                    .as("строка матрицы охвата разобралась не на три ячейки, а на %d: «%s». "
+                            + "Скорее всего труба стоит внутри ячейки — экранируй её",
+                            row.length - 1, String.join("|", row))
+                    .isEqualTo(4);
+            // Составная клетка «architect + security» — законная форма: ось делят двое.
+            axes.put(rowKey(row[0]), Arrays.stream(row[2].split("\\+"))
+                    .map(String::trim).filter(m -> !m.isEmpty()).toList());
+        }
+        // Якорь на пустой вход: разбор, сломавшийся о правку разметки, обязан покраснеть сам,
+        // а не отдать пустую карту, на которой все сверки ниже сойдутся (playbook, 2.8).
+        //
+        // Порог, а не точное число: точное пришлось бы поднимать на каждую новую ось, то есть
+        // держать самосчёт в тесте. Чего порог НЕ ловит: осознанное удаление двух-трёх осей
+        // сразу ИЗ ОБОИХ файлов. Это ослабление, и его ловит чтение удалённых строк
+        // (мандат gatekeeper), а не гейт.
+        assertThat(axes)
+                .as("из матрицы охвата разобрано %d осей — столько их не бывает, сломался разбор "
+                        + "таблицы, а не таблица", axes.size())
+                .hasSizeGreaterThan(10);
+        return axes;
+    }
+
+    private static Set<String> mandateFiles() throws IOException {
+        try (Stream<Path> files = Files.list(MANDATES)) {
+            return files.map(f -> f.getFileName().toString())
+                    .filter(n -> n.endsWith(".md"))
+                    .map(n -> n.substring(0, n.length() - ".md".length()))
+                    .collect(Collectors.toCollection(TreeSet::new));
+        }
+    }
+
+    @Test
+    @DisplayName("у каждой оси охвата есть владелец, и у владельца есть мандат")
+    void everyAxisHasAMandateWithAFile() throws IOException {
+        Map<String, List<String>> axes = axes();
+        Set<String> files = mandateFiles();
+
+        Set<String> ownerless = new TreeSet<>();
+        Set<String> missingFiles = new TreeSet<>();
+        axes.forEach((axis, owners) -> {
+            if (owners.isEmpty() || owners.contains("—")) {
+                ownerless.add(axis);
+            }
+            owners.stream().filter(o -> !o.equals("—") && !files.contains(o)).forEach(missingFiles::add);
+        });
+
+        assertThat(ownerless)
+                .as("ось без владельца. Прочерк в колонке — это не «пока никто», а дефект "
+                        + "процедуры: пять таких осей дали большинство находок круга сентября "
+                        + "2026 именно потому, что их не смотрел никто по обязанности")
+                .isEmpty();
+        assertThat(missingFiles)
+                .as("матрица охвата называет мандат, которого нет в %s: ось объявлена закрытой "
+                        + "за тем, кого не существует", MANDATES)
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("каждый мандат владеет осью либо назван исключением с причиной")
+    void everyMandateOwnsAnAxisOrIsDeclared() throws IOException {
+        Set<String> owners = new TreeSet<>();
+        axes().values().forEach(owners::addAll);
+
+        Set<String> homeless = new TreeSet<>(mandateFiles());
+        homeless.removeAll(owners);
+        homeless.removeAll(MANDATES_OUTSIDE_MATRIX.keySet());
+
+        assertThat(homeless)
+                .as("мандат есть файлом, но ни одной оси не закрывает — его не позовут никогда. "
+                        + "Либо впиши его в колонку владельцев матрицы охвата, либо назови "
+                        + "исключением в MANDATES_OUTSIDE_MATRIX с причиной")
+                .isEmpty();
+
+        assertThat(mandateFiles())
+                .as("исключение названо для мандата, файла которого нет: реестр пережил свой "
+                        + "предмет и теперь разрешает несуществующее")
+                .containsAll(MANDATES_OUTSIDE_MATRIX.keySet());
+    }
+
+    @Test
+    @DisplayName("матрица шаблона PR и оси охвата описывают одно и то же")
+    void pullRequestTemplateCoversEveryAxis() {
+        Set<String> axes = new TreeSet<>(axes().keySet());
+        Set<String> rows = new TreeSet<>();
+        for (String[] row : tableAfter(PR_TEMPLATE, "## Матрица охвата")) {
+            rows.add(rowKey(row[0]));
+        }
+        assertThat(rows)
+                .as("из матрицы шаблона PR разобрано %d строк — сломался разбор, а не шаблон",
+                        rows.size())
+                .hasSizeGreaterThan(10);
+
+        Set<String> withoutRow = new TreeSet<>(axes);
+        withoutRow.removeAll(rows);
+        assertThat(withoutRow)
+                .as("ось есть в playbook и нет в шаблоне PR. Шаблон — единственное место, где "
+                        + "процедура встречается с человеком в нужный момент: ось без строки "
+                        + "не будет закрыта никогда, и пустой клетки, по которой это видно, тоже "
+                        + "не будет")
+                .isEmpty();
+
+        Set<String> extra = new TreeSet<>(rows);
+        extra.removeAll(axes);
+        extra.removeAll(ROWS_BEYOND_AXES.keySet());
+        assertThat(extra)
+                .as("в шаблоне PR строка, которой нет среди осей охвата. Либо ось переименована "
+                        + "в одном месте из двух, либо это приём, а не ось — тогда назови его "
+                        + "в ROWS_BEYOND_AXES с причиной")
+                .isEmpty();
+
+        // Обратная сторона, как у MANDATES_OUTSIDE_MATRIX: реестр не должен пережить свой
+        // предмет. Иначе запись продолжит молча разрешать строку, которой в шаблоне давно нет.
+        assertThat(rows)
+                .as("исключение названо для строки, которой в шаблоне PR больше нет: реестр "
+                        + "пережил свой предмет и теперь разрешает несуществующее")
+                .containsAll(ROWS_BEYOND_AXES.keySet());
+    }
+
+    @Test
+    @DisplayName("README перечисляет ровно те мандаты, которые лежат файлами")
+    void readmeListsExactlyTheMandateFiles() throws IOException {
+        String readme = read("README.md");
+        Matcher line = Pattern.compile("`\\.claude/agents/` — мандаты ревьюеров \\(([^)]+)\\)")
+                .matcher(readme);
+        assertThat(line.find())
+                .as("README перестал перечислять мандаты в ожидаемой форме — сверка молча "
+                        + "перестала бы что-либо проверять")
+                .isTrue();
+        Set<String> listed = new TreeSet<>(List.of(line.group(1).split("/")));
+        assertThat(listed)
+                .as("перечень мандатов в README разошёлся с каталогом %s. Читатель README "
+                        + "узнаёт из него, кого звать на ревью, — недостающего не позовут",
+                        MANDATES)
+                .isEqualTo(mandateFiles());
     }
 
     private static String read(String path) {

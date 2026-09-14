@@ -16,3 +16,5 @@ tools/target/
 .DS_Store
 /.compat-logs/
 /.repeat-logs/
+# лог одной мутации: scripts/mutate.sh перезаписывает его на каждом прогоне
+/.mutate.log

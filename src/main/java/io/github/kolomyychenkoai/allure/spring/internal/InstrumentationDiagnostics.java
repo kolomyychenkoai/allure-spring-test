@@ -59,7 +59,6 @@ public final class InstrumentationDiagnostics {
      * съедал бы слоты у настоящей поломки, и шестая по счёту настоящая уходила бы на FINE.
      */
     private static final AtomicInteger LOGGED = new AtomicInteger();
-    /** Сколько сбоев «описание типа не разрешилось» скрыто на FINE. Уходит в дамп и в гейт. */
     private static final AtomicInteger UNRESOLVED = new AtomicInteger();
     private static final AtomicInteger TRANSFORMED = new AtomicInteger();
     private static final Queue<String> SAMPLE = new ConcurrentLinkedQueue<>();
@@ -80,15 +79,15 @@ public final class InstrumentationDiagnostics {
         return FAILURES.get();
     }
 
-    /**
-     * Сколько трансформаций реально применено — позитивный сигнал «агент не просто установился».
-     * Считаются СОБЫТИЯ, а не уникальные типы: один тип, попавший под два модуля, даёт 2.
-     */
     /** Сколько сбоев «описание типа не разрешилось» ушло на FINE: сигнал для дампа и гейта. */
     public static int unresolvedCount() {
         return UNRESOLVED.get();
     }
 
+    /**
+     * Сколько трансформаций реально применено — позитивный сигнал «агент не просто установился».
+     * Считаются СОБЫТИЯ, а не уникальные типы: один тип, попавший под два модуля, даёт 2.
+     */
     public static int transformedCount() {
         return TRANSFORMED.get();
     }
