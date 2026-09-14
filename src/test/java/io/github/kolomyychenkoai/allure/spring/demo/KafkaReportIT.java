@@ -42,11 +42,11 @@ class KafkaReportIT {
     @Autowired
     private EmbeddedKafkaBroker broker;
 
-    // forRemoval подавлен ТОЧЕЧНО и только здесь: в spring-kafka-test 3.3.11 все три перегрузки
-    // KafkaTestUtils.consumerProps помечены forRemoval, живой замены в этой версии нет (проверено
-    // javap по spring-kafka-test-3.3.11.jar). Сборка идёт с -Werror, поэтому без подавления упадёт
-    // компиляция. Категорию целиком не глушим: подавление висит на одном методе, и при апгрейде
-    // spring-kafka его надо снять — строка в docs/upgrade-checklist.md об этом напоминает.
+    // Подавление ТОЧЕЧНОЕ и только здесь: в spring-kafka-test 3.3.11 все три перегрузки
+    // KafkaTestUtils.consumerProps помечены как удаляемые, живой замены в этой версии нет
+    // (проверено javap по jar). Сборка идёт с -Werror, поэтому без подавления упадёт компиляция.
+    // Категорию целиком не глушим: подавление висит на одном методе, и при апгрейде spring-kafka
+    // его надо снять — строка в docs/upgrade-checklist.md об этом напоминает.
     @SuppressWarnings("removal")
     @Test
     @DisplayName("отправка и приём Kafka автоматически попадают в отчёт")
