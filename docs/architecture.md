@@ -33,8 +33,8 @@
    значения: в `clean`, `render`, `describeResponse`. В `describeEntity` свой `catch`
    стоит на каждом поле.
 
-В `src/main` лежит **70 классов / 7528 строк** в 20 пакетах, в `src/test` — **119 классов**
-и 588 тестов. У клиентского проекта появляется ровно одна зависимость в `compile`
+В `src/main` лежит **71 классов / 7681 строк** в 20 пакетах, в `src/test` — **121 классов**
+и 597 тестов. У клиентского проекта появляется ровно одна зависимость в `compile`
 (`allure-java-commons`), остальные 24 помечены `provided`/`optional`: модуль включается,
 только если технология уже есть в тестах.
 
@@ -191,7 +191,7 @@ cat src/main/resources/META-INF/spring.factories src/main/resources/META-INF/spr
 
 ---
 
-## 6. Что лежит в `internal/` (12 классов + `package-info`)
+## 6. Что лежит в `internal/` (13 классов + `package-info`)
 
 Публичного API тут нет: это внутренний код, и `package-info` это фиксирует.
 
@@ -204,6 +204,7 @@ cat src/main/resources/META-INF/spring.factories src/main/resources/META-INF/spr
 | `MovedTypeNames` / `MovedCustomizerRegistrar` | типы, переехавшие между мажорами Boot: имена строкой + программная регистрация бина |
 | `JpaLaziness` | распознаёт незагруженную ленивую связь JPA, не трогая её |
 | `InstrumentationDiagnostics` / `ActivationDiagnostics` | видно ли, что перехват сломался или что модуль молча не активировался |
+| `ConcurrencyWitness` | видел ли прогон два открытых окна тестов сразу — то есть идёт ли он в несколько потоков одной JVM. Спросить об этом JUnit нельзя: настройка приходит тремя каналами, и старший из них — запрос Платформы, куда её кладёт surefire |
 | `AllureInstrumentationLogger` | единый канал диагностики байткод-модулей: WARNING на сорванный перехват, FINE на чужой тип, который не разрешился |
 
 ---
@@ -250,6 +251,7 @@ cat src/main/resources/META-INF/spring.factories src/main/resources/META-INF/spr
 | состояние | где | живёт | зачем такое |
 |---|---|---|---|
 | `AtomicBoolean INSTALLED` (в каждом байткод-модуле) | `*Instrumentation` | до конца JVM | идемпотентность; ⚠️ обратно не выключается — сценария «включить снова» нет |
+| `AtomicInteger OPEN` / `PEAK` | `ConcurrencyWitness` | до конца JVM | пик одновременно открытых окон тестов: параллель определяется фактом, а не настройкой. ⚠️ `OPEN` держится парой вызовов листенера, поэтому у `testFinished` стоит гард на ноль: цикл «до» Spring рвёт на первом бросившем листенере, а цикл «после» обходит всех |
 | `Set<MvcResult>` / `Set<WireMockServer>` на `WeakHashMap` | `AllureMockMvcResultHandler`, `AllureWireMockTestListener` | пока жив ключ | дедуп «уже залогировано», без удержания чужих объектов |
 | `List<String> STARTUP_SNAPSHOT` | `AllureLiquibaseInstrumentation` | до конца JVM | снимок стартовой схемы повторяется в начале каждого теста; ⚠️ JVM-широкий: два разных контекста БД в одной JVM накапливаются |
 | `ThreadLocal` счётчика глубины | AssertJ, Spring-ассерты, валидация RestAssured, `JdbcTemplate` | на поток | перехваченные методы делегируют друг другу (`assertNull` → `assertTrue` → `fail`; `queryForObject` → `query`); без счётчика один вызов дал бы несколько шагов |
@@ -298,7 +300,7 @@ grep -rn "ThreadLocal<\|static final \(Map\|Set\|List\|Atomic\|ClassValue\)" src
 
 ## 10. Что уже проверено
 
-- **588 тестов** в двух уровнях. Уровень A — детерминированные проверки содержимого отчёта
+- **597 тестов** в двух уровнях. Уровень A — детерминированные проверки содержимого отчёта
   через in-memory Allure, уровень B — живые `*ReportIT`, которые читают реально записанные
   `allure-results`.
 - **Инвентарь видов шагов и вложений** — эталон `src/test/inventory/report-inventory.txt`,

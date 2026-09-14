@@ -1,6 +1,8 @@
 package io.github.kolomyychenkoai.allure.spring.config;
 
 import io.github.kolomyychenkoai.allure.spring.internal.ActivationDiagnostics;
+import io.github.kolomyychenkoai.allure.spring.internal.ClassPresence;
+import io.github.kolomyychenkoai.allure.spring.internal.ConcurrencyWitness;
 import io.qameta.allure.Allure;
 import org.springframework.core.Ordered;
 import org.springframework.core.env.ConfigurableEnvironment;
@@ -25,8 +27,9 @@ import java.util.stream.Collectors;
  * насколько чувствительна конфигурация тестов у потребителя.
  * Активируется автоматически через {@code META-INF/spring.factories}.
  * <p>
- * Потокобезопасен: без изменяемого состояния ({@code SYSTEM_SOURCES} — неизменяемый Set,
- * локальные переменные — на стеке метода).
+ * Потокобезопасен: собственного изменяемого состояния нет ({@code SYSTEM_SOURCES} —
+ * неизменяемый Set, локальные переменные — на стеке метода); счётчики параллели живут
+ * в {@link ConcurrencyWitness} и атомарны.
  */
 public class AllureConfigurationListener implements TestExecutionListener, Ordered {
 
@@ -47,6 +50,10 @@ public class AllureConfigurationListener implements TestExecutionListener, Order
 
     @Override
     public void beforeTestMethod(TestContext testContext) {
+        // Свидетель параллели: считаем ОДНОВРЕМЕННО открытые окна тестов. Спросить у JUnit,
+        // включена ли потоковая параллель, нельзя — разбор каналов в ConcurrencyWitness.
+        ConcurrencyWitness.testStarted();
+
         Environment base = environment(testContext);
         if (!(base instanceof ConfigurableEnvironment env)) {
             return;
@@ -69,6 +76,25 @@ public class AllureConfigurationListener implements TestExecutionListener, Order
             Allure.addAttachment("Свойства", "text/plain",
                     config.isEmpty() ? "No properties" : config);
         });
+    }
+
+    @Override
+    public void afterTestMethod(TestContext testContext) {
+        ConcurrencyWitness.testFinished();
+    }
+
+    @Override
+    public void afterTestClass(TestContext testContext) {
+        // Момент доклада выбран замером, а не рассуждением, и оба очевидных места не подошли.
+        // beforeTestClass: параллель становится фактом только после пересечения окон, а к тому
+        // времени классы уже начались — на потребителе строка не вышла ни разу.
+        // afterTestMethod: аппендер логов ещё висит, и строка садится внутрь вложения
+        // «Application Logs» — того самого, о перемешивании которого она предупреждает
+        // (обратный порядок «после»-колбэков тут не спасает: оба листенера объявлены
+        // HIGHEST_PRECEDENCE, а в spring.factories логи стоят раньше, значит после разворота
+        // они идут ПОСЛЕ нас).
+        ActivationDiagnostics.noteConcurrentRunOnce(ClassPresence::isPresent,
+                ConcurrencyWitness.concurrentSeen());
     }
 
     private static Environment environment(TestContext testContext) {

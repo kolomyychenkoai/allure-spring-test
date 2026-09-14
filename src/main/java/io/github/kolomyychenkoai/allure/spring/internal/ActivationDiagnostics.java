@@ -26,6 +26,37 @@ import java.util.function.Predicate;
 public final class ActivationDiagnostics {
 
     private static final String SWITCH = "allure.spring.diagnostics";
+
+    /**
+     * Модули, чей захват идёт на ЧУЖОМ потоке в общий буфер: под потоковой параллелью в одной
+     * JVM их записи могут уехать в соседний тест-кейс.
+     * <p>
+     * ⚠️ Глобального фильтра RestAssured тут НЕТ намеренно, хотя README держит его в том же
+     * списке «не ОК»: там шаг пишется инлайном на тест-потоке, то есть атрибуция цела, а
+     * ломается конфигурация — фильтр один на всю JVM. Сказать про него «данные уедут
+     * в соседний тест» значило бы соврать потребителю.
+     * <p>
+     * Список сверяется с README гейтом {@code ParallelRunDocTest}.
+     */
+    private static final List<String> SHARED_BUFFER_MARKERS = List.of(
+            "org.apache.kafka.clients.consumer.KafkaConsumer",
+            "com.github.tomakehurst.wiremock.WireMockServer",
+            "org.springframework.test.web.reactive.server.WebTestClient",
+            "ch.qos.logback.classic.LoggerContext");
+
+    /**
+     * Что сказать, увидев настоящую потоковую параллель. Текст — КОНСТАНТА: он же ключ
+     * дедупликации {@link #noteOnce}, и переменная часть увезла бы данные потребителя
+     * в артефакт CI.
+     */
+    private static final String CONCURRENT_MIXES_DATA =
+            "тесты идут в несколько потоков ОДНОЙ JVM. Шаги Kafka consumer и WireMock, "
+                    + "обмены WebTestClient, где виден только статус, и вложение «Application Logs» собираются "
+                    + "на чужих потоках в общий буфер — их записи могут уехать в соседний "
+                    + "тест-кейс. Гоняй такие классы форками (forkCount) или в один поток; "
+                    + "полные списки «что ОК» и «что не ОК» — в README, раздел про параллельный "
+                    + "запуск. Заглушить эту строку: -Dallure.spring.diagnostics=off";
+
     private static final AtomicBoolean REPORTED = new AtomicBoolean();
 
     /**
@@ -197,6 +228,38 @@ public final class ActivationDiagnostics {
      */
     static void forgetForTests() {
         SAID.clear();
+    }
+
+    /**
+     * Перемешивает ли параллель данные ПРЯМО СЕЙЧАС: параллель увидена по факту, и на classpath
+     * есть хоть один модуль с общим буфером. Чистая функция от двух ответов — так её проверяют
+     * без classloader-фокусов и без зависимости от того, с какими ключами запущен прогон.
+     */
+    public static boolean parallelMixesData(Predicate<String> present, boolean concurrentSeen) {
+        return concurrentSeen && SHARED_BUFFER_MARKERS.stream().anyMatch(present);
+    }
+
+    /**
+     * Имена-маркеры модулей с общим буфером — для гейта, сверяющего список с README.
+     * Пакетно-приватный по тому же правилу, что {@link #forgetForTests()}: тест-хуки
+     * не уезжают потребителю. Мостик — {@code DiagnosticsReset} в тестах.
+     */
+    static List<String> sharedBufferMarkers() {
+        return List.copyOf(SHARED_BUFFER_MARKERS);
+    }
+
+    /**
+     * Сказать один раз на JVM, что отчёт под этой параллелью может врать.
+     * <p>
+     * Зовётся из {@code afterTestMethod}, а не из {@link #reportOnce()} и не из
+     * {@code beforeTestClass}: первый стреляет на первом же классе, когда параллели ещё не
+     * видно, а второй к моменту пересечения окон уже не зовётся — классы начались. Замерено
+     * на потребителе: из {@code beforeTestClass} строка не выходила ни разу.
+     */
+    public static void noteConcurrentRunOnce(Predicate<String> present, boolean concurrentSeen) {
+        if (parallelMixesData(present, concurrentSeen)) {
+            noteOnce("ParallelRun", CONCURRENT_MIXES_DATA);
+        }
     }
 
     /**

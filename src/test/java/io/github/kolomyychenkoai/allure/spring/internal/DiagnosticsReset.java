@@ -21,4 +21,14 @@ public final class DiagnosticsReset {
     public static void forget() {
         ActivationDiagnostics.forgetForTests();
     }
+
+    /** Маркеры модулей с общим буфером — для гейта, сверяющего список с README. */
+    public static java.util.List<String> sharedBufferMarkers() {
+        return ActivationDiagnostics.sharedBufferMarkers();
+    }
+
+    /** Забыть пик одновременно открытых тест-методов: счётчики глобальны на JVM. */
+    public static void forgetConcurrency() {
+        ConcurrencyWitness.forgetForTests();
+    }
 }
