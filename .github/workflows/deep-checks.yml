@@ -34,15 +34,9 @@ jobs:
           java-version: '25'
           distribution: 'temurin'
           cache: 'maven'
-      # Профиль java25 требует отдельного JDK — ставим его ВТОРЫМ, оставляя JAVA_HOME на 21:
-      # компиляция обязана остаться под release=21, форкается только прогон тестов.
-      - uses: actions/setup-java@v4
-        with:
-          java-version: '25'
-          distribution: 'temurin'
-          cache: 'maven'
+      # Java 25 — условие сборки (maven.compiler.release 25), а не точка матрицы.
       - name: matrix
-        run: ./scripts/compat-matrix.sh -Djava25.home=$JAVA_HOME_25_X64
+        run: ./scripts/compat-matrix.sh
       - name: Логи точек
         if: always()
         uses: actions/upload-artifact@v4
