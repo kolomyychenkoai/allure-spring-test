@@ -1,0 +1,68 @@
+# Дорогие проверки, которым не место на каждом пуше.
+#
+# Матрица совместимости — пять полных сборок (~3–4 мин), повторяемость — десять (~6–7 мин).
+# Гонять их на каждый коммит значит приучить людей ждать; гонять никогда — значит не гонять.
+# Поэтому: по кнопке и раз в неделю.
+#
+# Обе проверки отвечают на вопросы, которые обычный прогон задать не может:
+#   compat-matrix — «наши объявленные границы версий ещё правда?»
+#   repeat        — «нет ли зависимости от ПОРЯДКА тестов?» (порядок у нас случайный,
+#                   и дефект на одной перестановке виден не всегда — так нашёлся
+#                   дефект с временными загрузчиками: 1 красный из 20)
+name: deep-checks
+
+on:
+  workflow_dispatch:
+    inputs:
+      repeat-runs:
+        description: 'Сколько прогонов для проверки повторяемости'
+        required: false
+        default: '10'
+  schedule:
+    # Раз в неделю, ночь понедельника UTC. Падение здесь — не «перезапусти»,
+    # а находка: либо граница версий уехала, либо есть зависимость от порядка.
+    - cron: '0 3 * * 1'
+
+jobs:
+  compat-matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: 'maven'
+      # Java 25 — условие сборки (maven.compiler.release 25), а не точка матрицы.
+      - name: matrix
+        run: ./scripts/compat-matrix.sh
+      - name: Логи точек
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compat-logs
+          path: .compat-logs/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  repeatability:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: 'maven'
+      - name: repeat
+        run: ./scripts/repeat.sh ${{ inputs.repeat-runs || '10' }}
+      - name: Логи прогонов
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: repeat-logs
+          path: .repeat-logs/
+          retention-days: 14
+          if-no-files-found: ignore
