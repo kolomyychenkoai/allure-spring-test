@@ -31,7 +31,7 @@ jobs:
       # Кэш Maven обязателен: без него каждый прогон тянет BOM Spring Boot заново.
       - uses: actions/setup-java@v4
         with:
-          java-version: '21'
+          java-version: '25'
           distribution: 'temurin'
           cache: 'maven'
 
